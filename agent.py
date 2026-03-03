@@ -21,6 +21,12 @@ Instrucciones:
 - Si la pregunta es ambigua, responde con lo más relevante y ofrece profundizar.
 - Nunca inventes datos. Si no tienes la información, dilo claramente.
 - Puedes hacer varias consultas en la misma respuesta si la pregunta lo requiere.
+
+Proyecciones y predicciones:
+- Cuando te pregunten sobre el futuro (ventas del próximo mes, próximo año, cómo va a ir un producto, etc.) usa las herramientas `proyeccion_ventas` o `proyeccion_producto` para calcular la tendencia real con datos históricos.
+- Siempre da un número concreto proyectado, la tendencia (creciente/decreciente) y el porcentaje de cambio estimado.
+- Aclara que la proyección se basa en la tendencia histórica y puede variar, pero nunca te niegues a dar un número.
+- Si te preguntan por el año completo, suma las proyecciones mensuales.
 """
 
 TOOLS = [
@@ -198,6 +204,57 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "proyeccion_ventas",
+            "description": (
+                "Calcula la proyección de ventas para los próximos meses basándose en la tendencia histórica real. "
+                "Usa regresión lineal sobre los datos mensuales. "
+                "Usar para preguntas como: ¿cuánto venderemos el próximo mes?, ¿cómo van las ventas este año?, "
+                "¿cuál es la tendencia de ventas?, proyección para el próximo año."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "meses_a_proyectar": {
+                        "type": "integer",
+                        "description": "Cuántos meses hacia adelante proyectar. Por defecto 3. Máximo 12.",
+                    },
+                    "meses_historicos": {
+                        "type": "integer",
+                        "description": "Cuántos meses históricos usar como base. Por defecto 12.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "proyeccion_producto",
+            "description": (
+                "Calcula la proyección de ventas de un producto específico para los próximos meses. "
+                "También estima cuántos días de stock quedan antes de agotarse. "
+                "Usar para: ¿cómo va a vender X producto?, ¿cuándo se agota X?, tendencia de demanda de un producto."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "producto": {
+                        "type": "string",
+                        "description": "Nombre o parte del nombre del producto a analizar.",
+                    },
+                    "meses_a_proyectar": {
+                        "type": "integer",
+                        "description": "Cuántos meses proyectar. Por defecto 3.",
+                    },
+                },
+                "required": ["producto"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "pagos_recientes",
             "description": (
                 "Devuelve los pagos más recientes con método, monto, cliente y estado. "
@@ -214,6 +271,26 @@ TOOLS = [
         },
     },
 ]
+
+
+def _regresion_lineal(valores: list[float]) -> dict:
+    """Regresión lineal simple sobre una serie temporal. Devuelve slope, intercept y proyección."""
+    n = len(valores)
+    if n < 2:
+        return {"slope": 0, "intercept": valores[0] if valores else 0}
+    x = list(range(n))
+    sum_x  = sum(x)
+    sum_y  = sum(valores)
+    sum_xy = sum(xi * yi for xi, yi in zip(x, valores))
+    sum_xx = sum(xi * xi for xi in x)
+    denom  = n * sum_xx - sum_x ** 2
+    if denom == 0:
+        return {"slope": 0, "intercept": sum_y / n}
+    slope     = (n * sum_xy - sum_x * sum_y) / denom
+    intercept = (sum_y - slope * sum_x) / n
+    promedio  = sum_y / n
+    tasa_pct  = round(slope / promedio * 100, 1) if promedio else 0
+    return {"slope": slope, "intercept": intercept, "tasa_mensual_pct": tasa_pct}
 
 
 def _ejecutar_herramienta(nombre: str, args: dict) -> str:
@@ -321,6 +398,91 @@ def _ejecutar_herramienta(nombre: str, args: dict) -> str:
                 sql += " WHERE " + " AND ".join(filtros)
             sql += " LIMIT %s"; params.append(args.get("limite", 15))
             rows = query_view(sql, tuple(params))
+
+        elif nombre == "proyeccion_ventas":
+            meses_hist = min(args.get("meses_historicos", 12), 24)
+            meses_proy = min(args.get("meses_a_proyectar", 3), 12)
+            historico  = query_view(
+                "SELECT periodo, ventas_totales, total_pedidos, ticket_promedio "
+                "FROM vw_ventas_mensuales ORDER BY anio, mes LIMIT %s",
+                (meses_hist,),
+            )
+            if not historico:
+                return json.dumps({"error": "No hay datos históricos"})
+
+            ventas = [float(r["ventas_totales"] or 0) for r in historico]
+            reg    = _regresion_lineal(ventas)
+            base   = len(ventas)
+
+            proyecciones = []
+            for i in range(1, meses_proy + 1):
+                valor = reg["slope"] * (base + i - 1) + reg["intercept"]
+                proyecciones.append({"mes_futuro": i, "ventas_proyectadas": round(max(0, valor), 2)})
+
+            rows = {
+                "historico_meses": len(historico),
+                "ventas_ultimo_mes": ventas[-1],
+                "ventas_promedio_mensual": round(sum(ventas) / len(ventas), 2),
+                "tasa_crecimiento_mensual_pct": reg["tasa_mensual_pct"],
+                "tendencia": "creciente" if reg["slope"] > 0 else "decreciente",
+                "proyecciones": proyecciones,
+                "total_proyectado_periodo": round(sum(p["ventas_proyectadas"] for p in proyecciones), 2),
+            }
+
+        elif nombre == "proyeccion_producto":
+            producto_filtro = args.get("producto", "")
+            meses_proy      = min(args.get("meses_a_proyectar", 3), 12)
+
+            historico = query_view(
+                "SELECT DATE_FORMAT(p.fecha_pedido, '%Y-%m') AS periodo, "
+                "SUM(dp.cantidad) AS unidades, SUM(dp.subtotal) AS revenue "
+                "FROM detalle_pedidos dp "
+                "JOIN pedidos p ON dp.id_pedido = p.id "
+                "JOIN estados_pedido ep ON p.id_estado = ep.id "
+                "JOIN productos pr ON dp.id_producto = pr.id "
+                "WHERE ep.nombre NOT IN ('cancelado','devuelto') "
+                "AND pr.nombre LIKE %s "
+                "GROUP BY DATE_FORMAT(p.fecha_pedido,'%Y-%m') "
+                "ORDER BY periodo LIMIT 24",
+                (f"%{producto_filtro}%",),
+            )
+
+            stock_info = query_view(
+                "SELECT producto, sku, stock_actual, estado_stock "
+                "FROM vw_inventario_estado WHERE producto LIKE %s LIMIT 1",
+                (f"%{producto_filtro}%",),
+            )
+
+            if not historico:
+                return json.dumps({"error": f"No se encontraron ventas para '{producto_filtro}'"})
+
+            unidades = [float(r["unidades"] or 0) for r in historico]
+            reg      = _regresion_lineal(unidades)
+            base     = len(unidades)
+            prom_mes = sum(unidades) / len(unidades)
+
+            proyecciones = []
+            for i in range(1, meses_proy + 1):
+                valor = reg["slope"] * (base + i - 1) + reg["intercept"]
+                proyecciones.append({"mes_futuro": i, "unidades_proyectadas": round(max(0, valor), 0)})
+
+            stock_actual = int(stock_info[0]["stock_actual"]) if stock_info else None
+            dias_stock   = None
+            if stock_actual and prom_mes > 0:
+                dias_stock = round(stock_actual / (prom_mes / 30), 0)
+
+            rows = {
+                "producto":      stock_info[0]["producto"] if stock_info else producto_filtro,
+                "sku":           stock_info[0]["sku"] if stock_info else None,
+                "meses_analizados": len(historico),
+                "unidades_mes_promedio": round(prom_mes, 1),
+                "unidades_ultimo_mes": unidades[-1],
+                "tasa_crecimiento_mensual_pct": reg["tasa_mensual_pct"],
+                "tendencia": "creciente" if reg["slope"] > 0 else "decreciente",
+                "proyecciones_unidades": proyecciones,
+                "stock_actual": stock_actual,
+                "dias_estimados_de_stock": dias_stock,
+            }
 
         else:
             return json.dumps({"error": f"Herramienta desconocida: {nombre}"})
