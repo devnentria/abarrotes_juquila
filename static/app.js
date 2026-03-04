@@ -231,10 +231,10 @@ function renderVentas(data) {
               <td>
                 <div style="display:flex;align-items:center;gap:6px">
                   <div class="o-progress" style="width:52px">
-                    <div class="o-progress-bar ${(r.pct_meta_acumulado||0)>=100?'full':''}"
-                         style="width:${Math.min(r.pct_meta_acumulado||0,100)}%"></div>
+                    <div class="o-progress-bar ${(r.pct_meta_mensual||0)>=100?'full':''}"
+                         style="width:${Math.min(r.pct_meta_mensual||0,100)}%"></div>
                   </div>
-                  <small class="o-num" style="min-width:32px">${r.pct_meta_acumulado||0}%</small>
+                  <small class="o-num" style="min-width:32px">${r.pct_meta_mensual||0}%</small>
                 </div>
               </td>
             </tr>`).join('')}
