@@ -789,43 +789,43 @@ a { text-decoration: none; color: inherit; }
 /* ── Charts grid ────────────────────────────────────────────── */
 .o-charts-row {
   display: flex;
-  gap: 14px;
-  margin: 16px 16px 14px;
+  gap: 12px;
+  margin: 12px 16px 12px;
 }
 .o-chart-card {
   background: #fff;
   border: 1px solid #e0d6e8;
   border-radius: 8px;
-  padding: 16px 18px 14px;
+  padding: 12px 14px 10px;
 }
 .o-chart-wide   { flex: 2; min-width: 0; }
 .o-chart-narrow { flex: 1; min-width: 0; }
 .o-chart-half   { flex: 1; min-width: 0; }
 
 .o-chart-card-title {
-  font-size: .72rem;
+  font-size: .68rem;
   font-weight: 700;
   color: var(--odoo-purple);
   text-transform: uppercase;
   letter-spacing: .06em;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 .o-chart-badge-ia {
   margin-left: auto;
   background: linear-gradient(135deg, #875A7B, #b07da8);
   color: #fff;
-  font-size: .62rem;
+  font-size: .58rem;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 1px 7px;
   border-radius: 10px;
   letter-spacing: .05em;
   text-transform: uppercase;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 /* ── Scrollbar global ───────────────────────────────────────── */

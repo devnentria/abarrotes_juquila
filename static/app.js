@@ -161,14 +161,14 @@ function renderDashboard(data) {
           Tendencia de Ventas &amp; Proyección
           <span class="o-chart-badge-ia"><i class="bi bi-cpu"></i> IA</span>
         </div>
-        <canvas id="chartVentas" height="105"></canvas>
+        <canvas id="chartVentas"></canvas>
       </div>
       <div class="o-chart-card o-chart-narrow">
         <div class="o-chart-card-title">
           <i class="bi bi-bullseye"></i> Cumplimiento de Metas
         </div>
-        <canvas id="chartMetas" height="155"></canvas>
-        <div id="metas-leyenda" style="text-align:center;font-size:.72rem;margin-top:8px;line-height:1.9"></div>
+        <canvas id="chartMetas"></canvas>
+        <div id="metas-leyenda" style="text-align:center;font-size:.72rem;margin-top:6px;line-height:1.8"></div>
       </div>
     </div>
 
@@ -178,13 +178,13 @@ function renderDashboard(data) {
         <div class="o-chart-card-title">
           <i class="bi bi-trophy"></i> Top 5 Vendedores
         </div>
-        <canvas id="chartVendedores" height="155"></canvas>
+        <canvas id="chartVendedores"></canvas>
       </div>
       <div class="o-chart-card o-chart-half">
         <div class="o-chart-card-title">
           <i class="bi bi-geo-alt"></i> Ventas por Región (año actual)
         </div>
-        <canvas id="chartRegion" height="155"></canvas>
+        <canvas id="chartRegion"></canvas>
       </div>
     </div>
 
@@ -267,23 +267,26 @@ function _drawDashboardCharts({ ventas_mensuales, top_vendedores, ventas_region,
       labels: allLabels,
       datasets: [
         { label:'Ventas reales', data:histData, borderColor:P, backgroundColor:PA,
-          fill:true, tension:0.35, pointRadius:3, borderWidth:2, spanGaps:false },
+          fill:true, tension:0.35, pointRadius:2, pointHoverRadius:4,
+          borderWidth:2, spanGaps:false },
         { label:'Proyección IA', data:projData, borderColor:OG,
-          backgroundColor:'rgba(253,126,20,0.07)', fill:true, tension:0.35,
-          pointRadius:5, pointStyle:'rectRot', borderWidth:2,
-          borderDash:[6,3], spanGaps:false }
+          backgroundColor:'rgba(253,126,20,0.06)', fill:true, tension:0.35,
+          pointRadius:4, pointStyle:'rectRot', borderWidth:2,
+          borderDash:[5,3], spanGaps:false }
       ]
     },
     options: {
-      responsive:true, interaction:{mode:'index',intersect:false},
+      responsive:true, aspectRatio:3.8,
+      interaction:{mode:'index',intersect:false},
+      layout:{padding:{top:4,bottom:2}},
       plugins: {
-        legend:{labels:{font:{size:11},usePointStyle:true}},
+        legend:{labels:{font:{size:10},usePointStyle:true,boxWidth:8,padding:12}},
         tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtCurrency(ctx.parsed.y)}`}}
       },
       scales: {
         y:{ ticks:{callback:v=>v>=1e6?'$'+(v/1e6).toFixed(1)+'M':'$'+(v/1000).toFixed(0)+'K',
-              font:tickFont}, grid:{color:gridColor} },
-        x:{ ticks:{font:tickFont, maxRotation:0}, grid:{display:false} }
+              font:tickFont, maxTicksLimit:5}, grid:{color:gridColor} },
+        x:{ ticks:{font:tickFont, maxRotation:0, maxTicksLimit:8}, grid:{display:false} }
       }
     }
   });
@@ -301,7 +304,8 @@ function _drawDashboardCharts({ ventas_mensuales, top_vendedores, ventas_region,
       }]
     },
     options:{
-      responsive:true, cutout:'65%',
+      responsive:true, aspectRatio:1.6, cutout:'68%',
+      layout:{padding:4},
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} vendedores`}}
@@ -329,19 +333,20 @@ function _drawDashboardCharts({ ventas_mensuales, top_vendedores, ventas_region,
       datasets:[{
         label:'Ventas', data:vVentas,
         backgroundColor:alphas.map(a=>`rgba(135,90,123,${a})`),
-        borderRadius:4, borderSkipped:false
+        borderRadius:3, borderSkipped:false, barThickness:14
       }]
     },
     options:{
-      indexAxis:'y', responsive:true,
+      indexAxis:'y', responsive:true, aspectRatio:2.2,
+      layout:{padding:{right:8}},
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:ctx=>` ${fmtCurrency(ctx.parsed.x)}`}}
       },
       scales:{
-        x:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont},
+        x:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont, maxTicksLimit:5},
             grid:{color:gridColor} },
-        y:{ ticks:{font:{size:11}}, grid:{display:false} }
+        y:{ ticks:{font:{size:10}}, grid:{display:false} }
       }
     }
   });
@@ -357,17 +362,18 @@ function _drawDashboardCharts({ ventas_mensuales, top_vendedores, ventas_region,
       datasets:[{
         label:'Ventas', data:regVals,
         backgroundColor:regColors.slice(0, regLabels.length),
-        borderRadius:4, borderSkipped:false
+        borderRadius:3, borderSkipped:false, barThickness:28
       }]
     },
     options:{
-      responsive:true,
+      responsive:true, aspectRatio:2.2,
+      layout:{padding:{top:4}},
       plugins:{
         legend:{display:false},
         tooltip:{callbacks:{label:ctx=>` ${fmtCurrency(ctx.parsed.y)}`}}
       },
       scales:{
-        y:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont},
+        y:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont, maxTicksLimit:5},
             grid:{color:gridColor} },
         x:{ ticks:{font:tickFont}, grid:{display:false} }
       }
