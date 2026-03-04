@@ -41,19 +41,44 @@ def api_dashboard():
         "COALESCE(SUM(total_pedidos),0) AS total_pedidos "
         "FROM vw_ventas_mensuales"
     )
-    empleados_kpi = query_view("SELECT COUNT(*) AS total FROM vw_empleados_activos")
-    clientes_kpi = query_view("SELECT COUNT(*) AS total FROM vw_clientes_top")
+    empleados_kpi    = query_view("SELECT COUNT(*) AS total FROM vw_empleados_activos")
+    clientes_kpi     = query_view("SELECT COUNT(*) AS total FROM vw_clientes_top")
     ventas_mensuales = query_view("SELECT * FROM vw_ventas_mensuales LIMIT 12")
+    top_vendedores   = query_view(
+        "SELECT vendedor, ventas_totales, pct_meta_mensual "
+        "FROM vw_rendimiento_vendedores LIMIT 5"
+    )
+    ventas_region = query_view(
+        "SELECT region, SUM(ventas_totales) AS total_ventas "
+        "FROM vw_ventas_por_region "
+        "WHERE anio = (SELECT MAX(anio) FROM vw_ventas_por_region) "
+        "GROUP BY region ORDER BY SUM(ventas_totales) DESC"
+    )
+    metas_raw = query_view(
+        "SELECT "
+        "SUM(CASE WHEN pct_meta_mensual >= 100 THEN 1 ELSE 0 END) AS sobre_meta, "
+        "SUM(CASE WHEN pct_meta_mensual BETWEEN 80 AND 99.9 THEN 1 ELSE 0 END) AS en_meta, "
+        "SUM(CASE WHEN pct_meta_mensual < 80 THEN 1 ELSE 0 END) AS bajo_meta "
+        "FROM vw_rendimiento_vendedores"
+    )
 
-    row = ventas_kpi[0] if ventas_kpi else {}
+    row   = ventas_kpi[0] if ventas_kpi else {}
+    metas = metas_raw[0]  if metas_raw  else {}
     return jsonify({
         "kpis": {
-            "ventas_totales": float(row.get("total_ventas") or 0),
-            "total_pedidos": int(row.get("total_pedidos") or 0),
+            "ventas_totales":    float(row.get("total_ventas") or 0),
+            "total_pedidos":     int(row.get("total_pedidos") or 0),
             "empleados_activos": int((empleados_kpi[0] if empleados_kpi else {}).get("total") or 0),
-            "clientes_activos": int((clientes_kpi[0] if clientes_kpi else {}).get("total") or 0),
+            "clientes_activos":  int((clientes_kpi[0]  if clientes_kpi  else {}).get("total") or 0),
         },
         "ventas_mensuales": ventas_mensuales,
+        "top_vendedores":   top_vendedores,
+        "ventas_region":    ventas_region,
+        "metas_dist": {
+            "sobre_meta": int(metas.get("sobre_meta") or 0),
+            "en_meta":    int(metas.get("en_meta")    or 0),
+            "bajo_meta":  int(metas.get("bajo_meta")  or 0),
+        },
     })
 
 

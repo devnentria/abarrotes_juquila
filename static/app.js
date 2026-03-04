@@ -140,11 +140,12 @@ function rankBadge(i) {
 /* ════════════════════════════════════════════════════════════
    DASHBOARD
    ════════════════════════════════════════════════════════════ */
+let _dashCharts = {};
+
 function renderDashboard(data) {
   const { kpis, ventas_mensuales } = data;
   document.getElementById('content').innerHTML = `
 
-    <!-- Stat buttons -->
     <div class="o-stats-bar">
       ${statBtn('Ventas Totales',    fmtCurrency(kpis.ventas_totales), 'bi-graph-up-arrow')}
       ${statBtn('Pedidos',           fmtNum(kpis.total_pedidos),       'bi-cart3')}
@@ -152,10 +153,42 @@ function renderDashboard(data) {
       ${statBtn('Clientes Activos',  fmtNum(kpis.clientes_activos),    'bi-buildings')}
     </div>
 
-    <!-- Toolbar -->
-    ${viewToolbar('Ventas Mensuales', ventas_mensuales.length, 'bi-calendar3')}
+    <!-- Fila 1: Tendencia + Metas -->
+    <div class="o-charts-row">
+      <div class="o-chart-card o-chart-wide">
+        <div class="o-chart-card-title">
+          <i class="bi bi-graph-up-arrow"></i>
+          Tendencia de Ventas &amp; Proyección
+          <span class="o-chart-badge-ia"><i class="bi bi-cpu"></i> IA</span>
+        </div>
+        <canvas id="chartVentas" height="105"></canvas>
+      </div>
+      <div class="o-chart-card o-chart-narrow">
+        <div class="o-chart-card-title">
+          <i class="bi bi-bullseye"></i> Cumplimiento de Metas
+        </div>
+        <canvas id="chartMetas" height="155"></canvas>
+        <div id="metas-leyenda" style="text-align:center;font-size:.72rem;margin-top:8px;line-height:1.9"></div>
+      </div>
+    </div>
 
-    <!-- List view -->
+    <!-- Fila 2: Top vendedores + Regiones -->
+    <div class="o-charts-row" style="margin-top:0">
+      <div class="o-chart-card o-chart-half">
+        <div class="o-chart-card-title">
+          <i class="bi bi-trophy"></i> Top 5 Vendedores
+        </div>
+        <canvas id="chartVendedores" height="155"></canvas>
+      </div>
+      <div class="o-chart-card o-chart-half">
+        <div class="o-chart-card-title">
+          <i class="bi bi-geo-alt"></i> Ventas por Región (año actual)
+        </div>
+        <canvas id="chartRegion" height="155"></canvas>
+      </div>
+    </div>
+
+    ${viewToolbar('Ventas Mensuales', ventas_mensuales.length, 'bi-calendar3')}
     <div class="o-list-view" style="margin:0;border-radius:0;border-left:none;border-right:none;border-bottom:none">
       <table class="o-table">
         <thead>
@@ -185,6 +218,161 @@ function renderDashboard(data) {
         </tbody>
       </table>
     </div>`;
+
+  _drawDashboardCharts(data);
+}
+
+function _nextPeriod(p) {
+  const [y, m] = p.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function _linReg(vals) {
+  const n = vals.length, xBar = (n-1)/2;
+  const yBar = vals.reduce((a,b)=>a+b,0)/n;
+  let num=0, den=0;
+  vals.forEach((y,i)=>{ num+=(i-xBar)*(y-yBar); den+=(i-xBar)**2; });
+  const slope = den ? num/den : 0;
+  return { slope, intercept: yBar - slope*xBar };
+}
+
+function _drawDashboardCharts({ ventas_mensuales, top_vendedores, ventas_region, metas_dist }) {
+  Object.values(_dashCharts).forEach(c => c?.destroy());
+  _dashCharts = {};
+
+  const P  = '#875A7B';
+  const PA = 'rgba(135,90,123,0.12)';
+  const OG = '#fd7e14';
+  const gridColor = 'rgba(0,0,0,0.05)';
+  const tickFont  = { size: 10 };
+
+  /* ── Chart 1: Tendencia + Proyección ── */
+  const vmAsc     = [...ventas_mensuales].reverse();
+  const histLabels = vmAsc.map(r => r.periodo);
+  const histVals   = vmAsc.map(r => parseFloat(r.ventas_totales));
+  const n = histVals.length;
+  const reg = _linReg(histVals);
+  let last = histLabels[n-1];
+  const projLabels = [];
+  for(let i=0;i<3;i++) { last = _nextPeriod(last); projLabels.push(last); }
+  const projVals = [1,2,3].map(i => Math.round(Math.max(0, reg.slope*(n-1+i)+reg.intercept)));
+  const allLabels = [...histLabels, ...projLabels];
+  const histData  = [...histVals, null, null, null];
+  const projData  = histVals.map((_,i) => i===n-1 ? histVals[n-1] : null).concat(projVals);
+
+  _dashCharts.ventas = new Chart(document.getElementById('chartVentas'), {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        { label:'Ventas reales', data:histData, borderColor:P, backgroundColor:PA,
+          fill:true, tension:0.35, pointRadius:3, borderWidth:2, spanGaps:false },
+        { label:'Proyección IA', data:projData, borderColor:OG,
+          backgroundColor:'rgba(253,126,20,0.07)', fill:true, tension:0.35,
+          pointRadius:5, pointStyle:'rectRot', borderWidth:2,
+          borderDash:[6,3], spanGaps:false }
+      ]
+    },
+    options: {
+      responsive:true, interaction:{mode:'index',intersect:false},
+      plugins: {
+        legend:{labels:{font:{size:11},usePointStyle:true}},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${fmtCurrency(ctx.parsed.y)}`}}
+      },
+      scales: {
+        y:{ ticks:{callback:v=>v>=1e6?'$'+(v/1e6).toFixed(1)+'M':'$'+(v/1000).toFixed(0)+'K',
+              font:tickFont}, grid:{color:gridColor} },
+        x:{ ticks:{font:tickFont, maxRotation:0}, grid:{display:false} }
+      }
+    }
+  });
+
+  /* ── Chart 2: Doughnut metas ── */
+  const { sobre_meta, en_meta, bajo_meta } = metas_dist || {};
+  _dashCharts.metas = new Chart(document.getElementById('chartMetas'), {
+    type:'doughnut',
+    data:{
+      labels:['≥ 100%','80 – 99%','< 80%'],
+      datasets:[{
+        data:[sobre_meta||0, en_meta||0, bajo_meta||0],
+        backgroundColor:['#28a745', P, '#dc3545'],
+        borderWidth:2, borderColor:'#fff'
+      }]
+    },
+    options:{
+      responsive:true, cutout:'65%',
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} vendedores`}}
+      }
+    }
+  });
+  const total = (sobre_meta||0)+(en_meta||0)+(bajo_meta||0);
+  document.getElementById('metas-leyenda').innerHTML =
+    `<span style="color:#28a745">●</span> Sobre meta: <b>${sobre_meta||0}</b>&nbsp;&nbsp;`+
+    `<span style="color:${P}">●</span> En meta: <b>${en_meta||0}</b>&nbsp;&nbsp;`+
+    `<span style="color:#dc3545">●</span> Bajo meta: <b>${bajo_meta||0}</b><br>`+
+    `<span style="color:#888">Equipo de ${total} vendedores</span>`;
+
+  /* ── Chart 3: Top 5 vendedores (horizontal bar) ── */
+  const vNames  = (top_vendedores||[]).map(v => {
+    const p = v.vendedor.split(' ');
+    return p[0] + (p.length>1?' '+p[p.length-1]:'');
+  });
+  const vVentas = (top_vendedores||[]).map(v => parseFloat(v.ventas_totales));
+  const alphas  = [0.85,0.70,0.55,0.42,0.30];
+  _dashCharts.vendedores = new Chart(document.getElementById('chartVendedores'), {
+    type:'bar',
+    data:{
+      labels:vNames,
+      datasets:[{
+        label:'Ventas', data:vVentas,
+        backgroundColor:alphas.map(a=>`rgba(135,90,123,${a})`),
+        borderRadius:4, borderSkipped:false
+      }]
+    },
+    options:{
+      indexAxis:'y', responsive:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>` ${fmtCurrency(ctx.parsed.x)}`}}
+      },
+      scales:{
+        x:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont},
+            grid:{color:gridColor} },
+        y:{ ticks:{font:{size:11}}, grid:{display:false} }
+      }
+    }
+  });
+
+  /* ── Chart 4: Ventas por región (bar) ── */
+  const regColors = [P,'#a57ba0','#28a745','#17a2b8','#fd7e14','#dc3545'];
+  const regLabels = (ventas_region||[]).map(r => r.region);
+  const regVals   = (ventas_region||[]).map(r => parseFloat(r.total_ventas));
+  _dashCharts.region = new Chart(document.getElementById('chartRegion'), {
+    type:'bar',
+    data:{
+      labels:regLabels,
+      datasets:[{
+        label:'Ventas', data:regVals,
+        backgroundColor:regColors.slice(0, regLabels.length),
+        borderRadius:4, borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:ctx=>` ${fmtCurrency(ctx.parsed.y)}`}}
+      },
+      scales:{
+        y:{ ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M', font:tickFont},
+            grid:{color:gridColor} },
+        x:{ ticks:{font:tickFont}, grid:{display:false} }
+      }
+    }
+  });
 }
 
 /* ════════════════════════════════════════════════════════════
