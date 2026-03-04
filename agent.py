@@ -8,7 +8,7 @@ from openai import OpenAI
 
 from db import query_view
 
-MODEL = "gpt-4o"
+MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """Eres un asistente de análisis empresarial integrado al sistema ERP de la empresa.
 Tienes acceso a datos reales de ventas, empleados, inventario, clientes y finanzas.
