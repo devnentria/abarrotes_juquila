@@ -783,12 +783,37 @@ function sendMessage() {
     });
 }
 
+function mdToHtml(text) {
+  // Escape HTML primero
+  let s = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // Negritas y cursiva
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Código inline
+  s = s.replace(/`(.+?)`/g, '<code style="background:#f0e8f0;padding:1px 5px;border-radius:3px;font-size:.85em">$1</code>');
+  // Listas con viñeta (- item)
+  const lines = s.split('\n');
+  const out = []; let inUl = false;
+  for (const ln of lines) {
+    const m = ln.match(/^[-•]\s+(.+)/);
+    if (m) {
+      if (!inUl) { out.push('<ul style="margin:6px 0 6px 16px;padding:0">'); inUl = true; }
+      out.push(`<li style="margin:2px 0">${m[1]}</li>`);
+    } else {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      out.push(ln === '' ? '<br>' : ln);
+    }
+  }
+  if (inUl) out.push('</ul>');
+  return out.join('\n').replace(/\n/g,'<br>').replace(/<br><br>/g,'<br>');
+}
+
 function appendMsg(role, text) {
   const isUser = role === 'user';
   const div = document.createElement('div');
   div.className = `msg msg-${isUser ? 'user' : 'bot'}`;
   div.innerHTML = `
-    <div class="msg-bubble">${escapeHtml(text)}</div>
+    <div class="msg-bubble">${isUser ? escapeHtml(text) : mdToHtml(text)}</div>
     <div class="msg-time">${nowTime()}</div>`;
   chatMessages.appendChild(div);
 }
