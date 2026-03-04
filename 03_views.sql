@@ -69,7 +69,10 @@ SELECT
     ROUND(AVG(p.total), 2)                      AS ticket_promedio,
     COUNT(DISTINCT p.id_cliente)                AS clientes_atendidos,
     ROUND(SUM(p.total) * v.comision_pct / 100, 2) AS comision_generada,
-    ROUND(SUM(p.total) / NULLIF(v.meta_mensual, 0) * 100, 1) AS pct_meta_acumulado
+    ROUND(
+        (SUM(p.total) / GREATEST(TIMESTAMPDIFF(MONTH, MIN(p.fecha_pedido), CURDATE()), 1))
+        / NULLIF(v.meta_mensual, 0) * 100, 1
+    ) AS pct_meta_mensual
 FROM vendedores v
 JOIN empleados e       ON v.id_empleado  = e.id
 JOIN sucursales s      ON e.id_sucursal  = s.id
