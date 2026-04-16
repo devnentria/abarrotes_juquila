@@ -1,31 +1,55 @@
+# ============================================================
+# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Módulo   : studio_dashboards
+# Archivo  : main.py
+# Autor    : Geovani Daniel Nolasco
+# Versión  : 1.0.0
+# ============================================================
 """
-Módulo II — Studio de Dashboards
-Punto de entrada de la aplicación FastAPI.
+Punto de entrada — Studio Dashboards.
 
-Estado: En espera — se construye después del PWA Asistente.
+Responsabilidades:
+  - Gestión de usuarios y administración de la Suite
+  - Dashboards ejecutivos (próximamente)
 
-Cuando llegue el momento, aquí se montarán:
-  - /studio             → UI del generador de dashboards
-  - /api/studio/generar → IA genera Chart.js a partir de lenguaje natural
-  - /api/dashboards     → CRUD de dashboards guardados
+Rutas principales:
+  GET  /            → Shell Studio (dashboards)
+  GET  /admin       → Portal de administración
+  POST /auth/login  → Autenticación JWT
+  GET|POST|PATCH /api/admin/* → CRUD de usuarios
 """
 import uvicorn
 from fastapi import FastAPI
 
 from shared.config import STUDIO_PORT
+from shared.database_local import init_db
+from pwa_asistente.routers import auth
+from studio_dashboards.routers import admin, paginas
 
+# ── Inicializar BD local al arrancar ─────────────────────────────────────────
+init_db()
+
+# ── Instancia principal ───────────────────────────────────────────────────────
 app = FastAPI(
     title="Studio Dashboards — Suite Analítica Nentria",
     docs_url=None,
     redoc_url=None,
 )
 
+# ── Routers ───────────────────────────────────────────────────────────────────
+app.include_router(auth.router)    # POST /auth/login, GET /auth/me, PATCH /auth/perfil
+app.include_router(admin.router)   # GET /admin, GET|POST|PATCH /api/admin/*
+app.include_router(paginas.router) # GET / → shell Studio
 
+
+# ── Health check ─────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    """Endpoint para verificar que el servidor está vivo."""
     return {"status": "ok", "modulo": "studio_dashboards"}
 
 
+# ── Arranque directo ──────────────────────────────────────────────────────────
 if __name__ == "__main__":
     uvicorn.run(
         "studio_dashboards.main:app",
