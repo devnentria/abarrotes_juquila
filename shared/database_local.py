@@ -54,7 +54,17 @@ def init_db() -> None:
                 ultimo_acceso TEXT,
                 consultas_ia  INTEGER NOT NULL DEFAULT 0,
                 limite_ia     INTEGER NOT NULL DEFAULT 700,
-                costo_ia_usd  REAL    NOT NULL DEFAULT 0.0
+                costo_ia_usd  REAL    NOT NULL DEFAULT 0.0,
+                mes_consultas TEXT    NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS consumo_ia_mensual (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id   INTEGER NOT NULL,
+                mes          TEXT    NOT NULL,
+                consultas    INTEGER NOT NULL DEFAULT 0,
+                costo_usd    REAL    NOT NULL DEFAULT 0.0,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
             );
 
             CREATE TABLE IF NOT EXISTS chat_conversaciones (
@@ -82,6 +92,15 @@ def init_db() -> None:
             "ALTER TABLE usuarios ADD COLUMN limite_ia      INTEGER NOT NULL DEFAULT 700",
             "ALTER TABLE usuarios ADD COLUMN costo_ia_usd   REAL    NOT NULL DEFAULT 0.0",
             "ALTER TABLE usuarios ADD COLUMN foto_perfil    TEXT",
+            "ALTER TABLE usuarios ADD COLUMN mes_consultas  TEXT    NOT NULL DEFAULT ''",
+            """CREATE TABLE IF NOT EXISTS consumo_ia_mensual (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id   INTEGER NOT NULL,
+                mes          TEXT    NOT NULL,
+                consultas    INTEGER NOT NULL DEFAULT 0,
+                costo_usd    REAL    NOT NULL DEFAULT 0.0,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+            )""",
         ]
         for sql in migraciones:
             try:
@@ -138,6 +157,41 @@ def execute(sql: str, params: tuple = ()) -> int:
         cursor = conn.execute(sql, params)
         conn.commit()
         return cursor.lastrowid
+
+
+def verificar_mes_ia(usuario_id: int, mes_actual: str) -> None:
+    """
+    Verifica si el mes del contador IA cambió. Si cambió, archiva el consumo
+    del mes anterior en consumo_ia_mensual y reinicia los contadores del usuario.
+
+    Args:
+        usuario_id (int): ID del usuario.
+        mes_actual (str): Mes en formato "YYYY-MM" (ej. "2026-04").
+    """
+    u = fetch_one(
+        "SELECT consultas_ia, costo_ia_usd, mes_consultas FROM usuarios WHERE id = ?",
+        (usuario_id,),
+    )
+    if not u:
+        return
+    if u["mes_consultas"] == mes_actual:
+        return
+
+    # Archivar mes anterior si tenía datos
+    if u["mes_consultas"] and (u["consultas_ia"] > 0 or u["costo_ia_usd"] > 0):
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO consumo_ia_mensual (usuario_id, mes, consultas, costo_usd) "
+                "VALUES (?, ?, ?, ?)",
+                (usuario_id, u["mes_consultas"], u["consultas_ia"], u["costo_ia_usd"]),
+            )
+            conn.commit()
+
+    # Reiniciar contadores y marcar mes actual
+    execute(
+        "UPDATE usuarios SET consultas_ia = 0, costo_ia_usd = 0, mes_consultas = ? WHERE id = ?",
+        (mes_actual, usuario_id),
+    )
 
 
 def modulos_de_usuario(modulos_json: str) -> list[str]:

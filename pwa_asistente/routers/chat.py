@@ -16,6 +16,7 @@ Endpoints:
   POST   /api/chat/mensaje                  → Envía mensaje y obtiene respuesta del agente
 """
 import re
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,7 +25,7 @@ from pydantic import BaseModel
 
 from shared.auth import get_current_user
 from shared.config import IA_COSTO_POR_CONSULTA, IA_RATIO_PWA
-from shared.database_local import execute, fetch_all, fetch_one
+from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
@@ -150,7 +151,8 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
     if not body.mensaje.strip():
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
-    # 1. Verificar límite de consultas IA
+    # 1. Verificar límite de consultas IA (con auto-reset mensual)
+    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
     u = fetch_one(
         "SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?",
         (usuario["id"],),

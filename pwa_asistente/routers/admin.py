@@ -87,7 +87,7 @@ def listar_usuarios():
     """
     filas = fetch_all(
         "SELECT id, nombre, email, rol, modulos, permisos, activo, creado_en, ultimo_acceso, "
-        "       consultas_ia, limite_ia, costo_ia_usd "
+        "       consultas_ia, limite_ia, costo_ia_usd, mes_consultas "
         "FROM usuarios ORDER BY id"
     )
     for u in filas:
@@ -236,6 +236,53 @@ def listar_equipo(ejecutor: dict = Depends(require_rol("admin", "supervisor"))):
         "FROM usuarios WHERE rol = 'usuario' ORDER BY nombre"
     )
     return JSONResponse({"usuarios": filas})
+
+
+@router.patch("/api/admin/usuarios/{usuario_id}/reset-consultas",
+              dependencies=[Depends(require_rol("admin", "supervisor"))])
+def resetear_consultas(usuario_id: int):
+    """
+    Reinicia el contador de consultas IA y costo acumulado de un usuario a cero.
+
+    Args:
+        usuario_id (int): ID del usuario.
+
+    Returns:
+        JSONResponse: { mensaje }
+
+    Raises:
+        HTTPException 404: Si el usuario no existe.
+    """
+    usuario = fetch_one("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    execute(
+        "UPDATE usuarios SET consultas_ia = 0, costo_ia_usd = 0, mes_consultas = '' WHERE id = ?",
+        (usuario_id,),
+    )
+    return JSONResponse({"mensaje": "Contador de consultas reiniciado"})
+
+
+@router.get("/api/admin/usuarios/{usuario_id}/historial-ia",
+            dependencies=[Depends(require_rol("admin", "supervisor"))])
+def historial_ia(usuario_id: int):
+    """
+    Retorna el historial mensual de consumo IA de un usuario.
+
+    Returns:
+        JSONResponse: { historial: [ {mes, consultas, costo_usd} ] }
+    """
+    usuario = fetch_one("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    filas = fetch_all(
+        "SELECT mes, consultas, costo_usd "
+        "FROM consumo_ia_mensual WHERE usuario_id = ? ORDER BY mes DESC",
+        (usuario_id,),
+    )
+    return JSONResponse({"historial": filas})
 
 
 @router.patch("/api/admin/usuarios/{usuario_id}/password")
