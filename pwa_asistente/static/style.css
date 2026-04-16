@@ -58,7 +58,7 @@ html, body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overscroll-behavior: none;
-  user-select: none;
+  user-select: none; /* se sobreescribe en burbujas del chat */
 }
 
 /* ── Header ──────────────────────────────────────────────────── */
@@ -328,10 +328,18 @@ html, body {
   padding: 14px 14px 8px;
 }
 
+.chat-fecha-etiqueta {
+  text-align: center; font-size: 11px; color: var(--text-dim);
+  background: var(--bg); border-radius: 20px;
+  padding: 3px 12px; align-self: center;
+  margin-bottom: 4px;
+}
+
 .chat-bubble {
   max-width: 85%;
   padding: 10px 14px;
   border-radius: 16px;
+  user-select: text;
   font-size: 14px; line-height: 1.55;
 }
 
@@ -500,6 +508,7 @@ html, body {
   display: block; margin-top: 1px;
 }
 
+
 .historial-item-del {
   background: none; border: none;
   color: var(--text-dim); cursor: pointer;
@@ -530,6 +539,12 @@ html, body {
 .chat-input:focus { border-color: var(--blue-mid); }
 .chat-input::placeholder { color: var(--text-dim); }
 
+.chat-status-msg {
+  font-size: 0.78rem;
+  color: var(--text-muted, #888);
+  padding: 6px 12px;
+  font-style: italic;
+}
 .chat-send-btn {
   width: 40px; height: 40px;
   background: var(--blue);
@@ -650,6 +665,17 @@ html, body {
 .detalle-importe {
   font-size: 13px; font-weight: 600; color: var(--blue-mid);
   flex-shrink: 0; white-space: nowrap;
+}
+
+.detalle-badge {
+  display: flex; flex-direction: column; align-items: flex-end;
+  flex-shrink: 0; white-space: nowrap; gap: 2px;
+}
+.detalle-badge > span:first-child {
+  font-size: 11px; font-weight: 600; color: var(--warn);
+}
+.detalle-badge-meses {
+  font-size: 10px; color: var(--text-dim);
 }
 
 .detalle-lab {
@@ -849,6 +875,7 @@ html, body {
   display: flex; align-items: center; gap: 8px;
   color: var(--text-dim); font-size: 13px;
 }
+
 
 /* ── Panel IA Flash (bottom sheet) ───────────────────────────── */
 .ia-overlay {

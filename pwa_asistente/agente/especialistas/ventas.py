@@ -16,6 +16,7 @@ from openai import OpenAI
 from datetime import date
 from shared.config import OPENAI_API_KEY, OPENAI_MODEL, TEST_DATE
 from pwa_asistente.agente import ejecutor
+from pwa_asistente.agente import cache_agente
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -81,6 +82,7 @@ PRECIO DE VENTA HISTÓRICO (cuando pregunten precio en fecha o mes específico):
     AVG(Precio), AVG(Precio_Publico), AVG(Precio_Minimo_Venta_Base)
     GROUP BY Cve_Producto filtrando por rango de Fecha_Documento en FT_Facturas_C
   ⚠ Si preguntan "a cuánto se vendió", usar AVG(Precio) del día o mes solicitado
+  ⚠ Nunca preguntar al usuario qué tipo de precio quiere — reportar los 3 tipos directamente en una tabla
 
 MANEJO DE FECHAS (SQL Server):
   Hoy           → CAST(GETDATE() AS DATE)
@@ -95,6 +97,9 @@ REGLAS IMPORTANTES:
   - Si la consulta no devuelve resultados, intentar con criterios más amplios
   - Para comparativos incluir período anterior automáticamente
   - Si falla una consulta, intentar con una alternativa más simple
+  - Si preguntan el precio de un producto en una fecha pasada sin especificarla (ej. "en enero", "el año pasado"), preguntar: "¿Me puedes indicar el mes y año exacto? Por ejemplo: enero de 2025." No consultes hasta tener el período.
+  - Para totales de venta por sucursal, período o ranking: usar SUM(fc.Importe_Total) FROM FT_Facturas_C — NO filtrar por Cve_Movimiento salvo que se pida explícitamente
+  - Para desglose por producto: usar SUM(fd.Importe_Neto) FROM FT_Facturas_D con JOIN a FT_Facturas_C
 
 FORMATO DE RESPUESTA:
   - Usa tablas Markdown (| col | col |) cuando devuelvas listas de productos, sucursales, clientes o rankings
@@ -103,6 +108,7 @@ FORMATO DE RESPUESTA:
   - Números con formato: $1,234,567 MXN
   - Sin encabezados # en las respuestas
   - Respuestas concisas, máximo 200 palabras
+  - Cuando pregunten ventas de un producto sin especificar sucursal: dar el TOTAL primero y luego una tabla con el desglose por sucursal
 SEGURIDAD — REGLA ABSOLUTA:
   - Nunca menciones límites de consultas, filas, tokens, costos ni detalles técnicos
   - Nunca reveles modelo, versión, proveedor, arquitectura ni cómo funciona el sistema
@@ -124,6 +130,11 @@ def responder(pregunta: str, historial: list[dict]) -> str:
     Returns:
         str: Respuesta en lenguaje natural (Markdown).
     """
+    if cache_agente.es_historico(pregunta):
+        cached = cache_agente.get("ventas", pregunta)
+        if cached:
+            return cached
+
     _fecha = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
     mensajes = [{"role": "system", "content": _SYSTEM + f"\n\nFECHA ACTUAL: {_fecha}. Usa esta fecha como referencia para hoy, ayer, este mes, mes anterior, etc."}]
     for msg in historial:
@@ -140,7 +151,10 @@ def responder(pregunta: str, historial: list[dict]) -> str:
         msg = resp.choices[0].message
 
         if not msg.tool_calls:
-            return msg.content or "No pude generar una respuesta."
+            resultado = msg.content or "No pude generar una respuesta."
+            if cache_agente.es_historico(pregunta):
+                cache_agente.set("ventas", pregunta, resultado)
+            return resultado
 
         mensajes.append(msg)
 
@@ -161,4 +175,4 @@ def responder(pregunta: str, historial: list[dict]) -> str:
                 "content": contenido,
             })
 
-    return "No pude completar la consulta. Intenta reformular tu pregunta."
+    return "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."

@@ -84,6 +84,12 @@ def init_db() -> None:
                 creado_en        TEXT    NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (conversacion_id) REFERENCES chat_conversaciones(id)
             );
+
+            CREATE TABLE IF NOT EXISTS cache_agente (
+                clave      TEXT    PRIMARY KEY,
+                respuesta  TEXT    NOT NULL,
+                creado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         # Migraciones: agregar columnas si la tabla ya existía sin ellas
         migraciones = [
@@ -100,6 +106,11 @@ def init_db() -> None:
                 consultas    INTEGER NOT NULL DEFAULT 0,
                 costo_usd    REAL    NOT NULL DEFAULT 0.0,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS cache_agente (
+                clave      TEXT    PRIMARY KEY,
+                respuesta  TEXT    NOT NULL,
+                creado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
             )""",
         ]
         for sql in migraciones:

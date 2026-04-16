@@ -253,13 +253,13 @@ function renderMedicos() {
   setTimeout(iaFlashMedicos, 50);
 
   // Duplicados confirmados por cédula
-  html += `<div class="section-title">Duplicados confirmados · misma cédula · ${por_cedula.length}</div>`;
+  html += `<div class="section-title">Cédula duplicada · ${por_cedula.length} médico${por_cedula.length !== 1 ? 's' : ''}</div>`;
   if (por_cedula.length) {
     html += por_cedula.map(grupo => `
       <div class="card-item">
         <div class="card-row">
           <span class="tag tag-danger">Cédula ${grupo[0].cedula}</span>
-          <span class="card-sub">${grupo.length} registros</span>
+          <span class="card-sub">registrado ${grupo.length} veces</span>
         </div>
         ${grupo.map(m => `
           <div class="detalle-row" style="margin-top:4px">
@@ -277,13 +277,13 @@ function renderMedicos() {
   }
 
   // Posibles duplicados por nombre
-  html += `<div class="section-title mt">Posibles duplicados · mismo nombre · ${por_nombre.length}</div>`;
+  html += `<div class="section-title mt">Nombre duplicado · ${por_nombre.length} médico${por_nombre.length !== 1 ? 's' : ''}</div>`;
   if (por_nombre.length) {
     html += por_nombre.map(grupo => `
       <div class="card-item">
         <div class="card-row">
           <span class="card-title" style="font-size:14px">${grupo[0].nombre}</span>
-          <span class="tag tag-warn">${grupo.length} registros</span>
+          <span class="tag tag-warn">registrado ${grupo.length} veces</span>
         </div>
         ${grupo.map(m => `
           <div class="detalle-row" style="margin-top:4px">
@@ -470,6 +470,10 @@ async function cargarStockSucursal(cve, detalle) {
           <span class="detalle-nombre">${p.producto || '—'}</span>
           <span class="detalle-lab">${p.laboratorio || ''}</span>
         </div>
+        <div class="detalle-badge">
+          <span>~${fmtMXN_corto(p.prom_importe_mensual)}/mes</span>
+          <span class="detalle-badge-meses">${p.m1_label}:${fmtNum(p.m1_uds)} ${p.m2_label}:${fmtNum(p.m2_uds)} ${p.m3_label}:${fmtNum(p.m3_uds)} pzs</span>
+        </div>
       </div>
     `).join('');
   }
@@ -580,25 +584,44 @@ async function _iaFlashPanel(tipo, endpoint, titulo, cve, nombre, btn) {
 function iaFlashSucursal(cve, nombre, btn)   { _iaFlashPanel('suc', 'sucursal',   'Resumen',    cve, nombre, btn); }
 function iaFlashInventario(cve, nombre, btn) { _iaFlashPanel('inv', 'inventario', 'Inventario', cve, nombre, btn); }
 
-async function iaFlashMedicos() {
+function _renderMedicosBanner(texto) {
+  const banner = document.getElementById('ia-medicos-banner');
+  if (!banner) return;
+  banner.innerHTML = `
+    <span class="ia-medicos-icono">✦</span>
+    <span class="ia-medicos-texto">${texto}</span>`;
+
+  const btnAnterior = document.getElementById('ia-medicos-actualizar');
+  if (btnAnterior) btnAnterior.remove();
+
+  const btn = document.createElement('button');
+  btn.id        = 'ia-medicos-actualizar';
+  btn.className = 'ia-panel-actualizar-btn';
+  btn.textContent = '🔄 Actualizar (consume 1 consulta)';
+  btn.onclick   = () => iaFlashMedicos(true);
+  banner.after(btn);
+}
+
+async function iaFlashMedicos(regenerar = false) {
   const banner = document.getElementById('ia-medicos-banner');
   if (!banner) return;
 
-  const cached = _iaCacheGet('med', 'global');
-  if (cached) {
-    banner.innerHTML = `<span class="ia-medicos-icono">✦</span><span class="ia-medicos-texto">${cached}</span>`;
-    return;
+  if (!regenerar) {
+    const cached = _iaCacheGet('med', 'global');
+    if (cached) { _renderMedicosBanner(cached); return; }
   }
 
+  const btn = document.getElementById('ia-medicos-actualizar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Actualizando...'; }
+
   try {
-    const data = await authFetch('/api/ia/medicos').then(r => r.json());
+    const url = regenerar ? '/api/ia/medicos?regenerar=1' : '/api/ia/medicos';
+    const data = await authFetch(url).then(r => r.json());
     if (!data.texto) { banner.remove(); return; }
     _iaCacheSet('med', 'global', data.texto);
-    banner.innerHTML = `
-      <span class="ia-medicos-icono">✦</span>
-      <span class="ia-medicos-texto">${data.texto}</span>`;
+    _renderMedicosBanner(data.texto);
   } catch {
-    banner.remove();
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Actualizar (consume 1 consulta)'; }
   }
 }
 
@@ -655,7 +678,7 @@ function renderMarkdown(text) {
         if (i === 1 && isHeader) return; // saltar línea separadora
         const cells = line.split('|').filter((_, ci) => ci > 0 && ci < line.split('|').length - 1);
         const tag   = (i === 0 && isHeader) ? 'th' : 'td';
-        const row   = cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('');
+        const row   = cells.map(c => `<${tag}>${c.trim().replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')}</${tag}>`).join('');
         table += `<tr>${row}</tr>`;
       });
 
@@ -722,6 +745,9 @@ function showTyping() {
 
 function hideTyping() { document.getElementById('typing-indicator')?.remove(); }
 
+// ── Chat — AbortController para timeout ──────────────────────────────────────
+let _chatAbortController = null;
+
 // ── Chat — enviar mensaje ─────────────────────────────────────────────────────
 async function enviarMensaje() {
   if (chat.enviando) return;
@@ -734,33 +760,105 @@ async function enviarMensaje() {
   appendBubble(text, 'user');
   showTyping();
 
+  _chatAbortController = new AbortController();
+  const timeoutId = setTimeout(() => _chatAbortController?.abort(), 90_000);
+
+  // Crear bubble del bot vacía para ir llenando con el stream
+  const messages = document.getElementById('chat-messages');
+  const botBubble = document.createElement('div');
+  botBubble.className = 'chat-bubble chat-bubble-bot';
+  const botContent = document.createElement('div');
+  botContent.className = 'chat-bubble-content';
+  botBubble.appendChild(botContent);
+  let rawText = '';
+
   try {
-    const res  = await authFetch('/api/chat/mensaje', {
+    const res = await authFetch('/api/chat/mensaje/stream', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ mensaje: text, conversacion_id: chat.conversacionId }),
+      signal:  _chatAbortController.signal,
     });
-    const data = await res.json();
-    hideTyping();
+    clearTimeout(timeoutId);
 
     if (res.status === 429) {
+      hideTyping();
+      const data = await res.json();
       appendBubble(data.detail || 'Límite de consultas alcanzado.', 'bot');
       return;
     }
 
-    const reply = data.respuesta || data.detail || 'Sin respuesta.';
-    appendBubble(reply, 'bot');
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
 
-    // Si era nueva conversación, guardar el ID y actualizar título
-    if (!chat.conversacionId && data.conversacion_id) {
-      chat.conversacionId = data.conversacion_id;
-      document.getElementById('chat-titulo-actual').textContent =
-        text.length > 40 ? text.slice(0, 40) + '…' : text;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // guardar línea incompleta
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const json = line.slice(6).trim();
+        if (!json) continue;
+        let evt;
+        try { evt = JSON.parse(json); } catch { continue; }
+
+        if (evt.type === 'status') {
+          // Reemplazar los puntitos con el mensaje de estado
+          hideTyping();
+          const statusDiv = document.createElement('div');
+          statusDiv.className = 'chat-typing chat-status-msg';
+          statusDiv.id = 'chat-status-msg';
+          statusDiv.textContent = evt.text;
+          messages.appendChild(statusDiv);
+          messages.scrollTop = messages.scrollHeight;
+
+        } else if (evt.type === 'token') {
+          // Primer token — quitar status y mostrar bubble
+          document.getElementById('chat-status-msg')?.remove();
+          if (!botBubble.parentNode) {
+            messages.appendChild(botBubble);
+          }
+          rawText += evt.text;
+          botContent.innerHTML = renderMarkdown(rawText);
+          messages.scrollTop = messages.scrollHeight;
+
+        } else if (evt.type === 'done') {
+          if (!chat.conversacionId && evt.conversacion_id) {
+            chat.conversacionId = evt.conversacion_id;
+            document.getElementById('chat-titulo-actual').textContent =
+              text.length > 40 ? text.slice(0, 40) + '…' : text;
+          }
+        } else if (evt.type === 'error') {
+          document.getElementById('chat-status-msg')?.remove();
+          hideTyping();
+          appendBubble(evt.text, 'bot');
+        }
+      }
     }
-  } catch {
+
+    // Si no llegó ningún token, mostrar error
+    if (!rawText) {
+      hideTyping();
+      appendBubble('Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor.', 'bot');
+    }
+
+  } catch (err) {
+    clearTimeout(timeoutId);
+    document.getElementById('chat-status-msg')?.remove();
     hideTyping();
-    appendBubble('Error al conectar con el asistente. Intenta de nuevo.', 'bot');
+    botBubble.remove();
+    if (err.name === 'AbortError') {
+      appendBubble('Consulta cancelada.', 'bot');
+    } else {
+      appendBubble('Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor.', 'bot');
+    }
   } finally {
+    _chatAbortController = null;
     chat.enviando = false;
   }
 }
@@ -819,6 +917,19 @@ async function cargarConversaciones() {
       else                 grupos['Anteriores'].push(c);
     });
 
+    const _fmtFechaConv = (isoStr, grupo) => {
+      if (!isoStr) return '';
+      const d = new Date(isoStr);
+      if (grupo !== 'Anteriores') {
+        return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+      }
+      const ahora = new Date();
+      const opts = d.getFullYear() !== ahora.getFullYear()
+        ? { day: 'numeric', month: 'short', year: 'numeric' }
+        : { day: 'numeric', month: 'short' };
+      return d.toLocaleDateString('es-MX', opts);
+    };
+
     lista.innerHTML = Object.entries(grupos)
       .filter(([, items]) => items.length)
       .map(([grupo, items]) => `
@@ -864,6 +975,16 @@ async function cargarConversacion(id) {
 
     const msgs = document.getElementById('chat-messages');
     msgs.innerHTML = '';
+
+    if (data.conversacion.creado_en) {
+      const fecha = new Date(data.conversacion.creado_en);
+      const etiqueta = fecha.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      const div = document.createElement('div');
+      div.className = 'chat-fecha-etiqueta';
+      div.textContent = etiqueta;
+      msgs.appendChild(div);
+    }
+
     (data.mensajes || []).forEach(m => appendBubble(m.contenido, m.rol === 'user' ? 'user' : 'bot'));
     msgs.scrollTop = msgs.scrollHeight;
 

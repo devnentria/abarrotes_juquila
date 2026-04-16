@@ -9,12 +9,12 @@
  * El usuario no nota que existe — solo nota que la app es rápida.
  */
 
-const CACHE_NAME = 'suite-analitica-v30';
+const CACHE_NAME = 'suite-analitica-v45';
 
 // Solo CSS y JS se cachean — el HTML siempre va a la red para estar al día
 const STATIC_ASSETS = [
   '/static/style.css',
-  '/static/app.js?v=23',
+  '/static/app.js?v=38',
   '/static/manifest.json',
 ];
 

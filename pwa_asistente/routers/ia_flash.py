@@ -191,12 +191,50 @@ def ia_inventario(
         ORDER BY el.Fecha_Caducidad ASC
     """, (cve_sucursal,))
 
-    sin_stock = query("""
-        SELECT COUNT(*) AS total
+    # Solo productos con ventas en los últimos 90 días (los que realmente se mueven)
+    sin_stock = query(f"""
+        SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
         FROM IN_Existencias_Alm ea
         WHERE ea.Cve_Sucursal = ?
           AND ea.Status       = 'AC'
           AND ea.Existencia   <= 0
+          AND EXISTS (
+              SELECT 1
+              FROM FT_Facturas_D fd
+              JOIN FT_Facturas_C fc
+                ON fd.Cve_Folio      = fc.Cve_Folio
+               AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+               AND fd.Cve_Movimiento = fc.Cve_Movimiento
+              WHERE fd.Cve_Producto  = ea.Cve_Producto
+                AND fc.Cve_Sucursal  = ea.Cve_Sucursal
+                AND fc.Status       <> 'C'
+                AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
+          )
+    """, (cve_sucursal,))
+
+    # TOP 3 más vendidos (90 días) sin existencia — para hacer la alerta específica
+    top_sin_stock = query(f"""
+        SELECT TOP 3
+            p.Descripcion          AS producto,
+            SUM(fd.Cantidad)       AS unidades
+        FROM FT_Facturas_D fd
+        JOIN FT_Facturas_C fc
+          ON fd.Cve_Folio      = fc.Cve_Folio
+         AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+         AND fd.Cve_Movimiento = fc.Cve_Movimiento
+        JOIN IM_Productos_Gral p ON fd.Cve_Producto = p.Cve_Producto
+        JOIN IN_Existencias_Alm ea
+          ON fd.Cve_Producto  = ea.Cve_Producto
+         AND ea.Cve_Sucursal  = fc.Cve_Sucursal
+        WHERE fc.Cve_Sucursal  = ?
+          AND fc.Status       <> 'C'
+          AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
+          AND ea.Status        = 'AC'
+          AND ea.Existencia   <= 0
+          AND p.Descripcion IS NOT NULL
+        GROUP BY p.Descripcion
+        HAVING SUM(fd.Importe_Neto) / 3.0 >= 500
+        ORDER BY SUM(fd.Importe_Neto) DESC
     """, (cve_sucursal,))
 
     # Lotes ya caducados con existencia — dato no visible en la tarjeta
@@ -208,28 +246,46 @@ def ia_inventario(
           AND Fecha_Caducidad < {hoy()}
     """, (cve_sucursal,))
 
-    # Productos en stock crítico — dato no visible en la tarjeta
-    stock_critico = query("""
-        SELECT COUNT(*) AS total
-        FROM IN_Existencias_Alm
-        WHERE Cve_Sucursal = ? AND Status = 'AC'
-          AND Existencia > 0 AND Existencia <= 5
+    # Stock crítico solo en productos con ventas recientes
+    stock_critico = query(f"""
+        SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
+        FROM IN_Existencias_Alm ea
+        WHERE ea.Cve_Sucursal = ? AND ea.Status = 'AC'
+          AND ea.Existencia > 0 AND ea.Existencia <= 5
+          AND EXISTS (
+              SELECT 1
+              FROM FT_Facturas_D fd
+              JOIN FT_Facturas_C fc
+                ON fd.Cve_Folio      = fc.Cve_Folio
+               AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+               AND fd.Cve_Movimiento = fc.Cve_Movimiento
+              WHERE fd.Cve_Producto  = ea.Cve_Producto
+                AND fc.Cve_Sucursal  = ea.Cve_Sucursal
+                AND fc.Status       <> 'C'
+                AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
+          )
     """, (cve_sucursal,))
 
-    n_sin       = sin_stock[0]["total"]    if sin_stock    else 0
-    n_caducados = caducados[0]["total"]    if caducados    else 0
+    n_sin       = sin_stock[0]["total"]     if sin_stock     else 0
+    n_caducados = caducados[0]["total"]     if caducados     else 0
     n_critico   = stock_critico[0]["total"] if stock_critico else 0
     cad_txt     = ", ".join(
         f"{r['producto']} (lote {r['lote']}, {r['dias']} días)"
         for r in caducidades
     ) or "ninguna en los próximos 60 días"
+    top_sin_txt = ", ".join(
+        f"{r['producto']} ({r['unidades']:.0f} uds)"
+        for r in top_sin_stock
+    ) or "ninguno"
 
     prompt = (
         f"Eres el asistente analítico personal de {nombre}. "
         f"Redacta exactamente 2 oraciones de alerta de inventario para {nombre_suc}, "
         f"dirigidas a {nombre}. "
-        f"Datos: {n_sin} productos sin existencia, {n_critico} en stock crítico (menos de 5 piezas), "
+        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia, "
+        f"{n_critico} en stock crítico (menos de 5 piezas), "
         f"{n_caducados} lotes con producto caducado aún en almacén. "
+        f"Productos más vendidos sin existencia: {top_sin_txt}. "
         f"Caducidades próximas (60 días): {cad_txt}. "
         f"Tono profesional y urgente si hay riesgo. Empieza con el nombre. "
         f"Destaca el problema más grave. Sin títulos ni viñetas."
@@ -330,9 +386,11 @@ def ia_medicos(
             f"Eres el asistente analítico personal de {nombre}. "
             f"Redacta exactamente 2 oraciones sobre el estado del catálogo de médicos, "
             f"dirigidas a {nombre}. "
-            f"Duplicados: {n_cedula} grupos con cédula repetida, {n_nombre} grupos con nombre repetido. "
-            f"{n_sin_vend} médicos sin vendedor asignado, {n_sin_ced} sin cédula registrada. "
+            f"Duplicados detectados: {n_cedula} médicos con la misma cédula registrada más de una vez, "
+            f"{n_nombre} médicos con el mismo nombre registrado más de una vez. "
+            f"Médicos sin vendedor asignado: {n_sin_vend}. Sin cédula registrada: {n_sin_ced}. "
             f"El vendedor con más médicos a cargo es {top_vend_txt}. "
+            f"Usa la palabra 'médicos', no 'grupos'. "
             f"Tono profesional. Empieza con el nombre. Menciona el impacto en comisiones. "
             f"Sin títulos ni viñetas."
         )
