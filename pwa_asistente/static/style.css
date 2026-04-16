@@ -89,6 +89,13 @@ html, body {
   letter-spacing: .04em;
   flex-shrink: 0;
 }
+.app-logo-img {
+  height: 20px; width: auto;
+  display: block; flex-shrink: 0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 2px 5px;
+}
 
 .app-name    { font-weight: 600; font-size: 15px; color: #fff; display: block; line-height: 1.1; }
 .app-subtitle { font-size: 11px; color: rgba(255,255,255,.6); display: block; }

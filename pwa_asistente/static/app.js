@@ -1032,6 +1032,9 @@ function renderAvatarHeader(nombre, fotoPerfil) {
   } else {
     av.textContent = (nombre || '?').charAt(0).toUpperCase();
   }
+  const primerNombre = (nombre || '').split(' ')[0];
+  const el = document.getElementById('header-nombre');
+  if (el) el.textContent = `Hola, ${primerNombre}`;
 }
 
 function abrirPerfil() {

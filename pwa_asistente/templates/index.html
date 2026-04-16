@@ -20,7 +20,7 @@
   <!-- ── Login ──────────────────────────────────────────────── -->
   <div id="login-screen" class="login-screen">
     <div class="login-card">
-      <img src="/static/logo.jpeg" alt="LebenMedik" class="login-logo-img">
+      <img src="/static/logo_transparente.png" alt="LebenMedik" class="login-logo-img">
       <p class="login-sub">Inicia sesión para continuar</p>
       <div id="login-error" class="login-error hidden"></div>
       <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
@@ -33,16 +33,15 @@
         </button>
       </div>
       <button id="login-btn" class="login-btn">Entrar</button>
-      <p class="login-footer">Nentria Intelligent Solutions</p>
     </div>
   </div>
 
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header class="app-header">
     <div class="app-header-left">
-      <span class="app-logo">SA</span>
+      <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:22px;width:auto;max-width:110px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:2px 7px">
       <div class="app-header-titles">
-        <span class="app-name">Suite Analítica</span>
+        <span class="app-name" id="header-nombre">Bienvenido</span>
         <span class="app-subtitle" id="header-subtitle">Inicio</span>
       </div>
     </div>
@@ -268,9 +267,9 @@
 
   <!-- ── Banner de instalación PWA ──────────────────────────── -->
   <div id="install-banner" class="install-banner hidden">
-    <div class="install-banner-icon">SA</div>
+    <div class="install-banner-icon"><img src="/static/logo.jpeg" alt="LebenMedik" style="width:36px;height:auto"></div>
     <div class="install-banner-texto">
-      <span class="install-banner-titulo">Suite Analítica</span>
+      <span class="install-banner-titulo">LebenMedik</span>
       <span class="install-banner-sub" id="install-banner-sub">Instala la app para acceso rápido</span>
     </div>
     <button id="install-banner-btn" class="install-banner-btn">Instalar</button>
