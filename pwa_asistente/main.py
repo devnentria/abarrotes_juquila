@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 
 from shared.config import PWA_PORT
 from shared.database_local import init_db
-from pwa_asistente.routers import admin, auth, chat, ia_flash, paginas, vistas
+from pwa_asistente.routers import auth, chat, ia_flash, paginas, vistas
 
 # ── Inicializar BD local al arrancar ─────────────────────────────────────────
 init_db()
@@ -74,7 +74,6 @@ app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)      # POST /auth/login, GET /auth/me, PATCH /auth/perfil
-app.include_router(admin.router)     # GET /admin, GET|POST|PATCH /api/admin/*
 app.include_router(chat.router)      # GET|POST|DELETE /api/chat/*
 app.include_router(ia_flash.router)  # GET /api/ia/* resúmenes flash con IA
 app.include_router(paginas.router)   # GET / → shell de la app
