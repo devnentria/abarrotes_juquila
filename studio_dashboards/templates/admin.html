@@ -423,12 +423,12 @@ async function cargarUsuarios() {
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="abrirModalEditar(${u.id})">Editar</button>
             <button class="btn btn-ghost btn-sm" onclick="abrirResetPassword(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Contraseña</button>
-            <button class="btn btn-ghost btn-sm" onclick="resetearConsultas(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Reiniciar IA</button>
-            <button class="btn btn-ghost btn-sm" onclick="verHistorialIA(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Historial</button>
+            <button class="btn btn-ghost btn-sm" onclick="verHistorialIA(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Historial IA</button>
             <button class="btn btn-sm ${u.activo ? 'btn-danger' : 'btn-primary'}"
                     onclick="toggleUsuario(${u.id}, ${u.activo})">
               ${u.activo ? 'Desactivar' : 'Activar'}
             </button>
+            <button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
           </div>
         </td>
       </tr>
@@ -588,11 +588,11 @@ async function confirmarResetPassword() {
   }
 }
 
-// ── Reiniciar contador IA ─────────────────────────────────────────────────────
-async function resetearConsultas(id, nombre) {
-  if (!confirm(`¿Reiniciar el contador de consultas IA de ${nombre}?`)) return;
+// ── Eliminar usuario ──────────────────────────────────────────────────────────
+async function eliminarUsuario(id, nombre) {
+  if (!confirm(`¿Eliminar permanentemente a ${nombre}? Esta acción no se puede deshacer.`)) return;
   try {
-    const data = await api(`/api/admin/usuarios/${id}/reset-consultas`, { method: 'PATCH' });
+    const data = await api(`/api/admin/usuarios/${id}`, { method: 'DELETE' });
     mostrarToast(data.mensaje, 'success');
     cargarUsuarios();
   } catch (e) {

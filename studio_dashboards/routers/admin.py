@@ -238,6 +238,38 @@ def listar_equipo(ejecutor: dict = Depends(require_rol("admin", "supervisor"))):
     return JSONResponse({"usuarios": filas})
 
 
+@router.delete("/api/admin/usuarios/{usuario_id}", dependencies=[Depends(require_rol("admin"))])
+def eliminar_usuario(usuario_id: int):
+    """
+    Elimina permanentemente un usuario de la Suite.
+    No se puede eliminar al único administrador activo.
+
+    Args:
+        usuario_id (int): ID del usuario a eliminar.
+
+    Returns:
+        JSONResponse: { mensaje }
+
+    Raises:
+        HTTPException 404: Si el usuario no existe.
+        HTTPException 400: Si se intenta eliminar al único admin.
+    """
+    usuario = fetch_one("SELECT id, rol, activo FROM usuarios WHERE id = ?", (usuario_id,))
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    if usuario["rol"] == "admin":
+        admins_activos = fetch_one(
+            "SELECT COUNT(*) as total FROM usuarios WHERE rol = 'admin' AND activo = 1"
+        )
+        if admins_activos["total"] <= 1:
+            raise HTTPException(status_code=400, detail="No puedes eliminar al único administrador")
+
+    execute("DELETE FROM consumo_ia_mensual WHERE usuario_id = ?", (usuario_id,))
+    execute("DELETE FROM usuarios WHERE id = ?", (usuario_id,))
+    return JSONResponse({"mensaje": "Usuario eliminado"})
+
+
 @router.patch("/api/admin/usuarios/{usuario_id}/reset-consultas",
               dependencies=[Depends(require_rol("admin", "supervisor"))])
 def resetear_consultas(usuario_id: int):
