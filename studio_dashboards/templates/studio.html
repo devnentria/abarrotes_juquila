@@ -18,12 +18,12 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue:       #1e3a6e;    /* Marca Nentria — header */
-      --blue-mid:   #0A84FF;   /* iOS blue — botones, acentos */
+      --blue:       #1A2B5A;    /* Azul marino LebenMedik */
+      --blue-mid:   #00897B;   /* Teal LebenMedik — botones, acentos */
       --blue-light: #E3F0FF;
       --success:    #34C759;   /* iOS green */
       --danger:     #FF3B30;   /* iOS red */
-      --warn:       #FF9F0A;   /* iOS orange */
+      --warn:       #EF6C3A;   /* Naranja LebenMedik */
       --bg:         #F2F2F7;   /* iOS system background */
       --card:       #FFFFFF;
       --border:     #E5E5EA;   /* iOS separator */
@@ -392,9 +392,8 @@
   <!-- ── Login ── -->
   <div id="login-screen" class="login-screen">
     <div class="login-card">
-      <div class="login-logo">SA</div>
-      <p class="login-title">Suite Analítica</p>
-      <p class="login-sub">Studio — Inicia sesión para continuar</p>
+      <img src="/static/logo.jpeg" alt="LebenMedik" style="width:180px;height:auto;display:block;margin:0 auto 12px">
+      <p class="login-sub" style="text-align:center;margin-bottom:4px">Studio — Inicia sesión para continuar</p>
       <div id="login-error" class="login-error hidden"></div>
       <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
       <div class="login-input-wrap">

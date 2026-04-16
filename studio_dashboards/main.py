@@ -18,8 +18,11 @@ Rutas principales:
   POST /auth/login  → Autenticación JWT
   GET|POST|PATCH /api/admin/* → CRUD de usuarios
 """
+from pathlib import Path
+
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from shared.config import STUDIO_PORT
 from shared.database_local import init_db
@@ -35,6 +38,10 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+
+# ── Archivos estáticos ────────────────────────────────────────────────────────
+_static_dir = Path(__file__).parent / "static"
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)    # POST /auth/login, GET /auth/me, PATCH /auth/perfil
