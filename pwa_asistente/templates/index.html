@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1e3a6e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Analítica">
+  <title>Suite Analítica</title>
+  <link rel="manifest" href="/static/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- ── Login ──────────────────────────────────────────────── -->
+  <div id="login-screen" class="login-screen">
+    <div class="login-card">
+      <div class="login-logo">SA</div>
+      <p class="login-title">Suite Analítica</p>
+      <p class="login-sub">Inicia sesión para continuar</p>
+      <div id="login-error" class="login-error hidden"></div>
+      <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
+      <div class="login-input-wrap">
+        <input id="login-password" type="password" class="login-input" placeholder="Contraseña" autocomplete="current-password">
+        <button type="button" id="toggle-password" class="login-eye" aria-label="Mostrar contraseña" onclick="togglePassword()">
+          <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+      <button id="login-btn" class="login-btn">Entrar</button>
+      <p class="login-footer">Nentria Intelligent Solutions</p>
+    </div>
+  </div>
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="app-header-left">
+      <span class="app-logo">SA</span>
+      <div class="app-header-titles">
+        <span class="app-name">Suite Analítica</span>
+        <span class="app-subtitle" id="header-subtitle">Inicio</span>
+      </div>
+    </div>
+    <div class="app-header-right">
+      <div class="app-avatar" id="app-avatar">?</div>
+    </div>
+  </header>
+
+  <!-- ── Contenido ──────────────────────────────────────────── -->
+  <main class="app-content" id="app-content">
+
+    <div class="loading-state" id="loading-state">
+      <div class="spinner"></div>
+      <span>Cargando datos...</span>
+    </div>
+
+    <!-- ── Inicio ──────────────────────────────────────────── -->
+    <section class="view" id="view-inicio">
+      <div class="section-title">Sucursales</div>
+      <div class="card-list" id="lista-inicio-sucursales">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </section>
+
+    <!-- ── Dashboards ─────────────────────────────────────── -->
+    <section class="view hidden" id="view-dashboards">
+      <div class="placeholder-state">
+        <div class="placeholder-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </div>
+        <p class="placeholder-title">Dashboards</p>
+        <p class="placeholder-text">Los dashboards generados en el Studio aparecerán aquí.</p>
+      </div>
+    </section>
+
+    <!-- ── Chat ───────────────────────────────────────────── -->
+    <section class="view hidden view-chat" id="view-chat">
+
+      <!-- Sub-header del chat -->
+      <div class="chat-topbar">
+        <button class="chat-topbar-btn" id="btn-historial" aria-label="Historial">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+          </svg>
+        </button>
+        <span class="chat-topbar-titulo" id="chat-titulo-actual">Nueva conversación</span>
+        <button class="chat-topbar-btn" id="btn-nueva-conv" aria-label="Nueva conversación">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Mensajes -->
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-bubble chat-bubble-bot">
+          <p>Hola, soy tu asistente analítico.</p>
+          <p>Pregúntame lo que necesites sobre el negocio:</p>
+          <ul>
+            <li>¿Cuánto vendimos este mes?</li>
+            <li>¿Qué sucursal tiene más pedidos pendientes?</li>
+            <li>¿Cuál es el producto más vendido?</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Barra de entrada -->
+      <div class="chat-input-bar">
+        <button class="mic-btn" id="mic-btn" aria-label="Dictado por voz">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+        </button>
+        <input type="text" id="chat-input" class="chat-input"
+               placeholder="Escribe o dicta tu pregunta..." autocomplete="off" maxlength="500">
+        <button id="chat-send" class="chat-send-btn" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- ── Médicos ─────────────────────────────────────────── -->
+    <section class="view hidden" id="view-medicos">
+      <div id="lista-medicos">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </section>
+
+    <!-- ── Inventario ─────────────────────────────────────── -->
+    <section class="view hidden" id="view-inventario">
+      <div class="section-title">Toca una sucursal para ver el detalle</div>
+      <div class="card-list" id="lista-inv-sucursales">
+        <div class="empty-state">Cargando...</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── Nav inferior ───────────────────────────────────────── -->
+  <nav class="app-nav">
+    <button class="nav-item active" data-view="inicio">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+      </svg>
+      <span>Inicio</span>
+    </button>
+    <button class="nav-item" data-view="dashboards">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+      </svg>
+      <span>Dashboards</span>
+    </button>
+    <button class="nav-item nav-chat" data-view="chat">
+      <div class="nav-chat-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+        </svg>
+      </div>
+      <span>Asistente</span>
+    </button>
+    <button class="nav-item" data-view="medicos">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>
+      </svg>
+      <span>Médicos</span>
+    </button>
+    <button class="nav-item" data-view="inventario">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+        <path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.72V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.72c.57-.38 1-.99 1-1.71V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z"/>
+      </svg>
+      <span>Inventario</span>
+    </button>
+  </nav>
+
+  <!-- ── Historial drawer (desliza desde la izquierda) ──────── -->
+  <div class="historial-overlay hidden" id="historial-overlay"></div>
+  <div class="historial-drawer hidden" id="historial-drawer">
+    <div class="historial-header">
+      <span class="historial-header-titulo">Conversaciones</span>
+      <button class="historial-close" id="historial-close" aria-label="Cerrar">×</button>
+    </div>
+    <button class="historial-nueva" id="historial-nueva-btn">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+      </svg>
+      Nueva conversación
+    </button>
+    <div class="historial-lista" id="historial-lista">
+      <div class="historial-empty">Sin conversaciones anteriores</div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=23"></script>
+  <!-- ── Perfil bottom sheet ───────────────────────────────── -->
+  <div id="perfil-overlay" class="perfil-overlay hidden"></div>
+  <div id="perfil-sheet" class="perfil-sheet hidden">
+    <div class="perfil-sheet-handle"></div>
+
+    <!-- Vista principal -->
+    <div id="perfil-vista-main">
+      <div class="perfil-header">
+        <div class="perfil-avatar-wrap" id="perfil-avatar-btn">
+          <div class="perfil-avatar" id="perfil-inicial">?</div>
+          <span class="perfil-avatar-edit">📷</span>
+        </div>
+        <input type="file" id="perfil-foto-input" accept="image/*" style="display:none">
+        <div class="perfil-info">
+          <span class="perfil-nombre" id="perfil-nombre">—</span>
+          <span class="perfil-rol" id="perfil-rol">—</span>
+        </div>
+        <button class="perfil-cerrar" id="perfil-cerrar-btn" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="perfil-opciones">
+        <!-- Editar nombre -->
+        <button id="perfil-editar-btn" class="perfil-opcion">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+          Editar nombre
+        </button>
+        <!-- Tema -->
+        <div class="perfil-opcion perfil-opcion-tema">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3zm0 16V5a7 7 0 0 1 0 14z"/></svg>
+          <span style="flex:1">Tema oscuro</span>
+          <label class="perfil-toggle">
+            <input type="checkbox" id="perfil-tema-toggle">
+            <span class="perfil-toggle-track"></span>
+          </label>
+        </div>
+        <!-- Cerrar sesión -->
+        <button id="perfil-logout-btn" class="perfil-opcion perfil-opcion-danger">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+          Cerrar sesión
+        </button>
+      </div>
+    </div>
+
+    <!-- Vista editar nombre -->
+    <div id="perfil-vista-editar" class="hidden">
+      <div class="perfil-header">
+        <button class="perfil-cerrar" id="perfil-editar-back">‹</button>
+        <span style="flex:1;font-size:15px;font-weight:700;color:var(--text)">Editar nombre</span>
+      </div>
+      <div style="padding:16px 20px 24px;display:flex;flex-direction:column;gap:12px">
+        <input id="perfil-nombre-input" type="text" class="login-input" placeholder="Tu nombre" maxlength="60">
+        <div id="perfil-editar-error" class="login-error hidden"></div>
+        <button id="perfil-guardar-btn" class="login-btn">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Banner de actualización disponible ───────────────── -->
+  <div id="update-banner" class="update-banner hidden">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="flex-shrink:0">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+    </svg>
+    <span style="flex:1;font-size:13px">Hay una actualización disponible</span>
+    <button id="update-banner-btn" class="update-banner-btn">Actualizar</button>
+  </div>
+
+  <!-- ── Banner de instalación PWA ──────────────────────────── -->
+  <div id="install-banner" class="install-banner hidden">
+    <div class="install-banner-icon">SA</div>
+    <div class="install-banner-texto">
+      <span class="install-banner-titulo">Suite Analítica</span>
+      <span class="install-banner-sub" id="install-banner-sub">Instala la app para acceso rápido</span>
+    </div>
+    <button id="install-banner-btn" class="install-banner-btn">Instalar</button>
+    <button id="install-banner-close" class="install-banner-close" aria-label="Cerrar">✕</button>
+  </div>
+
+  <!-- ── Panel IA Flash ────────────────────────────────────── -->
+  <div id="ia-overlay" class="ia-overlay hidden"></div>
+  <div id="ia-panel" class="ia-panel hidden">
+    <div class="ia-panel-handle"></div>
+    <div class="ia-panel-header">
+      <div class="ia-panel-titulo-wrap">
+        <span class="ia-panel-icono">✦</span>
+        <span id="ia-panel-titulo" class="ia-panel-titulo">Resumen IA</span>
+      </div>
+      <button id="ia-panel-close" class="ia-panel-close" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="ia-panel-body" class="ia-panel-body">
+      <div id="ia-panel-loading" class="ia-panel-loading">
+        <div class="spinner spinner-sm"></div>
+        <span>Analizando datos...</span>
+      </div>
+      <p id="ia-panel-texto" class="ia-panel-texto hidden"></p>
+    </div>
+  </div>
+
+  <!-- ── Modal tabla expandida ─────────────────────────────── -->
+  <div id="tabla-modal-overlay" class="tabla-modal-overlay hidden">
+    <div class="tabla-modal">
+      <div class="tabla-modal-header">
+        <span class="tabla-modal-titulo">Tabla</span>
+        <button id="tabla-modal-close" class="tabla-modal-close" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="tabla-modal-body" id="tabla-modal-body"></div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      // Desregistrar cualquier SW viejo que no sea /sw.js
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => {
+          if (reg.active && !reg.active.scriptURL.endsWith('/sw.js')) {
+            reg.unregister();
+          }
+        });
+      });
+
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        // Revisar actualización cada vez que el usuario vuelve a la app
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') reg.update();
+        });
+        // También al recuperar foco (escritorio)
+        window.addEventListener('focus', () => reg.update());
+      });
+    }
+  </script>
+</body>
+</html>

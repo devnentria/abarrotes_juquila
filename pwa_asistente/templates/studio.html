@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     Proyecto : Suite Analítica — Nentria Intelligent Solutions
+     Módulo   : pwa_asistente
+     Archivo  : templates/studio.html
+     Autor    : Geovani Daniel Nolasco
+     Versión  : 1.0.0
+     ============================================================ -->
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suite Analítica — Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:       #1e3a6e;    /* Marca Nentria — header */
+      --blue-mid:   #0A84FF;   /* iOS blue — botones, acentos */
+      --blue-light: #E3F0FF;
+      --success:    #34C759;   /* iOS green */
+      --danger:     #FF3B30;   /* iOS red */
+      --warn:       #FF9F0A;   /* iOS orange */
+      --bg:         #F2F2F7;   /* iOS system background */
+      --card:       #FFFFFF;
+      --border:     #E5E5EA;   /* iOS separator */
+      --text:       #1D1D1F;   /* iOS label */
+      --text-dim:   #6E6E73;   /* iOS secondary label */
+      --shadow-1:   0 1px 2px rgba(0,0,0,.04), 0 1px 6px rgba(0,0,0,.03);
+      --shadow-2:   0 4px 16px rgba(0,0,0,.08);
+      --radius:     12px;
+      --header-h:   60px;
+    }
+
+    /* ── Modo oscuro ── */
+    [data-theme="dark"] {
+      --bg:       #0f172a;
+      --card:     #1e293b;
+      --border:   #334155;
+      --text:     #f1f5f9;
+      --text-dim: #94a3b8;
+      --blue-light: #1e3a6e44;
+    }
+    [data-theme="dark"] .header        { background: #0f172a; }
+    [data-theme="dark"] .drawer        { background: #1e293b; }
+    [data-theme="dark"] .drawer-item:hover { background: #0f172a; }
+    [data-theme="dark"] .field input   { background: #0f172a; color: var(--text); }
+    [data-theme="dark"] .team-table th { background: #0f172a; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text); font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+      background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; z-index: 50;
+      box-shadow: 0 2px 8px rgba(0,0,0,.18);
+    }
+    .header-left  { display: flex; align-items: center; gap: 12px; }
+    .header-logo  { font-size: 15px; font-weight: 700; background: rgba(255,255,255,.15); padding: 6px 10px; border-radius: 8px; letter-spacing: .03em; }
+    .header-title { font-size: 16px; font-weight: 600; opacity: .92; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .header-user  { font-size: 13px; opacity: .75; }
+    .header-role  { font-size: 11px; background: rgba(255,255,255,.15); padding: 3px 8px; border-radius: 12px; font-weight: 600; text-transform: capitalize; }
+    .menu-btn {
+      background: none; border: none; color: #fff; cursor: pointer;
+      padding: 8px; border-radius: 8px; display: flex; flex-direction: column;
+      gap: 5px; transition: background .15s;
+    }
+    .menu-btn:hover { background: rgba(255,255,255,.12); }
+    .menu-btn span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; transition: all .25s; }
+
+    /* ── Contenido ── */
+    .page { padding: calc(var(--header-h) + 28px) 28px 28px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Bienvenida ── */
+    .welcome-card {
+      background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+      padding: 24px 28px; margin-bottom: 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .welcome-greeting { font-size: 20px; font-weight: 700; }
+    .welcome-sub      { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+    .welcome-avatar   {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700;
+    }
+
+    /* ── Dashboard placeholder ── */
+    .dashboard-section { }
+    .section-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
+
+    .dashboard-placeholder {
+      background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+      padding: 80px 24px; text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .placeholder-icon { color: var(--border); margin-bottom: 16px; }
+    .placeholder-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+    .placeholder-text  { font-size: 13px; color: var(--text-dim); max-width: 380px; margin: 0 auto; line-height: 1.6; }
+
+    /* ── Overlay y drawer de menú ── */
+    .drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      z-index: 100; opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 280px;
+      background: var(--card); z-index: 101;
+      transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,.15);
+    }
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .drawer-header-info {}
+    .drawer-nombre { font-size: 15px; font-weight: 700; }
+    .drawer-usuario { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+    .drawer-close {
+      background: none; border: none; cursor: pointer; color: var(--text-dim);
+      font-size: 22px; line-height: 1; padding: 4px;
+    }
+    .drawer-close:hover { color: var(--text); }
+
+    .drawer-body { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+    .drawer-section { padding: 16px 20px 6px; font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .07em; }
+
+    .drawer-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 11px 20px; cursor: pointer; transition: background .12s;
+      font-size: 14px; border: none; background: none; width: 100%; text-align: left; color: var(--text);
+    }
+    .drawer-item:hover { background: var(--bg); }
+    .drawer-item.active { background: var(--blue-light); color: var(--blue-mid); font-weight: 600; }
+    .drawer-item svg   { flex-shrink: 0; color: var(--text-dim); }
+    .drawer-item.active svg { color: var(--blue-mid); }
+    .drawer-item.danger     { color: var(--danger); }
+    .drawer-item.danger svg { color: var(--danger); }
+
+    .drawer-divider { height: 1px; background: var(--border); margin: 6px 0; }
+
+    /* ── Modal base ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200; padding: 20px;
+    }
+    .hidden { display: none !important; }
+    .modal {
+      background: var(--card); border-radius: 14px;
+      width: 100%; max-width: 440px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-header h3 { font-size: 16px; font-weight: 700; }
+    .modal-close  { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text-dim); }
+    .modal-body   { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+    .field input {
+      border: 1.5px solid var(--border); border-radius: var(--radius);
+      padding: 10px 12px; font-size: 14px; outline: none;
+      transition: border-color .15s;
+    }
+    .field input:focus { border-color: var(--blue-mid); }
+
+    /* ── Ojito contraseña ── */
+    .pwd-wrap { position: relative; }
+    .pwd-wrap input { padding-right: 42px; }
+    .pwd-eye {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--text-dim);
+      padding: 4px; display: flex; align-items: center;
+    }
+    .pwd-eye:hover { color: var(--blue-mid); }
+
+    .btn { padding: 9px 18px; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+    .btn:hover { opacity: .87; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-ghost   { background: transparent; color: var(--blue-mid); border: 1.5px solid var(--border); }
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-sm      { padding: 6px 12px; font-size: 12px; }
+
+    /* ── Tabla equipo supervisor ── */
+    .team-table { width: 100%; border-collapse: collapse; }
+    .team-table th { padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .team-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .team-table tr:last-child td { border-bottom: none; }
+    .badge { display: inline-flex; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-activo   { background: #d1fae5; color: var(--success); }
+    .badge-inactivo { background: #fee2e2; color: var(--danger); }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--blue); color: #fff; padding: 12px 20px;
+      border-radius: var(--radius); font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,.2); z-index: 300; transition: opacity .3s;
+    }
+    .toast.success { background: var(--success); }
+    .toast.error   { background: var(--danger); }
+
+    /* ── Banner instalación móvil ── */
+    .install-banner {
+      background: var(--blue-light); border: 1px solid #bfdbfe;
+      border-radius: var(--radius); padding: 14px 18px;
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 20px; font-size: 13px;
+    }
+    .install-banner svg { flex-shrink: 0; color: var(--blue-mid); }
+    .install-banner p   { flex: 1; color: var(--blue); }
+    .install-banner strong { font-weight: 700; }
+    .install-close { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 18px; line-height: 1; }
+
+    /* ── Toggle modo oscuro ── */
+    .theme-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 11px 20px; font-size: 14px; color: var(--text);
+    }
+    .toggle-switch {
+      position: relative; width: 44px; height: 24px; cursor: pointer;
+    }
+    .toggle-switch input { display: none; }
+    .toggle-track {
+      position: absolute; inset: 0; background: var(--border);
+      border-radius: 12px; transition: background .2s;
+    }
+    .toggle-switch input:checked + .toggle-track { background: var(--blue-mid); }
+    .toggle-thumb {
+      position: absolute; top: 3px; left: 3px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #fff; transition: transform .2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(20px); }
+
+    /* ── Avatar de perfil con foto ── */
+    .avatar-img {
+      width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+    }
+    .perfil-avatar-wrap {
+      position: relative; width: 80px; height: 80px; cursor: pointer; margin: 0 auto 8px;
+    }
+    .perfil-avatar {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; font-weight: 700; overflow: hidden;
+    }
+    .perfil-avatar-edit {
+      position: absolute; bottom: 0; right: 0;
+      background: var(--blue-mid); color: #fff;
+      border: 2px solid var(--card); border-radius: 50%;
+      width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
+      font-size: 13px; cursor: pointer;
+    }
+
+    /* ── Panel de chat ── */
+    .chat-panel-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      z-index: 100; opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .chat-panel-overlay.open { opacity: 1; pointer-events: all; }
+
+    .chat-panel {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 100vw;
+      background: var(--card); z-index: 101;
+      transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,.15);
+    }
+    .chat-panel.open { transform: translateX(0); }
+
+    .chat-panel-header {
+      padding: 0 20px; height: 56px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--blue); color: #fff; flex-shrink: 0;
+    }
+    .chat-panel-header h3 { font-size: 15px; font-weight: 600; }
+    .chat-panel-close {
+      background: none; border: none; color: rgba(255,255,255,.8);
+      font-size: 22px; cursor: pointer; line-height: 1; padding: 4px;
+    }
+    .chat-panel-close:hover { color: #fff; }
+
+    .chat-panel-messages {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+
+    .bubble {
+      max-width: 85%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5;
+    }
+    .bubble-bot  { background: var(--bg); color: var(--text); border-bottom-left-radius: 4px; align-self: flex-start; }
+    .bubble-user { background: var(--blue); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
+
+    .chat-typing { display: flex; gap: 4px; padding: 10px 14px; align-self: flex-start; }
+    .typing-dot  { width: 7px; height: 7px; background: var(--text-dim); border-radius: 50%; animation: bounce .9s infinite; }
+    .typing-dot:nth-child(2) { animation-delay: .15s; }
+    .typing-dot:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,60%,100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+    .chat-panel-input-bar {
+      padding: 12px 16px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; flex-shrink: 0;
+    }
+    .chat-panel-input {
+      flex: 1; border: 1.5px solid var(--border); border-radius: 22px;
+      padding: 10px 16px; font-size: 14px; outline: none; transition: border-color .15s;
+    }
+    .chat-panel-input:focus { border-color: var(--blue-mid); }
+    .chat-panel-send {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--blue);
+      border: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #fff; flex-shrink: 0; transition: opacity .15s;
+    }
+    .chat-panel-send:hover { opacity: .87; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="header">
+    <div class="header-left">
+      <span class="header-logo">SA</span>
+      <span class="header-title">Suite Analítica</span>
+    </div>
+    <div class="header-right">
+      <span class="header-role" id="header-role"></span>
+      <span class="header-user" id="header-user"></span>
+      <button class="menu-btn" id="menu-btn" aria-label="Abrir menú" onclick="abrirMenu()">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── Contenido ── -->
+  <div class="page">
+
+    <!-- Banner instalación móvil (solo si es móvil y no instalada) -->
+    <div class="install-banner hidden" id="install-banner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+        <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/>
+      </svg>
+      <p id="install-text">Instala la app en tu celular para una mejor experiencia.</p>
+      <button class="install-close" onclick="document.getElementById('install-banner').classList.add('hidden')">×</button>
+    </div>
+
+    <!-- Bienvenida -->
+    <div class="welcome-card">
+      <div>
+        <div class="welcome-greeting">Bienvenido, <span id="welcome-nombre">—</span></div>
+        <div class="welcome-sub" id="welcome-sub">Suite Analítica · Nentria Intelligent Solutions</div>
+      </div>
+      <div class="welcome-avatar" id="welcome-avatar">?</div>
+    </div>
+
+    <!-- Dashboards -->
+    <div class="dashboard-section">
+      <div class="section-label">Dashboards</div>
+      <div class="dashboard-placeholder">
+        <div class="placeholder-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="56" height="56">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+        </div>
+        <p class="placeholder-title">Los dashboards aparecerán aquí</p>
+        <p class="placeholder-text">Los análisis generados en el Studio estarán disponibles en esta sección para consultarlos desde cualquier dispositivo.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Drawer de menú ── -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="cerrarMenu()"></div>
+  <nav class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div class="drawer-header-info">
+        <div class="drawer-nombre" id="drawer-nombre">—</div>
+        <div class="drawer-usuario" id="drawer-usuario">—</div>
+      </div>
+      <button class="drawer-close" onclick="cerrarMenu()">×</button>
+    </div>
+    <div class="drawer-body" id="drawer-body">
+      <!-- Generado por JS según rol -->
+    </div>
+  </nav>
+
+  <!-- ── Modal: Cambiar contraseña ── -->
+  <div class="modal-overlay hidden" id="modal-password">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Cambiar contraseña</h3>
+        <button class="modal-close" onclick="cerrarModalPassword()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Contraseña actual</label>
+          <div class="pwd-wrap">
+            <input type="password" id="pwd-actual" placeholder="Tu contraseña vigente">
+            <button type="button" class="pwd-eye" onclick="togglePwd('pwd-actual', this)" aria-label="Mostrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Nueva contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="pwd-nueva" placeholder="Mínimo 6 caracteres">
+            <button type="button" class="pwd-eye" onclick="togglePwd('pwd-nueva', this)" aria-label="Mostrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Confirmar nueva contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="pwd-confirmar" placeholder="Repite la nueva contraseña">
+            <button type="button" class="pwd-eye" onclick="togglePwd('pwd-confirmar', this)" aria-label="Mostrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarModalPassword()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-cambiar-pwd" onclick="guardarPassword()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Mi equipo (supervisor / admin) ── -->
+  <div class="modal-overlay hidden" id="modal-equipo" style="align-items:flex-start;padding-top:80px">
+    <div class="modal" style="max-width:600px">
+      <div class="modal-header">
+        <h3>Mi equipo</h3>
+        <button class="modal-close" onclick="cerrarModalEquipo()">×</button>
+      </div>
+      <div class="modal-body" style="padding:0">
+        <div style="overflow-x:auto">
+          <table class="team-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Usuario</th>
+                <th>Estado</th>
+                <th>Consultas IA</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tabla-equipo">
+              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarModalEquipo()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Reset contraseña de usuario (supervisor) ── -->
+  <div class="modal-overlay hidden" id="modal-reset-equipo">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h3>Restablecer contraseña</h3>
+        <button class="modal-close" onclick="cerrarModalResetEquipo()">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="reset-equipo-nombre" style="font-weight:600;color:var(--text-dim);font-size:13px"></p>
+        <div class="field">
+          <label>Nueva contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="reset-equipo-nueva" placeholder="Mínimo 6 caracteres">
+            <button type="button" class="pwd-eye" onclick="togglePwd('reset-equipo-nueva', this)" aria-label="Mostrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Confirmar contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="reset-equipo-confirmar" placeholder="Repite la contraseña">
+            <button type="button" class="pwd-eye" onclick="togglePwd('reset-equipo-confirmar', this)" aria-label="Mostrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarModalResetEquipo()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-reset-equipo" onclick="guardarResetEquipo()">Restablecer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: Mi perfil / Configuración ── -->
+  <div class="modal-overlay hidden" id="modal-perfil">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3>Mi perfil</h3>
+        <button class="modal-close" onclick="cerrarModalPerfil()">×</button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Foto de perfil -->
+        <div style="text-align:center">
+          <div class="perfil-avatar-wrap" onclick="document.getElementById('input-foto').click()">
+            <div class="perfil-avatar" id="perfil-avatar-preview">?</div>
+            <div class="perfil-avatar-edit">✎</div>
+          </div>
+          <p style="font-size:11px;color:var(--text-dim)">Toca para cambiar la foto</p>
+          <input type="file" id="input-foto" accept="image/*" style="display:none" onchange="previsualizarFoto(event)">
+        </div>
+
+        <!-- Nombre -->
+        <div class="field">
+          <label>Nombre</label>
+          <input type="text" id="perfil-nombre" placeholder="Tu nombre">
+        </div>
+
+        <!-- Modo oscuro -->
+        <div class="theme-toggle">
+          <div style="display:flex;align-items:center;gap:10px">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style="color:var(--text-dim)">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <span>Modo oscuro</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-dark" onchange="aplicarTema(this.checked)">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarModalPerfil()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-guardar-perfil" onclick="guardarPerfil()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Panel Asistente IA ── -->
+  <div class="chat-panel-overlay" id="chat-panel-overlay" onclick="cerrarAsistente()"></div>
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-panel-header">
+      <h3>Asistente IA</h3>
+      <button class="chat-panel-close" onclick="cerrarAsistente()">×</button>
+    </div>
+    <div class="chat-panel-messages" id="chat-panel-messages">
+      <div class="bubble bubble-bot">
+        <p>Hola, soy tu asistente analítico.</p>
+        <p style="margin-top:6px">Pregúntame lo que necesites sobre el negocio:</p>
+        <ul style="margin-top:6px;padding-left:16px;font-size:13px;opacity:.85">
+          <li>¿Cuánto vendimos este mes?</li>
+          <li>¿Qué sucursal tiene más pendientes?</li>
+          <li>¿Cuál es el producto más vendido?</li>
+        </ul>
+      </div>
+    </div>
+    <div class="chat-panel-input-bar">
+      <input type="text" id="chat-input-studio" class="chat-panel-input"
+             placeholder="Escribe tu pregunta..." autocomplete="off" maxlength="500">
+      <button class="chat-panel-send" id="chat-send-studio" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+'use strict';
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+const TOKEN_KEY = 'suite_token';
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+async function api(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...options.headers },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'Error en el servidor');
+  return data;
+}
+
+function debeUsarPWA() {
+  const esStandalone = window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true;
+  return esStandalone || window.innerWidth < 768;
+}
+
+// ── Verificar acceso al cargar ────────────────────────────────────────────────
+let _usuario = null;
+let _resetEquipoId = null;
+
+(async () => {
+  // Si es móvil sin instalar, redirigir a PWA
+  if (debeUsarPWA()) { window.location.href = '/'; return; }
+
+  const t = getToken();
+  if (!t) { window.location.href = '/'; return; }
+
+  try {
+    _usuario = await api('/auth/me');
+    cargarTema();
+    renderHeader();
+    actualizarAvatarHeader();
+    renderDrawer();
+    renderBannerInstalacion();
+  } catch {
+    clearToken();
+    window.location.href = '/';
+  }
+})();
+
+// ── Render header ─────────────────────────────────────────────────────────────
+function renderHeader() {
+  document.getElementById('header-user').textContent = _usuario.nombre;
+  document.getElementById('header-role').textContent = _usuario.rol;
+  document.getElementById('welcome-nombre').textContent = _usuario.nombre;
+  document.getElementById('welcome-avatar').textContent = _usuario.nombre.charAt(0).toUpperCase();
+  document.getElementById('drawer-nombre').textContent  = _usuario.nombre;
+  document.getElementById('drawer-usuario').textContent = _usuario.email;
+
+  const subs = { admin: 'Administrador · Nentria', supervisor: 'Supervisor', usuario: 'Usuario' };
+  document.getElementById('welcome-sub').textContent = subs[_usuario.rol] || 'Suite Analítica';
+}
+
+// ── Render menú según rol ─────────────────────────────────────────────────────
+function renderDrawer() {
+  const rol = _usuario.rol;
+  const items = [];
+
+  // Todos
+  items.push({ tipo: 'seccion', label: 'Principal' });
+  items.push({ tipo: 'item', icon: iconDashboard, label: 'Dashboards', active: true, fn: irDashboards });
+  items.push({ tipo: 'item', icon: iconChat,      label: 'Asistente IA', fn: abrirAsistente });
+
+  // Supervisor y admin
+  if (rol === 'supervisor' || rol === 'admin') {
+    items.push({ tipo: 'seccion', label: 'Equipo' });
+    items.push({ tipo: 'item', icon: iconTeam, label: 'Mi equipo', fn: abrirModalEquipo });
+  }
+
+  // Admin
+  if (rol === 'admin') {
+    items.push({ tipo: 'seccion', label: 'Administración' });
+    items.push({ tipo: 'item', icon: iconUsers, label: 'Gestión de usuarios', fn: irAdmin });
+    items.push({ tipo: 'item', icon: iconStats, label: 'Uso & costos de IA',  fn: irAdmin });
+  }
+
+  // Todos — cuenta y sesión
+  items.push({ tipo: 'divider' });
+  items.push({ tipo: 'item', icon: iconPerfil, label: 'Mi perfil',          fn: abrirModalPerfil });
+  items.push({ tipo: 'item', icon: iconKey,    label: 'Cambiar contraseña', fn: abrirModalPassword });
+  items.push({ tipo: 'item', icon: iconLogout, label: 'Cerrar sesión', danger: true, fn: cerrarSesion });
+
+  const body = document.getElementById('drawer-body');
+  body.innerHTML = items.map(it => {
+    if (it.tipo === 'seccion')  return `<div class="drawer-section">${it.label}</div>`;
+    if (it.tipo === 'divider')  return `<div class="drawer-divider"></div>`;
+    return `<button class="drawer-item${it.active ? ' active' : ''}${it.danger ? ' danger' : ''}"
+                    onclick="${it.fn.name}()">
+              ${it.icon}
+              <span>${it.label}</span>
+            </button>`;
+  }).join('');
+}
+
+// ── Drawer open/close ─────────────────────────────────────────────────────────
+function abrirMenu() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-overlay').classList.add('open');
+}
+function cerrarMenu() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('open');
+}
+
+// ── Navegación nombrada (necesaria para onclick por nombre de función) ────────
+function irDashboards() { cerrarMenu(); }
+function irAdmin()      { window.location.href = '/admin'; }
+
+// ── Asistente IA — panel de chat ──────────────────────────────────────────────
+function abrirAsistente() {
+  cerrarMenu();
+  document.getElementById('chat-panel').classList.add('open');
+  document.getElementById('chat-panel-overlay').classList.add('open');
+  document.getElementById('chat-input-studio').focus();
+}
+function cerrarAsistente() {
+  document.getElementById('chat-panel').classList.remove('open');
+  document.getElementById('chat-panel-overlay').classList.remove('open');
+}
+
+// ── Banner instalación ────────────────────────────────────────────────────────
+function renderBannerInstalacion() {
+  const esIOS     = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const esMovil   = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const instalada = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  if (!esMovil || instalada) return;
+
+  const banner = document.getElementById('install-banner');
+  const texto  = document.getElementById('install-text');
+  if (esIOS) {
+    texto.innerHTML = 'Instala la app: en Safari toca <strong>[↑]</strong> → <strong>"Añadir a pantalla de inicio"</strong>';
+  } else {
+    texto.innerHTML = 'Instala la app: toca <strong>"Agregar a pantalla de inicio"</strong> en el menú de tu navegador.';
+  }
+  banner.classList.remove('hidden');
+}
+
+// ── Tema oscuro / claro ───────────────────────────────────────────────────────
+function aplicarTema(oscuro) {
+  document.documentElement.setAttribute('data-theme', oscuro ? 'dark' : 'light');
+  localStorage.setItem('suite_tema', oscuro ? 'dark' : 'light');
+}
+
+function cargarTema() {
+  const tema = localStorage.getItem('suite_tema') || 'light';
+  const oscuro = tema === 'dark';
+  document.documentElement.setAttribute('data-theme', tema);
+  const toggle = document.getElementById('toggle-dark');
+  if (toggle) toggle.checked = oscuro;
+}
+
+// ── Mi perfil ─────────────────────────────────────────────────────────────────
+let _fotoPendiente = null;   // data URL de foto nueva sin guardar
+
+function renderAvatar(el, nombre, fotoUrl) {
+  if (fotoUrl) {
+    el.innerHTML = `<img src="${fotoUrl}" class="avatar-img" alt="${nombre}">`;
+  } else {
+    el.textContent = nombre.charAt(0).toUpperCase();
+  }
+}
+
+function abrirModalPerfil() {
+  cerrarMenu();
+  _fotoPendiente = null;
+  document.getElementById('perfil-nombre').value = _usuario.nombre;
+  const prev = document.getElementById('perfil-avatar-preview');
+  renderAvatar(prev, _usuario.nombre, _usuario.foto_perfil);
+
+  const tema = localStorage.getItem('suite_tema') || 'light';
+  document.getElementById('toggle-dark').checked = tema === 'dark';
+
+  document.getElementById('modal-perfil').classList.remove('hidden');
+}
+
+function cerrarModalPerfil() {
+  document.getElementById('modal-perfil').classList.add('hidden');
+  _fotoPendiente = null;
+}
+
+function previsualizarFoto(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    // Redimensionar a 200x200 antes de guardar
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = 200;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      // Recorte centrado (crop cuadrado)
+      const side = Math.min(img.width, img.height);
+      const sx   = (img.width  - side) / 2;
+      const sy   = (img.height - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, 200, 200);
+      _fotoPendiente = canvas.toDataURL('image/jpeg', 0.82);
+      const prev = document.getElementById('perfil-avatar-preview');
+      prev.innerHTML = `<img src="${_fotoPendiente}" class="avatar-img" alt="preview">`;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function guardarPerfil() {
+  const nombre = document.getElementById('perfil-nombre').value.trim();
+  const btn    = document.getElementById('btn-guardar-perfil');
+  if (!nombre) { mostrarToast('El nombre no puede estar vacío', 'error'); return; }
+
+  const body = { nombre };
+  if (_fotoPendiente !== null) body.foto_perfil = _fotoPendiente;
+
+  btn.disabled = true;
+  try {
+    const data = await api('/auth/perfil', { method: 'PATCH', body: JSON.stringify(body) });
+    _usuario.nombre      = data.nombre;
+    _usuario.foto_perfil = data.foto_perfil;
+    renderHeader();
+    actualizarAvatarHeader();
+    mostrarToast('Perfil actualizado', 'success');
+    cerrarModalPerfil();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function actualizarAvatarHeader() {
+  const av = document.getElementById('welcome-avatar');
+  renderAvatar(av, _usuario.nombre, _usuario.foto_perfil);
+}
+
+// ── Cerrar sesión ─────────────────────────────────────────────────────────────
+function cerrarSesion() {
+  clearToken();
+  window.location.href = '/';
+}
+
+// ── Cambiar contraseña ────────────────────────────────────────────────────────
+function abrirModalPassword() {
+  cerrarMenu();
+  document.getElementById('pwd-actual').value    = '';
+  document.getElementById('pwd-nueva').value     = '';
+  document.getElementById('pwd-confirmar').value = '';
+  document.getElementById('modal-password').classList.remove('hidden');
+  document.getElementById('pwd-actual').focus();
+}
+function cerrarModalPassword() {
+  document.getElementById('modal-password').classList.add('hidden');
+}
+
+async function guardarPassword() {
+  const actual    = document.getElementById('pwd-actual').value;
+  const nueva     = document.getElementById('pwd-nueva').value;
+  const confirmar = document.getElementById('pwd-confirmar').value;
+  const btn       = document.getElementById('btn-cambiar-pwd');
+
+  if (!actual)              { mostrarToast('Ingresa tu contraseña actual', 'error'); return; }
+  if (nueva.length < 6)     { mostrarToast('La nueva contraseña debe tener al menos 6 caracteres', 'error'); return; }
+  if (nueva !== confirmar)  { mostrarToast('Las contraseñas no coinciden', 'error'); return; }
+
+  btn.disabled = true;
+  try {
+    const data = await api('/auth/password', {
+      method: 'PATCH',
+      body: JSON.stringify({ password_actual: actual, nueva_password: nueva }),
+    });
+    mostrarToast(data.mensaje, 'success');
+    cerrarModalPassword();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Mi equipo ─────────────────────────────────────────────────────────────────
+async function abrirModalEquipo() {
+  cerrarMenu();
+  document.getElementById('modal-equipo').classList.remove('hidden');
+  const tbody = document.getElementById('tabla-equipo');
+  try {
+    const data = await api('/api/admin/equipo');
+    const usuarios = data.usuarios;
+    if (usuarios.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:32px;color:var(--text-dim)">Sin usuarios finales registrados</td></tr>';
+      return;
+    }
+    tbody.innerHTML = usuarios.map(u => {
+      const hechas = u.consultas_ia || 0;
+      const limite = u.limite_ia    || 0;
+      const limiteTexto = limite === 0 ? '∞' : limite;
+      const pct   = limite > 0 ? Math.min(100, Math.round((hechas / limite) * 100)) : 0;
+      const color = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--success)';
+      return `
+        <tr>
+          <td><strong>${u.nombre}</strong></td>
+          <td style="color:var(--text-dim)">${u.email}</td>
+          <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+          <td>
+            <div style="font-size:12px;white-space:nowrap">
+              <strong>${hechas}</strong> <span style="color:var(--text-dim)">/ ${limiteTexto}</span>
+            </div>
+            ${limite > 0 ? `<div style="height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:3px;width:80px">
+              <div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div>
+            </div>` : ''}
+          </td>
+          <td>
+            <button class="btn btn-ghost btn-sm" onclick="abrirResetEquipo(${u.id}, '${u.nombre.replace(/'/g,"\\'")}')">
+              Contraseña
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-dim)">${e.message}</td></tr>`;
+  }
+}
+function cerrarModalEquipo() {
+  document.getElementById('modal-equipo').classList.add('hidden');
+}
+
+function abrirResetEquipo(id, nombre) {
+  _resetEquipoId = id;
+  document.getElementById('reset-equipo-nombre').textContent  = `Usuario: ${nombre}`;
+  document.getElementById('reset-equipo-nueva').value         = '';
+  document.getElementById('reset-equipo-confirmar').value     = '';
+  document.getElementById('modal-reset-equipo').classList.remove('hidden');
+  document.getElementById('reset-equipo-nueva').focus();
+}
+function cerrarModalResetEquipo() {
+  document.getElementById('modal-reset-equipo').classList.add('hidden');
+  _resetEquipoId = null;
+}
+
+async function guardarResetEquipo() {
+  const nueva     = document.getElementById('reset-equipo-nueva').value;
+  const confirmar = document.getElementById('reset-equipo-confirmar').value;
+  const btn       = document.getElementById('btn-reset-equipo');
+
+  if (nueva.length < 6)    { mostrarToast('Mínimo 6 caracteres', 'error'); return; }
+  if (nueva !== confirmar) { mostrarToast('Las contraseñas no coinciden', 'error'); return; }
+
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/admin/usuarios/${_resetEquipoId}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ nueva_password: nueva }),
+    });
+    mostrarToast(data.mensaje, 'success');
+    cerrarModalResetEquipo();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Ojito contraseña ──────────────────────────────────────────────────────────
+function togglePwd(inputId, btn) {
+  const input   = document.getElementById(inputId);
+  const mostrar = input.type === 'password';
+  input.type = mostrar ? 'text' : 'password';
+  btn.querySelector('svg').innerHTML = mostrar
+    ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+    : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function mostrarToast(msg, tipo = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${tipo}`;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.add('hidden'), 3500);
+}
+
+// ── Chat studio (placeholder — se conectará al agente) ────────────────────────
+function agregarBurbuja(texto, rol) {
+  const msgs = document.getElementById('chat-panel-messages');
+  const div  = document.createElement('div');
+  div.className = `bubble bubble-${rol}`;
+  div.textContent = texto;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function enviarMensajeStudio() {
+  const input = document.getElementById('chat-input-studio');
+  const texto = input.value.trim();
+  if (!texto) return;
+  input.value = '';
+  agregarBurbuja(texto, 'user');
+
+  // Indicador de escritura
+  const msgs  = document.getElementById('chat-panel-messages');
+  const typing = document.createElement('div');
+  typing.className = 'chat-typing';
+  typing.id = 'studio-typing';
+  typing.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+  msgs.appendChild(typing);
+  msgs.scrollTop = msgs.scrollHeight;
+
+  // TODO: conectar al agente cuando esté listo
+  setTimeout(() => {
+    document.getElementById('studio-typing')?.remove();
+    agregarBurbuja('El agente de IA estará disponible próximamente.', 'bot');
+  }, 800);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('chat-send-studio')
+    .addEventListener('click', enviarMensajeStudio);
+  document.getElementById('chat-input-studio')
+    .addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeStudio(); } });
+});
+
+// ── Cerrar modales con Escape ─────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    cerrarMenu();
+    cerrarAsistente();
+    cerrarModalPassword();
+    cerrarModalPerfil();
+    cerrarModalEquipo();
+    cerrarModalResetEquipo();
+  }
+});
+
+// ── Iconos SVG ────────────────────────────────────────────────────────────────
+const iconPerfil    = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>`;
+const iconDashboard = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>`;
+const iconChat      = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>`;
+const iconTeam      = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`;
+const iconUsers     = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>`;
+const iconStats     = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>`;
+const iconKey       = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>`;
+const iconLogout    = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>`;
+</script>
+</body>
+</html>

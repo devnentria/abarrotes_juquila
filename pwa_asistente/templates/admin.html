@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Suite Analítica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue:       #1e3a6e;    /* Marca Nentria — header */
+      --blue-mid:   #0A84FF;   /* iOS blue — botones, acentos */
+      --blue-light: #E3F0FF;
+      --danger:     #FF3B30;   /* iOS red */
+      --danger-soft:#FFF1F0;
+      --success:    #34C759;   /* iOS green */
+      --warn:       #FF9F0A;   /* iOS orange */
+      --warn-soft:  #FFF5E6;
+      --bg:         #F2F2F7;   /* iOS system background */
+      --card:       #FFFFFF;
+      --border:     #E5E5EA;   /* iOS separator */
+      --text:       #1D1D1F;   /* iOS label */
+      --text-dim:   #6E6E73;   /* iOS secondary label */
+      --shadow-1:   0 1px 2px rgba(0,0,0,.04), 0 1px 6px rgba(0,0,0,.03);
+      --shadow-2:   0 4px 16px rgba(0,0,0,.08);
+      --radius:     12px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      font-size: 14px; min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: var(--blue); color: #fff;
+      padding: 0 32px;
+      height: 60px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 10;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo { font-size: 16px; font-weight: 700; background: rgba(255,255,255,.15); padding: 6px 10px; border-radius: 8px; }
+    .header h1 { font-size: 16px; font-weight: 600; opacity: .9; }
+    .header-user { font-size: 13px; opacity: .7; }
+
+    /* ── Layout ── */
+    .page { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+    /* ── Toolbar ── */
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .toolbar h2 { font-size: 20px; font-weight: 700; }
+    .toolbar-right { display: flex; gap: 10px; align-items: center; }
+
+    /* ── Botones ── */
+    .btn {
+      padding: 9px 18px; border: none; border-radius: var(--radius);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+    }
+    .btn:hover { opacity: .87; }
+    .btn-primary  { background: var(--blue); color: #fff; }
+    .btn-danger   { background: var(--danger); color: #fff; }
+    .btn-ghost    { background: transparent; color: var(--blue-mid); border: 1.5px solid var(--border); }
+    .btn-sm       { padding: 6px 12px; font-size: 12px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* ── Tabla ── */
+    .card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; box-shadow: var(--shadow-1); }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: var(--bg); }
+    th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--border); }
+    td { padding: 13px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+
+    /* ── Badges ── */
+    .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-admin      { background: #1e3a6e22; color: var(--blue); }
+    .badge-supervisor { background: #2563eb18; color: var(--blue-mid); }
+    .badge-usuario    { background: #e2e8f0; color: var(--text-dim); }
+    .badge-activo     { background: #d1fae5; color: var(--success); }
+    .badge-inactivo   { background: var(--danger-soft); color: var(--danger); }
+    .badge-modulo     { background: var(--blue-light); color: var(--blue-mid); margin: 2px; }
+    .badge-permiso    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; margin: 2px; }
+
+    /* ── Modal ── */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 20px;
+    }
+    .hidden { display: none !important; }
+
+    .modal {
+      background: var(--card); border-radius: 14px;
+      width: 100%; max-width: 520px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal-header {
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-header h3 { font-size: 16px; font-weight: 700; }
+    .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-dim); line-height: 1; }
+    .modal-body   { padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* ── Formulario ── */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .field label { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+    .field input, .field select {
+      border: 1.5px solid var(--border); border-radius: var(--radius);
+      padding: 10px 12px; font-size: 14px; color: var(--text);
+      outline: none; transition: border-color .15s;
+      background: #fff;
+    }
+    .field input:focus, .field select:focus { border-color: var(--blue-mid); }
+
+    .checkgroup { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+    .check-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 20px;
+      border: 1.5px solid var(--border); cursor: pointer;
+      font-size: 13px; transition: all .15s; user-select: none;
+    }
+    .check-pill input { display: none; }
+    .check-pill.checked-modulo  { background: var(--blue-light); border-color: var(--blue-mid); color: var(--blue-mid); font-weight: 600; }
+    .check-pill.checked-permiso { background: #f0fdf4; border-color: #4ade80; color: #166534; font-weight: 600; }
+
+    /* ── Error toast ── */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: var(--blue); color: #fff;
+      padding: 12px 20px; border-radius: var(--radius);
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0,0,0,.2);
+      z-index: 200; transition: opacity .3s;
+    }
+    .toast.error { background: var(--danger); }
+    .toast.success { background: var(--success); }
+
+    .empty-row td { text-align: center; color: var(--text-dim); padding: 40px; }
+
+    /* ── Ojito contraseña ── */
+    .pwd-wrap { position: relative; }
+    .pwd-wrap input { padding-right: 42px; }
+    .pwd-eye {
+      position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; color: var(--text-dim);
+      padding: 4px; display: flex; align-items: center;
+    }
+    .pwd-eye:hover { color: var(--blue-mid); }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <button onclick="window.location.href='/studio'" title="Volver al dashboard"
+              style="background:rgba(255,255,255,.15);border:none;cursor:pointer;color:#fff;border-radius:8px;padding:7px 10px;display:flex;align-items:center;margin-right:4px">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      </button>
+      <span class="logo">SA</span>
+      <h1>Portal de Administración</h1>
+    </div>
+    <span class="header-user" id="header-user"></span>
+  </div>
+
+  <!-- Contenido -->
+  <div class="page">
+    <div class="toolbar">
+      <h2>Usuarios</h2>
+      <div class="toolbar-right">
+        <span id="total-usuarios" style="color:var(--text-dim);font-size:13px"></span>
+        <button class="btn btn-primary" onclick="abrirModalNuevo()">+ Nuevo usuario</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Usuario</th>
+            <th>Rol</th>
+            <th>Módulos</th>
+            <th>Permisos</th>
+            <th>Estado</th>
+            <th>Consultas IA</th>
+            <th>Costo IA</th>
+            <th>Último acceso</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tabla-usuarios">
+          <tr class="empty-row"><td colspan="10">Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal crear/editar usuario -->
+  <div class="overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-titulo">Nuevo usuario</h3>
+        <button class="modal-close" onclick="cerrarModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modal-id">
+
+        <div class="field">
+          <label>Nombre completo</label>
+          <input type="text" id="f-nombre" placeholder="Ej. Juan Pérez">
+        </div>
+        <div class="field">
+          <label>Usuario</label>
+          <input type="text" id="f-email" placeholder="Ej. juan_perez">
+        </div>
+        <div class="field" id="campo-password">
+          <label>Contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="f-password" placeholder="Mínimo 8 caracteres">
+            <button type="button" class="pwd-eye" onclick="togglePwd('f-password', this)" aria-label="Mostrar contraseña">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field" id="campo-limite-ia">
+          <label>Límite de consultas IA</label>
+          <input type="number" id="f-limite-ia" placeholder="0 = sin límite" min="0">
+          <span style="font-size:11px;color:var(--text-dim);margin-top:2px">0 = sin límite</span>
+        </div>
+        <div class="field">
+          <label>Rol</label>
+          <select id="f-rol">
+            <option value="usuario">Usuario</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="admin">Administrador</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Módulos</label>
+          <div class="checkgroup" id="f-modulos">
+            <label class="check-pill" data-grupo="modulo" data-val="pwa">
+              <input type="checkbox" value="pwa"> PWA Asistente
+            </label>
+            <label class="check-pill" data-grupo="modulo" data-val="studio">
+              <input type="checkbox" value="studio"> Studio
+            </label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Permisos de datos</label>
+          <div class="checkgroup" id="f-permisos">
+            <label class="check-pill" data-grupo="permiso" data-val="ventas">
+              <input type="checkbox" value="ventas"> Ventas
+            </label>
+            <label class="check-pill" data-grupo="permiso" data-val="inventario">
+              <input type="checkbox" value="inventario"> Inventario
+            </label>
+            <label class="check-pill" data-grupo="permiso" data-val="medicos">
+              <input type="checkbox" value="medicos"> Médicos
+            </label>
+            <label class="check-pill" data-grupo="permiso" data-val="clientes">
+              <input type="checkbox" value="clientes"> Clientes
+            </label>
+            <label class="check-pill" data-grupo="permiso" data-val="finanzas">
+              <input type="checkbox" value="finanzas"> Finanzas
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-guardar" onclick="guardarUsuario()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal reset contraseña -->
+  <div class="overlay hidden" id="reset-overlay">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <h3>Restablecer contraseña</h3>
+        <button class="modal-close" onclick="cerrarResetPassword()">×</button>
+      </div>
+      <div class="modal-body">
+        <p id="reset-nombre" style="font-weight:600;color:var(--text-dim);font-size:13px;margin-bottom:4px"></p>
+        <div class="field">
+          <label>Nueva contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="reset-nueva" placeholder="Mínimo 6 caracteres" autocomplete="new-password">
+            <button type="button" class="pwd-eye" onclick="togglePwd('reset-nueva', this)" aria-label="Mostrar contraseña">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Confirmar contraseña</label>
+          <div class="pwd-wrap">
+            <input type="password" id="reset-confirmar" placeholder="Repite la contraseña">
+            <button type="button" class="pwd-eye" onclick="togglePwd('reset-confirmar', this)" aria-label="Mostrar contraseña">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarResetPassword()">Cancelar</button>
+        <button class="btn btn-primary" id="btn-reset" onclick="confirmarResetPassword()">Restablecer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast de notificación -->
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+'use strict';
+
+const TOKEN_KEY = 'suite_token';
+
+function togglePwd(inputId, btn) {
+  const input  = document.getElementById(inputId);
+  const mostrar = input.type === 'password';
+  input.type = mostrar ? 'text' : 'password';
+  btn.querySelector('svg').innerHTML = mostrar
+    ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+    : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+}
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+
+// ── Verificar acceso admin — si no es admin, regresa al login ─────────────────
+(async () => {
+  const t = getToken();
+  if (!t) { window.location.href = '/'; return; }
+  try {
+    const res  = await fetch('/auth/me', { headers: { Authorization: `Bearer ${t}` } });
+    const data = await res.json();
+    if (!res.ok || data.rol !== 'admin') { window.location.href = '/'; return; }
+    document.getElementById('header-user').textContent = data.nombre;
+    cargarUsuarios();
+  } catch {
+    window.location.href = '/';
+  }
+})();
+
+// ── Fetch autenticado ─────────────────────────────────────────────────────────
+async function api(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...options.headers },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'Error en el servidor');
+  return data;
+}
+
+// ── Helpers de IA ────────────────────────────────────────────────────────────
+function renderConsultasIA(u) {
+  const hechas = u.consultas_ia || 0;
+  const limite = u.limite_ia    || 0;
+  const pct    = limite > 0 ? Math.min(100, Math.round((hechas / limite) * 100)) : 0;
+  const color  = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--success)';
+  const limiteTexto = limite === 0 ? '∞' : limite;
+  return `
+    <div style="min-width:110px">
+      <div style="font-size:12px;margin-bottom:3px">
+        <strong>${hechas}</strong> <span style="color:var(--text-dim)">/ ${limiteTexto}</span>
+      </div>
+      ${limite > 0 ? `
+        <div style="height:5px;border-radius:3px;background:var(--border);overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width .3s"></div>
+        </div>` : ''}
+    </div>`;
+}
+
+// ── Cargar tabla de usuarios ──────────────────────────────────────────────────
+async function cargarUsuarios() {
+  const tbody = document.getElementById('tabla-usuarios');
+  try {
+    const data = await api('/api/admin/usuarios');
+    document.getElementById('total-usuarios').textContent = `${data.usuarios.length} usuarios`;
+    tbody.innerHTML = data.usuarios.map(u => `
+      <tr>
+        <td><strong>${u.nombre}</strong></td>
+        <td style="color:var(--text-dim)">${u.email}</td>
+        <td><span class="badge badge-${u.rol}">${u.rol}</span></td>
+        <td>${u.modulos.map(m => `<span class="badge badge-modulo">${m}</span>`).join('')}</td>
+        <td>${u.permisos.map(p => `<span class="badge badge-permiso">${p}</span>`).join('')}</td>
+        <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td>${renderConsultasIA(u)}</td>
+        <td style="font-size:12px;color:var(--text-dim)">$${(u.costo_ia_usd || 0).toFixed(4)} USD</td>
+        <td style="color:var(--text-dim);font-size:12px">${u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-MX') : '—'}</td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="abrirModalEditar(${u.id})">Editar</button>
+            <button class="btn btn-ghost btn-sm" onclick="abrirResetPassword(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Contraseña</button>
+            <button class="btn btn-sm ${u.activo ? 'btn-danger' : 'btn-primary'}"
+                    onclick="toggleUsuario(${u.id}, ${u.activo})">
+              ${u.activo ? 'Desactivar' : 'Activar'}
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('') || '<tr class="empty-row"><td colspan="10">Sin usuarios registrados</td></tr>';
+  } catch (e) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="10">Error al cargar: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+let _usuarioEditando = null;
+
+function abrirModalNuevo() {
+  _usuarioEditando = null;
+  document.getElementById('modal-titulo').textContent = 'Nuevo usuario';
+  document.getElementById('modal-id').value = '';
+  document.getElementById('f-nombre').value    = '';
+  document.getElementById('f-email').value     = '';
+  document.getElementById('f-password').value  = '';
+  document.getElementById('f-limite-ia').value = '700';
+  document.getElementById('f-rol').value       = 'usuario';
+  document.getElementById('campo-password').style.display  = '';
+  document.getElementById('campo-limite-ia').style.display = '';
+  setChecks('modulo',  []);
+  setChecks('permiso', []);
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('f-nombre').focus();
+}
+
+async function abrirModalEditar(id) {
+  const data = await api('/api/admin/usuarios').catch(() => null);
+  if (!data) return;
+  const u = data.usuarios.find(x => x.id === id);
+  if (!u) return;
+
+  _usuarioEditando = id;
+  document.getElementById('modal-titulo').textContent = 'Editar usuario';
+  document.getElementById('modal-id').value   = id;
+  document.getElementById('f-nombre').value    = u.nombre;
+  document.getElementById('f-email').value     = u.email;
+  document.getElementById('f-password').value  = '';
+  document.getElementById('f-limite-ia').value = u.limite_ia ?? 700;
+  document.getElementById('f-rol').value       = u.rol;
+  document.getElementById('campo-password').style.display  = '';
+  document.getElementById('campo-limite-ia').style.display = '';
+  setChecks('modulo',  u.modulos);
+  setChecks('permiso', u.permisos);
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function cerrarModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function setChecks(grupo, valores) {
+  document.querySelectorAll(`[data-grupo="${grupo}"]`).forEach(pill => {
+    const val     = pill.dataset.val;
+    const checked = valores.includes(val);
+    pill.querySelector('input').checked = checked;
+    const clase = grupo === 'modulo' ? 'checked-modulo' : 'checked-permiso';
+    pill.classList.toggle(clase, checked);
+  });
+}
+
+// Toggle visual de pills al hacer click
+document.querySelectorAll('.check-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    const input  = pill.querySelector('input');
+    const grupo  = pill.dataset.grupo;
+    const clase  = grupo === 'modulo' ? 'checked-modulo' : 'checked-permiso';
+    input.checked = !input.checked;
+    pill.classList.toggle(clase, input.checked);
+  });
+});
+
+function getChecked(grupo) {
+  return [...document.querySelectorAll(`[data-grupo="${grupo}"] input:checked`)].map(i => i.value);
+}
+
+// ── Guardar usuario ───────────────────────────────────────────────────────────
+async function guardarUsuario() {
+  const btn      = document.getElementById('btn-guardar');
+  const nombre    = document.getElementById('f-nombre').value.trim();
+  const email     = document.getElementById('f-email').value.trim();
+  const password  = document.getElementById('f-password').value;
+  const rol       = document.getElementById('f-rol').value;
+  const modulos   = getChecked('modulo');
+  const permisos  = getChecked('permiso');
+  const limite_ia = parseInt(document.getElementById('f-limite-ia').value) || 0;
+
+  if (!nombre || !email) { mostrarToast('Nombre y usuario son requeridos', 'error'); return; }
+  if (!_usuarioEditando && !password) { mostrarToast('La contraseña es requerida', 'error'); return; }
+  if (modulos.length === 0) { mostrarToast('Selecciona al menos un módulo', 'error'); return; }
+  if (permisos.length === 0) { mostrarToast('Selecciona al menos un permiso', 'error'); return; }
+
+  btn.disabled = true;
+  try {
+    if (_usuarioEditando) {
+      const body = { nombre, rol, modulos, permisos, limite_ia };
+      if (password) body.password = password;
+      await api(`/api/admin/usuarios/${_usuarioEditando}`, { method: 'PATCH', body: JSON.stringify(body) });
+      mostrarToast('Usuario actualizado', 'success');
+    } else {
+      await api('/api/admin/usuarios', { method: 'POST', body: JSON.stringify({ nombre, email, password, rol, modulos, permisos, limite_ia }) });
+      mostrarToast('Usuario creado', 'success');
+    }
+    cerrarModal();
+    cargarUsuarios();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Reset contraseña ──────────────────────────────────────────────────────────
+let _resetUserId = null;
+
+function abrirResetPassword(id, nombre) {
+  _resetUserId = id;
+  document.getElementById('reset-nombre').textContent = `Usuario: ${nombre}`;
+  document.getElementById('reset-nueva').value     = '';
+  document.getElementById('reset-confirmar').value = '';
+  document.getElementById('reset-overlay').classList.remove('hidden');
+  document.getElementById('reset-nueva').focus();
+}
+
+function cerrarResetPassword() {
+  document.getElementById('reset-overlay').classList.add('hidden');
+  _resetUserId = null;
+}
+
+async function confirmarResetPassword() {
+  const nueva     = document.getElementById('reset-nueva').value;
+  const confirmar = document.getElementById('reset-confirmar').value;
+  const btn       = document.getElementById('btn-reset');
+
+  if (!nueva || nueva.length < 6) {
+    mostrarToast('La contraseña debe tener al menos 6 caracteres', 'error'); return;
+  }
+  if (nueva !== confirmar) {
+    mostrarToast('Las contraseñas no coinciden', 'error'); return;
+  }
+
+  btn.disabled = true;
+  try {
+    const data = await api(`/api/admin/usuarios/${_resetUserId}/password`, {
+      method: 'PATCH',
+      body: JSON.stringify({ nueva_password: nueva }),
+    });
+    mostrarToast(data.mensaje, 'success');
+    cerrarResetPassword();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ── Toggle activo/inactivo ────────────────────────────────────────────────────
+async function toggleUsuario(id, activo) {
+  const accion = activo ? 'desactivar' : 'activar';
+  if (!confirm(`¿Seguro que quieres ${accion} este usuario?`)) return;
+  try {
+    const data = await api(`/api/admin/usuarios/${id}/toggle`, { method: 'PATCH' });
+    mostrarToast(data.mensaje, 'success');
+    cargarUsuarios();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function mostrarToast(msg, tipo = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = `toast ${tipo}`;
+  setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+// Cerrar modales con Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { cerrarModal(); cerrarResetPassword(); }
+});
+</script>
+</body>
+</html>

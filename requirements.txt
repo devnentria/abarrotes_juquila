@@ -1,4 +1,26 @@
-flask
-openai
-mysql-connector-python
-gunicorn
+# Suite Analítica Nentria — dependencias Python
+#
+# Instalación en Windows Server:
+#   pip install -r requirements.txt
+#
+# Prerrequisito en Windows Server (instalar una sola vez, no va aquí):
+#   Microsoft ODBC Driver 17 for SQL Server
+#   Descarga: https://aka.ms/odbc17
+#   En macOS/Linux: brew install msodbcsql17 / apt install msodbcsql17
+
+# ── Servidor web ──────────────────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+jinja2==3.1.4
+python-multipart==0.0.12
+
+# ── Base de datos ─────────────────────────────────────────────────────────────
+pyodbc==5.2.0
+
+# ── Autenticación ─────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.1
+pydantic[email]>=2.0
+
+# ── IA ────────────────────────────────────────────────────────────────────────
+openai==1.56.2

@@ -1,0 +1,1 @@
+# Agentes especialistas — Suite Analítica
