@@ -321,6 +321,22 @@
     </div>
   </div>
 
+  <!-- Modal historial IA -->
+  <div class="modal-overlay hidden" id="historial-overlay" onclick="if(event.target===this)cerrarHistorialIA()">
+    <div class="modal" style="max-width:520px">
+      <div class="modal-header">
+        <span id="historial-titulo">Historial IA</span>
+        <button class="btn btn-ghost btn-sm" onclick="cerrarHistorialIA()">✕</button>
+      </div>
+      <div class="modal-body" id="historial-body" style="min-height:80px">
+        <p style="color:var(--text-dim)">Cargando…</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="cerrarHistorialIA()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast de notificación -->
   <div class="toast hidden" id="toast"></div>
 
@@ -372,8 +388,10 @@ function renderConsultasIA(u) {
   const pct    = limite > 0 ? Math.min(100, Math.round((hechas / limite) * 100)) : 0;
   const color  = pct >= 90 ? 'var(--danger)' : pct >= 70 ? 'var(--warn)' : 'var(--success)';
   const limiteTexto = limite === 0 ? '∞' : limite;
+  const mes    = u.mes_consultas || '—';
   return `
     <div style="min-width:110px">
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:2px">${mes}</div>
       <div style="font-size:12px;margin-bottom:3px">
         <strong>${hechas}</strong> <span style="color:var(--text-dim)">/ ${limiteTexto}</span>
       </div>
@@ -405,6 +423,8 @@ async function cargarUsuarios() {
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="abrirModalEditar(${u.id})">Editar</button>
             <button class="btn btn-ghost btn-sm" onclick="abrirResetPassword(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Contraseña</button>
+            <button class="btn btn-ghost btn-sm" onclick="resetearConsultas(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Reiniciar IA</button>
+            <button class="btn btn-ghost btn-sm" onclick="verHistorialIA(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Historial</button>
             <button class="btn btn-sm ${u.activo ? 'btn-danger' : 'btn-primary'}"
                     onclick="toggleUsuario(${u.id}, ${u.activo})">
               ${u.activo ? 'Desactivar' : 'Activar'}
@@ -568,6 +588,59 @@ async function confirmarResetPassword() {
   }
 }
 
+// ── Reiniciar contador IA ─────────────────────────────────────────────────────
+async function resetearConsultas(id, nombre) {
+  if (!confirm(`¿Reiniciar el contador de consultas IA de ${nombre}?`)) return;
+  try {
+    const data = await api(`/api/admin/usuarios/${id}/reset-consultas`, { method: 'PATCH' });
+    mostrarToast(data.mensaje, 'success');
+    cargarUsuarios();
+  } catch (e) {
+    mostrarToast(e.message, 'error');
+  }
+}
+
+// ── Historial IA ──────────────────────────────────────────────────────────────
+async function verHistorialIA(id, nombre) {
+  document.getElementById('historial-titulo').textContent = `Historial IA — ${nombre}`;
+  document.getElementById('historial-body').innerHTML = '<p style="color:var(--text-dim)">Cargando…</p>';
+  document.getElementById('historial-overlay').classList.remove('hidden');
+  try {
+    const data = await api(`/api/admin/usuarios/${id}/historial-ia`);
+    const rows = data.historial;
+    if (!rows.length) {
+      document.getElementById('historial-body').innerHTML =
+        '<p style="color:var(--text-dim)">Sin historial registrado aún.</p>';
+      return;
+    }
+    document.getElementById('historial-body').innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;padding:6px 8px;color:var(--text-dim);font-weight:500">Mes</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--text-dim);font-weight:500">Consultas</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--text-dim);font-weight:500">Costo USD</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(r => `
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:6px 8px"><strong>${r.mes}</strong></td>
+              <td style="padding:6px 8px;text-align:right">${r.consultas}</td>
+              <td style="padding:6px 8px;text-align:right;color:var(--text-dim)">$${r.costo_usd.toFixed(4)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (e) {
+    document.getElementById('historial-body').innerHTML =
+      `<p style="color:var(--danger)">Error: ${e.message}</p>`;
+  }
+}
+
+function cerrarHistorialIA() {
+  document.getElementById('historial-overlay').classList.add('hidden');
+}
+
 // ── Toggle activo/inactivo ────────────────────────────────────────────────────
 async function toggleUsuario(id, activo) {
   const accion = activo ? 'desactivar' : 'activar';
@@ -591,7 +664,7 @@ function mostrarToast(msg, tipo = '') {
 
 // Cerrar modales con Escape
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { cerrarModal(); cerrarResetPassword(); }
+  if (e.key === 'Escape') { cerrarModal(); cerrarResetPassword(); cerrarHistorialIA(); }
 });
 </script>
 </body>

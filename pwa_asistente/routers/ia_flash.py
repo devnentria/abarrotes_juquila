@@ -18,6 +18,8 @@ Diseño:
   - Personalizado con el nombre del usuario autenticado.
   - Con ?regenerar=1 incrementa consultas_ia del usuario (segunda generación del día).
 """
+from datetime import date
+
 from openai import OpenAI
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -25,7 +27,7 @@ from fastapi.responses import JSONResponse
 from shared.auth import get_current_user
 from shared.config import IA_COSTO_POR_CONSULTA, IA_FLASH_MODEL, OPENAI_API_KEY
 from shared.database import query, hoy
-from shared.database_local import execute as execute_local
+from shared.database_local import execute as execute_local, verificar_mes_ia
 
 router = APIRouter(prefix="/api/ia", dependencies=[Depends(get_current_user)])
 
@@ -144,6 +146,7 @@ def ia_sucursal(
 
     texto = _flash(prompt)
     if regenerar:
+        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
         execute_local(
             "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
             "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
@@ -234,6 +237,7 @@ def ia_inventario(
 
     texto = _flash(prompt)
     if regenerar:
+        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
         execute_local(
             "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
             "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
@@ -335,6 +339,7 @@ def ia_medicos(
 
     texto = _flash(prompt)
     if regenerar:
+        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
         execute_local(
             "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
             "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
