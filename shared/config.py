@@ -62,9 +62,10 @@ IA_RATIO_STUDIO: int = int(os.getenv("IA_RATIO_STUDIO", "2"))
 # Costo estimado por consulta (1 incremento del contador).
 # Ajustar según el modelo activo en OPENAI_MODEL:
 #   gpt-4o-mini → ~$0.005 USD por consulta
+#   gpt-5-mini  → ~$0.008 USD por consulta
 #   gpt-4o      → ~$0.025 USD por consulta
 #   gpt-o3-mini → ~$0.06  USD por consulta  (studio)
-IA_COSTO_POR_CONSULTA: float = float(os.getenv("IA_COSTO_POR_CONSULTA", "0.005"))
+IA_COSTO_POR_CONSULTA: float = float(os.getenv("IA_COSTO_POR_CONSULTA", "0.008"))
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 # Generar un secret seguro: python -c "import secrets; print(secrets.token_hex(32))"
