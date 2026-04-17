@@ -1137,13 +1137,12 @@ function aplicarTema(tema) {
 function esTemaOscuro() {
   const guardado = localStorage.getItem(TEMA_KEY);
   if (guardado === 'dark')  return true;
-  if (guardado === 'light') return false;
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return false;  // default siempre light
 }
 
 (function () {
-  const t = localStorage.getItem(TEMA_KEY);
-  if (t) aplicarTema(t);
+  const t = localStorage.getItem(TEMA_KEY) || 'light';
+  aplicarTema(t);
 })();
 
 // ── Perfil / Cerrar sesión ────────────────────────────────────────────────────

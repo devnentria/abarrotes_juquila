@@ -725,7 +725,7 @@ html, body {
 .login-screen {
   position: fixed;
   inset: 0;
-  background: var(--blue);
+  background: #1a56db;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1367,8 +1367,8 @@ html.dark {
 }
 
 /* Overrides de componentes para ambos modos oscuros */
-@media (prefers-color-scheme: dark) { html:not(.light) .login-card { background: #1C1C1E; box-shadow: 0 20px 60px rgba(0,0,0,.6); }}
-html.dark .login-card { background: #1C1C1E; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+@media (prefers-color-scheme: dark) { html:not(.light) .login-card { background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.3); }}
+html.dark .login-card { background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
 
 @media (prefers-color-scheme: dark) { html:not(.light) .login-title { color: #F2F2F7; }}
 html.dark .login-title { color: #F2F2F7; }
