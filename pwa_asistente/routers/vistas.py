@@ -235,10 +235,9 @@ def stock_detalle(cve_sucursal: int):
 
     # Enriquecer con piezas en camino (consulta separada solo para los productos resultantes)
     if sin_stock:
-        traspasos_raw = query(f"""
+        traspasos_raw = query("""
             SELECT CAST(t.Cve_Producto AS INT) AS cve_prod, SUM(t.Cantidad) AS en_camino
             FROM VW_Temp_Transpaso_Pedidos t
-            JOIN IM_Productos_Gral p ON p.Cve_Producto = CAST(t.Cve_Producto AS INT)
             WHERE t.Cve_Sucursal = ?
             GROUP BY t.Cve_Producto
         """, (cve_sucursal,))
@@ -251,9 +250,12 @@ def stock_detalle(cve_sucursal: int):
                 FROM IM_Productos_Gral
                 WHERE Descripcion IN ({','.join(['?' for _ in descs])})
             """, tuple(descs))
-            cve_to_camino = {t['cve_prod']: t['en_camino'] for t in traspasos_raw}
+            # Cve_Producto en VW_Temp es int (10102), en IM_Productos_Gral es str ('010102')
+            # Normalizamos ambos a str sin transformación para el match
+            cve_to_camino = {str(t['cve_prod']): t['en_camino'] for t in traspasos_raw}
             for dm in (desc_map_raw or []):
-                camino = cve_to_camino.get(dm['Cve_Producto'], 0)
+                cve_str = str(int(dm['Cve_Producto']))  # '010102' → '10102'
+                camino = cve_to_camino.get(cve_str, 0)
                 if camino:
                     traspasos_por_desc[dm['Descripcion']] = camino
         for r in sin_stock:
