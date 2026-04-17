@@ -27,10 +27,18 @@ from shared.config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, TEST_
 from shared.serializers import serialize_row
 
 
+def _detect_driver() -> str:
+    """Usa el driver ODBC 18 si está disponible, si no el 17."""
+    drivers = pyodbc.drivers()
+    if "ODBC Driver 18 for SQL Server" in drivers:
+        return "ODBC Driver 18 for SQL Server"
+    return "ODBC Driver 17 for SQL Server"
+
+
 # La cadena de conexión se construye una sola vez al importar el módulo.
 # Si DB_HOST o DB_PASSWORD cambian en .env, reiniciar el servidor es suficiente.
 _CONNECTION_STRING = (
-    "DRIVER={ODBC Driver 17 for SQL Server};"
+    f"DRIVER={{{_detect_driver()}}};"
     f"SERVER={DB_HOST},{DB_PORT};"
     f"DATABASE={DB_NAME};"
     f"UID={DB_USER};"
