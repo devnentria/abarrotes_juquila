@@ -205,26 +205,31 @@ def ia_inventario(
         ORDER BY el.Fecha_Caducidad ASC
     """, (cve_sucursal,))
 
-    # Solo productos con ventas en los últimos 90 días (los que realmente se mueven)
+    # Mismo criterio que el detalle: sin stock + >= $50/mes promedio en 3 meses
     sin_stock = query(f"""
-        SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
-        FROM IN_Existencias_Alm ea
-        WHERE ea.Cve_Sucursal = ?
-          AND ea.Status       = 'AC'
-          AND ea.Existencia   <= 0
-          AND EXISTS (
-              SELECT 1
-              FROM FT_Facturas_D fd
-              JOIN FT_Facturas_C fc
-                ON fd.Cve_Folio      = fc.Cve_Folio
-               AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-               AND fd.Cve_Movimiento = fc.Cve_Movimiento
-              WHERE fd.Cve_Producto  = ea.Cve_Producto
-                AND fc.Cve_Sucursal  = ea.Cve_Sucursal
-                AND fc.Status       <> 'C'
-                AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
-          )
-    """, (cve_sucursal,))
+        SELECT COUNT(*) AS total
+        FROM (
+            SELECT ea.Cve_Producto
+            FROM IN_Existencias_Alm ea
+            LEFT JOIN (
+                SELECT fd.Cve_Producto, SUM(fd.Importe_Neto) AS importe
+                FROM FT_Facturas_D fd
+                JOIN FT_Facturas_C fc
+                  ON fd.Cve_Folio      = fc.Cve_Folio
+                 AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+                 AND fd.Cve_Movimiento = fc.Cve_Movimiento
+                WHERE fc.Cve_Sucursal = ?
+                  AND fc.Status      <> 'C'
+                  AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
+                GROUP BY fd.Cve_Producto
+            ) v ON ea.Cve_Producto = v.Cve_Producto
+            WHERE ea.Cve_Sucursal = ?
+              AND ea.Status       = 'AC'
+            GROUP BY ea.Cve_Producto
+            HAVING SUM(ea.Existencia) <= 0
+               AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
+        ) t
+    """, (cve_sucursal, cve_sucursal))
 
     # TOP 3 más vendidos (90 días) sin existencia — para hacer la alerta específica
     top_sin_stock = query(f"""
