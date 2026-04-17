@@ -191,90 +191,22 @@ def ia_inventario(
         return JSONResponse({"texto": "Sucursal no encontrada."})
     nombre_suc = suc[0]["Nombre"]
 
-    caducidades = query(f"""
-        SELECT TOP 3
-            p.Descripcion      AS producto,
-            el.Num_Lote        AS lote,
-            DATEDIFF(DAY, {hoy()}, el.Fecha_Caducidad) AS dias
-        FROM IN_Existencias_Lote el
-        LEFT JOIN IM_Productos_Gral p ON el.Cve_Producto = p.Cve_Producto
-        WHERE el.Cve_Sucursal    = ?
-          AND el.Existencia      > 0
-          AND el.Fecha_Caducidad IS NOT NULL
-          AND el.Fecha_Caducidad BETWEEN {hoy()} AND DATEADD(DAY, 60, {hoy()})
-        ORDER BY el.Fecha_Caducidad ASC
-    """, (cve_sucursal,))
+    # Leer datos del detalle de stock (misma fuente que la tarjeta)
+    stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}")
+    sin_stock_list = stock_cache["sin_stock"]   if stock_cache else []
+    caducidades    = stock_cache["caducidades"] if stock_cache else []
 
-    # Mismo criterio que el detalle: agrupa por código de barras + >= $50/mes promedio en 3 meses
-    sin_stock = query(f"""
-        WITH cb_canon AS (
-            SELECT Cve_Producto, MIN(Codigo_Barras) AS barcode_canon
-            FROM IM_Codigos_Barra
-            GROUP BY Cve_Producto
-        )
-        SELECT COUNT(*) AS total
-        FROM (
-            SELECT cb_canon.barcode_canon
-            FROM cb_canon
-            JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
-                                      AND ea.Cve_Sucursal = ?
-                                      AND ea.Status       = 'AC'
-            LEFT JOIN (
-                SELECT fd.Cve_Producto, SUM(fd.Importe_Neto) AS importe
-                FROM FT_Facturas_D fd
-                JOIN FT_Facturas_C fc
-                  ON fd.Cve_Folio      = fc.Cve_Folio
-                 AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-                 AND fd.Cve_Movimiento = fc.Cve_Movimiento
-                WHERE fc.Cve_Sucursal      = ?
-                  AND fc.Status           <> 'C'
-                  AND fc.Fecha_Documento  >= DATEADD(MONTH, -3, {hoy()})
-                GROUP BY fd.Cve_Producto
-            ) v ON v.Cve_Producto = cb_canon.Cve_Producto
-            GROUP BY cb_canon.barcode_canon
-            HAVING SUM(ea.Existencia) <= 0
-               AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
-        ) t
-    """, (cve_sucursal, cve_sucursal))
+    n_sin       = len(sin_stock_list)
+    n_en_camino = sum(1 for p in sin_stock_list if p.get("en_camino", 0) > 0)
+    top_sin_txt = ", ".join(
+        p["producto"] for p in sin_stock_list[:3] if p.get("producto")
+    ) or "ninguno"
+    cad_txt = ", ".join(
+        f"{r['producto']} (lote {r['lote']}, {r['dias']} días)"
+        for r in caducidades[:3]
+    ) or "ninguna en los próximos 60 días"
 
-    # TOP 3 más vendidos (90 días) sin existencia — para hacer la alerta específica
-    top_sin_stock = query(f"""
-        SELECT TOP 3
-            p.Descripcion          AS producto,
-            SUM(fd.Cantidad)       AS unidades
-        FROM FT_Facturas_D fd
-        JOIN FT_Facturas_C fc
-          ON fd.Cve_Folio      = fc.Cve_Folio
-         AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-         AND fd.Cve_Movimiento = fc.Cve_Movimiento
-        JOIN IM_Productos_Gral p ON fd.Cve_Producto = p.Cve_Producto
-        JOIN IN_Existencias_Alm ea
-          ON fd.Cve_Producto  = ea.Cve_Producto
-         AND ea.Cve_Sucursal  = fc.Cve_Sucursal
-        WHERE fc.Cve_Sucursal  = ?
-          AND fc.Status       <> 'C'
-          AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
-          AND ea.Status        = 'AC'
-          AND ea.Existencia   <= 0
-          AND p.Descripcion IS NOT NULL
-        GROUP BY p.Descripcion
-        HAVING SUM(fd.Importe_Neto) / 3.0 >= 50
-        ORDER BY SUM(fd.Importe_Neto) DESC
-    """, (cve_sucursal,))
-
-    # Productos sin existencia que ya tienen traspaso pendiente de recibir
-    en_camino = query("""
-        SELECT COUNT(DISTINCT CAST(t.Cve_Producto AS INT)) AS total
-        FROM VW_Temp_Transpaso_Pedidos t
-        JOIN IN_Existencias_Alm ea
-          ON ea.Cve_Producto = CAST(t.Cve_Producto AS INT)
-         AND ea.Cve_Sucursal = ?
-        WHERE t.Cve_Sucursal = ?
-          AND ea.Status      = 'AC'
-          AND ea.Existencia  <= 0
-    """, (cve_sucursal, cve_sucursal))
-
-    # Lotes ya caducados con existencia — dato no visible en la tarjeta
+    # Lotes ya caducados con existencia — no está en cache del detalle
     caducados = query(f"""
         SELECT COUNT(*) AS total
         FROM IN_Existencias_Lote
@@ -283,7 +215,7 @@ def ia_inventario(
           AND Fecha_Caducidad < {hoy()}
     """, (cve_sucursal,))
 
-    # Stock crítico solo en productos con ventas recientes
+    # Stock crítico solo en productos con ventas recientes — no está en cache del detalle
     stock_critico = query(f"""
         SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
         FROM IN_Existencias_Alm ea
@@ -303,18 +235,8 @@ def ia_inventario(
           )
     """, (cve_sucursal,))
 
-    n_sin        = sin_stock[0]["total"]     if sin_stock     else 0
-    n_caducados  = caducados[0]["total"]     if caducados     else 0
-    n_critico    = stock_critico[0]["total"] if stock_critico else 0
-    n_en_camino  = en_camino[0]["total"]     if en_camino     else 0
-    cad_txt      = ", ".join(
-        f"{r['producto']} (lote {r['lote']}, {r['dias']} días)"
-        for r in caducidades
-    ) or "ninguna en los próximos 60 días"
-    top_sin_txt  = ", ".join(
-        f"{r['producto']} ({r['unidades']:.0f} uds)"
-        for r in top_sin_stock
-    ) or "ninguno"
+    n_caducados = caducados[0]["total"]     if caducados     else 0
+    n_critico   = stock_critico[0]["total"] if stock_critico else 0
 
     prompt = (
         f"Eres el asistente analítico personal de {nombre}. "
