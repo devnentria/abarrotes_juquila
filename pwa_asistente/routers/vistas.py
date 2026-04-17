@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from shared.auth import get_current_user
 from shared.config import TEST_DATE
 from shared.database import query, hoy
+from shared import cache_dashboard as _cache
 
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
@@ -109,7 +110,7 @@ def stock():
                     ) v2 ON v2.Cve_Producto = cb_c.Cve_Producto
                     GROUP BY cb_c.barcode_canon
                     HAVING SUM(ea2.Existencia) <= 0
-                       AND ISNULL(SUM(v2.imp3m), 0) / 3.0 >= 500
+                       AND ISNULL(SUM(v2.imp3m), 0) / 3.0 >= 50
                 ) _x
             ) AS sin_stock,
             COUNT(DISTINCT CASE
@@ -134,6 +135,11 @@ def stock():
 @router.get("/stock/{cve_sucursal}")
 def stock_detalle(cve_sucursal: int):
     """Top stock, caducidades próximas y sin existencia por sucursal."""
+    _clave = f"stock_detalle_{cve_sucursal}"
+    cached = _cache.get(_clave)
+    if cached:
+        return JSONResponse(cached)
+
     top_stock = query("""
         SELECT TOP 10
             p.Descripcion            AS producto,
@@ -180,7 +186,8 @@ def stock_detalle(cve_sucursal: int):
             ROUND(ISNULL(SUM(v.importe), 0) / 3.0, 0)      AS prom_importe_mensual,
             ISNULL(SUM(v.m1_uds), 0)                        AS m1_uds,
             ISNULL(SUM(v.m2_uds), 0)                        AS m2_uds,
-            ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds
+            ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds,
+            0                                               AS en_camino
         FROM cb_canon
         JOIN IM_Productos_Gral p   ON p.Cve_Producto  = cb_canon.Cve_Producto
         JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
@@ -211,7 +218,7 @@ def stock_detalle(cve_sucursal: int):
         WHERE p.Descripcion IS NOT NULL
         GROUP BY cb_canon.barcode_canon
         HAVING SUM(ea.Existencia) <= 0
-           AND ISNULL(SUM(v.importe), 0) / 3.0 >= 500
+           AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
         ORDER BY prom_importe_mensual DESC
     """, (cve_sucursal, cve_sucursal))
 
@@ -226,16 +233,44 @@ def stock_detalle(cve_sucursal: int):
             m += 12
         return _MESES[m]
 
+    # Enriquecer con piezas en camino (consulta separada solo para los productos resultantes)
+    if sin_stock:
+        traspasos_raw = query(f"""
+            SELECT CAST(t.Cve_Producto AS INT) AS cve_prod, SUM(t.Cantidad) AS en_camino
+            FROM VW_Temp_Transpaso_Pedidos t
+            JOIN IM_Productos_Gral p ON p.Cve_Producto = CAST(t.Cve_Producto AS INT)
+            WHERE t.Cve_Sucursal = ?
+            GROUP BY t.Cve_Producto
+        """, (cve_sucursal,))
+        # También necesitamos mapear descripcion → Cve_Producto para el cruce
+        descs = [r['producto'] for r in sin_stock]
+        traspasos_por_desc = {}
+        if traspasos_raw:
+            desc_map_raw = query(f"""
+                SELECT Cve_Producto, Descripcion
+                FROM IM_Productos_Gral
+                WHERE Descripcion IN ({','.join(['?' for _ in descs])})
+            """, tuple(descs))
+            cve_to_camino = {t['cve_prod']: t['en_camino'] for t in traspasos_raw}
+            for dm in (desc_map_raw or []):
+                camino = cve_to_camino.get(dm['Cve_Producto'], 0)
+                if camino:
+                    traspasos_por_desc[dm['Descripcion']] = camino
+        for r in sin_stock:
+            r['en_camino'] = traspasos_por_desc.get(r['producto'], 0)
+
     for r in sin_stock:
         r['m1_label'] = _mes_label(3)
         r['m2_label'] = _mes_label(2)
         r['m3_label'] = _mes_label(1)
 
-    return JSONResponse({
+    resultado = {
         "top_stock":   top_stock,
         "caducidades": caducidades,
         "sin_stock":   sin_stock,
-    })
+    }
+    _cache.set(_clave, resultado)
+    return JSONResponse(resultado)
 
 
 # ── Resumen del día por sucursal (para Inicio) ────────────────────────────────

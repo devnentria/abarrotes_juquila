@@ -90,6 +90,12 @@ def init_db() -> None:
                 respuesta  TEXT    NOT NULL,
                 creado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS cache_dashboard (
+                clave        TEXT    PRIMARY KEY,
+                payload      TEXT    NOT NULL,
+                generado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
         """)
         # Migraciones: agregar columnas si la tabla ya existía sin ellas
         migraciones = [
@@ -111,6 +117,11 @@ def init_db() -> None:
                 clave      TEXT    PRIMARY KEY,
                 respuesta  TEXT    NOT NULL,
                 creado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
+            )""",
+            """CREATE TABLE IF NOT EXISTS cache_dashboard (
+                clave        TEXT    PRIMARY KEY,
+                payload      TEXT    NOT NULL,
+                generado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
             )""",
         ]
         for sql in migraciones:

@@ -28,6 +28,7 @@ from shared.auth import get_current_user
 from shared.config import IA_COSTO_POR_CONSULTA, IA_FLASH_MODEL, OPENAI_API_KEY
 from shared.database import query, hoy
 from shared.database_local import execute as execute_local, verificar_mes_ia
+from shared import cache_dashboard as _cache
 
 router = APIRouter(prefix="/api/ia", dependencies=[Depends(get_current_user)])
 
@@ -61,6 +62,12 @@ def ia_sucursal(
     Genera 2 oraciones de resumen ejecutivo para una sucursal,
     personalizadas con el nombre del usuario.
     """
+    _clave = f"ia_sucursal_{cve_sucursal}"
+    if not regenerar:
+        cached = _cache.get(_clave)
+        if cached:
+            return JSONResponse(cached)
+
     nombre = _primer_nombre(usuario["nombre"])
 
     suc = query(
@@ -145,6 +152,7 @@ def ia_sucursal(
     )
 
     texto = _flash(prompt)
+    _cache.set(_clave, {"texto": texto})
     if regenerar:
         verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
         execute_local(
@@ -167,6 +175,12 @@ def ia_inventario(
     Genera una alerta inteligente de inventario para una sucursal:
     caducidades próximas y productos sin existencia.
     """
+    _clave = f"ia_inventario_{cve_sucursal}"
+    if not regenerar:
+        cached = _cache.get(_clave)
+        if cached:
+            return JSONResponse(cached)
+
     nombre = _primer_nombre(usuario["nombre"])
 
     suc = query(
@@ -233,9 +247,21 @@ def ia_inventario(
           AND ea.Existencia   <= 0
           AND p.Descripcion IS NOT NULL
         GROUP BY p.Descripcion
-        HAVING SUM(fd.Importe_Neto) / 3.0 >= 500
+        HAVING SUM(fd.Importe_Neto) / 3.0 >= 50
         ORDER BY SUM(fd.Importe_Neto) DESC
     """, (cve_sucursal,))
+
+    # Productos sin existencia que ya tienen traspaso pendiente de recibir
+    en_camino = query("""
+        SELECT COUNT(DISTINCT CAST(t.Cve_Producto AS INT)) AS total
+        FROM VW_Temp_Transpaso_Pedidos t
+        JOIN IN_Existencias_Alm ea
+          ON ea.Cve_Producto = CAST(t.Cve_Producto AS INT)
+         AND ea.Cve_Sucursal = ?
+        WHERE t.Cve_Sucursal = ?
+          AND ea.Status      = 'AC'
+          AND ea.Existencia  <= 0
+    """, (cve_sucursal, cve_sucursal))
 
     # Lotes ya caducados con existencia — dato no visible en la tarjeta
     caducados = query(f"""
@@ -266,14 +292,15 @@ def ia_inventario(
           )
     """, (cve_sucursal,))
 
-    n_sin       = sin_stock[0]["total"]     if sin_stock     else 0
-    n_caducados = caducados[0]["total"]     if caducados     else 0
-    n_critico   = stock_critico[0]["total"] if stock_critico else 0
-    cad_txt     = ", ".join(
+    n_sin        = sin_stock[0]["total"]     if sin_stock     else 0
+    n_caducados  = caducados[0]["total"]     if caducados     else 0
+    n_critico    = stock_critico[0]["total"] if stock_critico else 0
+    n_en_camino  = en_camino[0]["total"]     if en_camino     else 0
+    cad_txt      = ", ".join(
         f"{r['producto']} (lote {r['lote']}, {r['dias']} días)"
         for r in caducidades
     ) or "ninguna en los próximos 60 días"
-    top_sin_txt = ", ".join(
+    top_sin_txt  = ", ".join(
         f"{r['producto']} ({r['unidades']:.0f} uds)"
         for r in top_sin_stock
     ) or "ninguno"
@@ -282,7 +309,8 @@ def ia_inventario(
         f"Eres el asistente analítico personal de {nombre}. "
         f"Redacta exactamente 2 oraciones de alerta de inventario para {nombre_suc}, "
         f"dirigidas a {nombre}. "
-        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia, "
+        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia "
+        f"({n_en_camino} de ellos ya tienen piezas en camino por traspaso pendiente), "
         f"{n_critico} en stock crítico (menos de 5 piezas), "
         f"{n_caducados} lotes con producto caducado aún en almacén. "
         f"Productos más vendidos sin existencia: {top_sin_txt}. "
@@ -292,6 +320,7 @@ def ia_inventario(
     )
 
     texto = _flash(prompt)
+    _cache.set(_clave, {"texto": texto})
     if regenerar:
         verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
         execute_local(

@@ -539,6 +539,11 @@ html, body {
 .chat-input:focus { border-color: var(--blue-mid); }
 .chat-input::placeholder { color: var(--text-dim); }
 
+.detalle-badge-camino {
+  font-size: 0.7rem;
+  color: #16a34a;
+  font-weight: 600;
+}
 .chat-status-msg {
   font-size: 0.78rem;
   color: var(--text-muted, #888);
