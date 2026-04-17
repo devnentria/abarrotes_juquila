@@ -6,3 +6,7 @@ __pycache__/
 # Documentación y diagramas (no van al repo)
 *.md
 diagramas/
+
+# Logos sueltos en raíz (van en static/)
+logo.jpeg
+logo_trasparente.png

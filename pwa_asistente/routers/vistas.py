@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from shared.auth import get_current_user
 from shared.config import TEST_DATE
 from shared.database import query, hoy
+from shared import cache_dashboard as _cache
 
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
@@ -81,14 +82,41 @@ def stock():
     """Card por sucursal con totales de existencia y lotes por caducar."""
     sucursales = query(f"""
         SELECT
-            s.Cve_Sucursal                                                    AS cve_sucursal,
-            s.Nombre                                                          AS sucursal,
-            COUNT(DISTINCT ea.Cve_Producto)                                   AS total_productos,
-            SUM(CASE WHEN ea.Existencia <= 0 THEN 1 ELSE 0 END)               AS sin_stock,
+            s.Cve_Sucursal  AS cve_sucursal,
+            s.Nombre        AS sucursal,
+            COUNT(DISTINCT ea.Cve_Producto) AS total_productos,
+            (
+                SELECT COUNT(*) FROM (
+                    SELECT cb_c.barcode_canon
+                    FROM (
+                        SELECT Cve_Producto, MIN(Codigo_Barras) AS barcode_canon
+                        FROM IM_Codigos_Barra GROUP BY Cve_Producto
+                    ) cb_c
+                    JOIN IN_Existencias_Alm ea2
+                      ON ea2.Cve_Producto = cb_c.Cve_Producto
+                     AND ea2.Cve_Sucursal = s.Cve_Sucursal
+                     AND ea2.Status       = 'AC'
+                    LEFT JOIN (
+                        SELECT fd2.Cve_Producto, SUM(fd2.Importe_Neto) AS imp3m
+                        FROM FT_Facturas_D fd2
+                        JOIN FT_Facturas_C fc2
+                          ON fd2.Cve_Folio      = fc2.Cve_Folio
+                         AND fd2.Cve_Sucursal   = fc2.Cve_Sucursal
+                         AND fd2.Cve_Movimiento = fc2.Cve_Movimiento
+                        WHERE fc2.Cve_Sucursal      = s.Cve_Sucursal
+                          AND fc2.Status           <> 'C'
+                          AND fc2.Fecha_Documento  >= DATEADD(MONTH, -3, {hoy()})
+                        GROUP BY fd2.Cve_Producto
+                    ) v2 ON v2.Cve_Producto = cb_c.Cve_Producto
+                    GROUP BY cb_c.barcode_canon
+                    HAVING SUM(ea2.Existencia) <= 0
+                       AND ISNULL(SUM(v2.imp3m), 0) / 3.0 >= 50
+                ) _x
+            ) AS sin_stock,
             COUNT(DISTINCT CASE
                 WHEN el.Fecha_Caducidad BETWEEN {hoy()} AND DATEADD(DAY, 90, {hoy()})
                      AND el.Existencia > 0
-                THEN el.Num_Lote END)                                         AS lotes_por_caducar
+                THEN el.Num_Lote END) AS lotes_por_caducar
         FROM GN_Sucursales s
         LEFT JOIN IN_Existencias_Alm ea
                ON ea.Cve_Sucursal = s.Cve_Sucursal AND ea.Status = 'AC'
@@ -107,6 +135,11 @@ def stock():
 @router.get("/stock/{cve_sucursal}")
 def stock_detalle(cve_sucursal: int):
     """Top stock, caducidades próximas y sin existencia por sucursal."""
+    _clave = f"stock_detalle_{cve_sucursal}"
+    cached = _cache.get(_clave)
+    if cached:
+        return JSONResponse(cached)
+
     top_stock = query("""
         SELECT TOP 10
             p.Descripcion            AS producto,
@@ -138,24 +171,106 @@ def stock_detalle(cve_sucursal: int):
         ORDER BY el.Fecha_Caducidad ASC
     """, (cve_sucursal,))
 
-    sin_stock = query("""
+    # Barcode canónico: cada producto queda en un solo grupo (MIN barcode).
+    # Variantes promo (mismo barcode, distinto Cve_Producto) se consolidan.
+    # Incluye desglose de unidades por mes para dar contexto de demanda.
+    sin_stock = query(f"""
+        WITH cb_canon AS (
+            SELECT Cve_Producto, MIN(Codigo_Barras) AS barcode_canon
+            FROM IM_Codigos_Barra
+            GROUP BY Cve_Producto
+        )
         SELECT TOP 10
-            p.Descripcion    AS producto,
-            p.Laboratorio    AS laboratorio
-        FROM IN_Existencias_Alm ea
-        LEFT JOIN IM_Productos_Gral p ON ea.Cve_Producto = p.Cve_Producto
-        WHERE ea.Cve_Sucursal = ?
-          AND ea.Status       = 'AC'
-          AND ea.Existencia   <= 0
-          AND p.Descripcion IS NOT NULL
-        ORDER BY p.Descripcion
-    """, (cve_sucursal,))
+            MIN(p.Descripcion)                              AS producto,
+            MIN(p.Laboratorio)                              AS laboratorio,
+            ROUND(ISNULL(SUM(v.importe), 0) / 3.0, 0)      AS prom_importe_mensual,
+            ISNULL(SUM(v.m1_uds), 0)                        AS m1_uds,
+            ISNULL(SUM(v.m2_uds), 0)                        AS m2_uds,
+            ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds,
+            0                                               AS en_camino
+        FROM cb_canon
+        JOIN IM_Productos_Gral p   ON p.Cve_Producto  = cb_canon.Cve_Producto
+        JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
+                                  AND ea.Cve_Sucursal = ?
+                                  AND ea.Status       = 'AC'
+        LEFT JOIN (
+            SELECT fd.Cve_Producto,
+                   SUM(fd.Importe_Neto) AS importe,
+                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
+                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-3,{hoy()}))
+                            THEN fd.Cantidad ELSE 0 END) AS m1_uds,
+                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
+                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-2,{hoy()}))
+                            THEN fd.Cantidad ELSE 0 END) AS m2_uds,
+                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
+                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
+                            THEN fd.Cantidad ELSE 0 END) AS m3_uds
+            FROM FT_Facturas_D fd
+            JOIN FT_Facturas_C fc
+              ON fd.Cve_Folio      = fc.Cve_Folio
+             AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+             AND fd.Cve_Movimiento = fc.Cve_Movimiento
+            WHERE fc.Cve_Sucursal      = ?
+              AND fc.Status           <> 'C'
+              AND fc.Fecha_Documento  >= DATEADD(MONTH, -3, {hoy()})
+            GROUP BY fd.Cve_Producto
+        ) v ON v.Cve_Producto = cb_canon.Cve_Producto
+        WHERE p.Descripcion IS NOT NULL
+        GROUP BY cb_canon.barcode_canon
+        HAVING SUM(ea.Existencia) <= 0
+           AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
+        ORDER BY prom_importe_mensual DESC
+    """, (cve_sucursal, cve_sucursal))
 
-    return JSONResponse({
+    # Agregar etiquetas de mes para el frontend
+    _MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+              'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+    _hoy = date.today()
+
+    def _mes_label(n: int) -> str:
+        m = _hoy.month - n
+        while m <= 0:
+            m += 12
+        return _MESES[m]
+
+    # Enriquecer con piezas en camino (consulta separada solo para los productos resultantes)
+    if sin_stock:
+        traspasos_raw = query(f"""
+            SELECT CAST(t.Cve_Producto AS INT) AS cve_prod, SUM(t.Cantidad) AS en_camino
+            FROM VW_Temp_Transpaso_Pedidos t
+            JOIN IM_Productos_Gral p ON p.Cve_Producto = CAST(t.Cve_Producto AS INT)
+            WHERE t.Cve_Sucursal = ?
+            GROUP BY t.Cve_Producto
+        """, (cve_sucursal,))
+        # También necesitamos mapear descripcion → Cve_Producto para el cruce
+        descs = [r['producto'] for r in sin_stock]
+        traspasos_por_desc = {}
+        if traspasos_raw:
+            desc_map_raw = query(f"""
+                SELECT Cve_Producto, Descripcion
+                FROM IM_Productos_Gral
+                WHERE Descripcion IN ({','.join(['?' for _ in descs])})
+            """, tuple(descs))
+            cve_to_camino = {t['cve_prod']: t['en_camino'] for t in traspasos_raw}
+            for dm in (desc_map_raw or []):
+                camino = cve_to_camino.get(dm['Cve_Producto'], 0)
+                if camino:
+                    traspasos_por_desc[dm['Descripcion']] = camino
+        for r in sin_stock:
+            r['en_camino'] = traspasos_por_desc.get(r['producto'], 0)
+
+    for r in sin_stock:
+        r['m1_label'] = _mes_label(3)
+        r['m2_label'] = _mes_label(2)
+        r['m3_label'] = _mes_label(1)
+
+    resultado = {
         "top_stock":   top_stock,
         "caducidades": caducidades,
         "sin_stock":   sin_stock,
-    })
+    }
+    _cache.set(_clave, resultado)
+    return JSONResponse(resultado)
 
 
 # ── Resumen del día por sucursal (para Inicio) ────────────────────────────────

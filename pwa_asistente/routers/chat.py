@@ -15,18 +15,19 @@ Endpoints:
   DELETE /api/chat/conversaciones/{id}      → Elimina una conversación
   POST   /api/chat/mensaje                  → Envía mensaje y obtiene respuesta del agente
 """
+import json
 import re
 from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
 from shared.config import IA_COSTO_POR_CONSULTA, IA_RATIO_PWA
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
-from pwa_asistente.agente import director
+from pwa_asistente.agente import director, loop_stream
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
 )
@@ -135,6 +136,37 @@ def eliminar_conversacion(conv_id: int, usuario: dict = Depends(get_current_user
     return JSONResponse({"mensaje": "Conversación eliminada"})
 
 
+# ── Helper: guardar mensajes y actualizar contador ────────────────────────────
+
+def _guardar_y_contar(conv_id: int, pregunta: str, respuesta: str, usuario_id: int) -> None:
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "user", pregunta),
+    )
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "assistant", respuesta),
+    )
+    execute(
+        "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
+        (pregunta[:80], conv_id),
+    )
+    total_global = fetch_one(
+        "SELECT COUNT(*) AS total FROM chat_mensajes cm "
+        "JOIN chat_conversaciones cc ON cm.conversacion_id = cc.id "
+        "WHERE cc.usuario_id = ? AND cm.rol = 'user'",
+        (usuario_id,),
+    )["total"]
+    if total_global % IA_RATIO_PWA == 0:
+        execute(
+            "UPDATE usuarios "
+            "SET consultas_ia = consultas_ia + 1, "
+            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) "
+            "WHERE id = ?",
+            (IA_COSTO_POR_CONSULTA, usuario_id),
+        )
+
+
 # ── Mensaje ───────────────────────────────────────────────────────────────────
 
 @router.post("/mensaje")
@@ -208,40 +240,123 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
                 "Intenta de nuevo o reformula la pregunta."
             )
 
-    # 5. Guardar mensajes en la BD
-    execute(
-        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
-        (conv_id, "user", body.mensaje),
-    )
-    execute(
-        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
-        (conv_id, "assistant", respuesta),
-    )
-
-    # Actualizar último mensaje visible en la lista
-    execute(
-        "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
-        (body.mensaje.strip()[:80], conv_id),
-    )
-
-    # 6. Contar mensajes globales del usuario (todas las conversaciones) y actualizar contadores
-    total_global = fetch_one(
-        "SELECT COUNT(*) AS total FROM chat_mensajes cm "
-        "JOIN chat_conversaciones cc ON cm.conversacion_id = cc.id "
-        "WHERE cc.usuario_id = ? AND cm.rol = 'user'",
-        (usuario["id"],),
-    )["total"]
-    if total_global % IA_RATIO_PWA == 0:
-        execute(
-            "UPDATE usuarios "
-            "SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) "
-            "WHERE id = ?",
-            (IA_COSTO_POR_CONSULTA, usuario["id"]),
-        )
+    # 5. Guardar mensajes y actualizar contadores
+    _guardar_y_contar(conv_id, body.mensaje, respuesta, usuario["id"])
 
     return JSONResponse({
         "respuesta":      respuesta,
         "conversacion_id": conv_id,
         "area":           area,
     })
+
+
+# ── Mensaje (streaming SSE) ───────────────────────────────────────────────────
+
+@router.post("/mensaje/stream")
+def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current_user)):
+    """
+    Igual que /mensaje pero devuelve la respuesta del agente como SSE
+    para que el frontend pueda mostrarla chunk por chunk.
+
+    Eventos SSE:
+      data: {"type": "status", "text": "Consultando el sistema..."}
+      data: {"type": "token",  "text": "fragmento de texto"}
+      data: {"type": "done",   "conversacion_id": 123, "area": "ventas"}
+      data: {"type": "error",  "text": "mensaje de error"}
+    """
+    if not body.mensaje.strip():
+        raise HTTPException(400, "El mensaje no puede estar vacío")
+
+    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
+    u = fetch_one(
+        "SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?",
+        (usuario["id"],),
+    )
+    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
+        raise HTTPException(
+            429,
+            "Has alcanzado tu límite de consultas de IA. "
+            "Contacta a tu administrador para ampliar el límite.",
+        )
+
+    conv_id = body.conversacion_id
+    if not conv_id:
+        titulo  = body.mensaje.strip()[:80]
+        conv_id = execute(
+            "INSERT INTO chat_conversaciones (usuario_id, titulo) VALUES (?, ?)",
+            (usuario["id"], titulo),
+        )
+    else:
+        conv = fetch_one(
+            "SELECT id FROM chat_conversaciones WHERE id = ? AND usuario_id = ?",
+            (conv_id, usuario["id"]),
+        )
+        if not conv:
+            raise HTTPException(404, "Conversación no encontrada")
+
+    historial = fetch_all(
+        "SELECT rol, contenido FROM chat_mensajes "
+        "WHERE conversacion_id = ? ORDER BY id",
+        (conv_id,),
+    )
+
+    msg     = body.mensaje.strip()
+    usuario_id = usuario["id"]
+
+    def _sse(obj: dict) -> str:
+        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+    def _generador():
+        import json as _json
+
+        # Respuestas instantáneas sin IA
+        if _SALUDO.match(msg):
+            yield _sse({"type": "token",  "text": _RESPUESTA_SALUDO})
+            _guardar_y_contar(conv_id, msg, _RESPUESTA_SALUDO, usuario_id)
+            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "saludo"})
+            return
+        if _CAPACIDADES.search(msg) and len(msg) < 120:
+            yield _sse({"type": "token",  "text": _RESPUESTA_CAPACIDADES})
+            _guardar_y_contar(conv_id, msg, _RESPUESTA_CAPACIDADES, usuario_id)
+            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "capacidades"})
+            return
+
+        yield _sse({"type": "status", "text": "Consultando el sistema..."})
+
+        area = director.clasificar(msg, historial)
+        especialista = _ESPECIALISTAS.get(area, None)
+
+        # Obtener el system prompt del especialista correspondiente
+        _sistemas = {
+            "ventas":     ventas,
+            "inventario": inventario,
+            "pedidos":    pedidos,
+            "medicos":    medicos,
+            "clientes":   clientes,
+            "mixto":      mixto,
+        }
+        modulo = _sistemas.get(area, mixto)
+        sistema_prompt = getattr(modulo, "_SYSTEM", "")
+        from datetime import date as _date
+        from shared.config import TEST_DATE
+        _fecha = TEST_DATE if TEST_DATE else _date.today().strftime("%Y-%m-%d")
+        sistema_completo = sistema_prompt + f"\n\nFECHA ACTUAL: {_fecha}. Usa esta fecha como referencia para hoy, ayer, este mes, mes anterior, etc."
+
+        try:
+            respuesta_completa = ""
+            for chunk in loop_stream.responder_stream(sistema_completo, msg, historial):
+                respuesta_completa += chunk
+                yield _sse({"type": "token", "text": chunk})
+
+            if not respuesta_completa:
+                respuesta_completa = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
+                yield _sse({"type": "token", "text": respuesta_completa})
+
+        except Exception as e:
+            respuesta_completa = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
+            yield _sse({"type": "token", "text": respuesta_completa})
+
+        _guardar_y_contar(conv_id, msg, respuesta_completa, usuario_id)
+        yield _sse({"type": "done", "conversacion_id": conv_id, "area": area})
+
+    return StreamingResponse(_generador(), media_type="text/event-stream")

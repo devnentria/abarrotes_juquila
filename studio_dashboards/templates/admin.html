@@ -11,13 +11,13 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue:       #1e3a6e;    /* Marca Nentria — header */
-      --blue-mid:   #0A84FF;   /* iOS blue — botones, acentos */
+      --blue:       #1A2B5A;    /* Azul marino LebenMedik */
+      --blue-mid:   #00897B;   /* Teal LebenMedik — botones, acentos */
       --blue-light: #E3F0FF;
       --danger:     #FF3B30;   /* iOS red */
       --danger-soft:#FFF1F0;
       --success:    #34C759;   /* iOS green */
-      --warn:       #FF9F0A;   /* iOS orange */
+      --warn:       #EF6C3A;   /* Naranja LebenMedik */
       --warn-soft:  #FFF5E6;
       --bg:         #F2F2F7;   /* iOS system background */
       --card:       #FFFFFF;
@@ -168,7 +168,7 @@
               style="background:rgba(255,255,255,.15);border:none;cursor:pointer;color:#fff;border-radius:8px;padding:7px 10px;display:flex;align-items:center;margin-right:4px">
         <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
       </button>
-      <span class="logo">SA</span>
+      <img src="/static/logo.jpeg" alt="LebenMedik" style="height:22px;width:auto;max-width:110px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:2px 7px">
       <h1>Portal de Administración</h1>
     </div>
     <span class="header-user" id="header-user"></span>
@@ -423,12 +423,12 @@ async function cargarUsuarios() {
           <div style="display:flex;gap:6px;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="abrirModalEditar(${u.id})">Editar</button>
             <button class="btn btn-ghost btn-sm" onclick="abrirResetPassword(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Contraseña</button>
-            <button class="btn btn-ghost btn-sm" onclick="resetearConsultas(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Reiniciar IA</button>
-            <button class="btn btn-ghost btn-sm" onclick="verHistorialIA(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Historial</button>
+            <button class="btn btn-ghost btn-sm" onclick="verHistorialIA(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Historial IA</button>
             <button class="btn btn-sm ${u.activo ? 'btn-danger' : 'btn-primary'}"
                     onclick="toggleUsuario(${u.id}, ${u.activo})">
               ${u.activo ? 'Desactivar' : 'Activar'}
             </button>
+            <button class="btn btn-danger btn-sm" onclick="eliminarUsuario(${u.id}, '${u.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
           </div>
         </td>
       </tr>
@@ -588,11 +588,11 @@ async function confirmarResetPassword() {
   }
 }
 
-// ── Reiniciar contador IA ─────────────────────────────────────────────────────
-async function resetearConsultas(id, nombre) {
-  if (!confirm(`¿Reiniciar el contador de consultas IA de ${nombre}?`)) return;
+// ── Eliminar usuario ──────────────────────────────────────────────────────────
+async function eliminarUsuario(id, nombre) {
+  if (!confirm(`¿Eliminar permanentemente a ${nombre}? Esta acción no se puede deshacer.`)) return;
   try {
-    const data = await api(`/api/admin/usuarios/${id}/reset-consultas`, { method: 'PATCH' });
+    const data = await api(`/api/admin/usuarios/${id}`, { method: 'DELETE' });
     mostrarToast(data.mensaje, 'success');
     cargarUsuarios();
   } catch (e) {

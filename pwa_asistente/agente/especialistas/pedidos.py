@@ -16,6 +16,7 @@ from openai import OpenAI
 from datetime import date
 from shared.config import OPENAI_API_KEY, OPENAI_MODEL, TEST_DATE
 from pwa_asistente.agente import ejecutor
+from pwa_asistente.agente import cache_agente
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -94,6 +95,11 @@ def responder(pregunta: str, historial: list[dict]) -> str:
     Returns:
         str: Respuesta en lenguaje natural (Markdown).
     """
+    if cache_agente.es_historico(pregunta):
+        cached = cache_agente.get("pedidos", pregunta)
+        if cached:
+            return cached
+
     _fecha = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
     mensajes = [{"role": "system", "content": _SYSTEM + f"\n\nFECHA ACTUAL: {_fecha}. Usa esta fecha como referencia para hoy, ayer, este mes, mes anterior, etc."}]
     for msg in historial:
@@ -110,7 +116,10 @@ def responder(pregunta: str, historial: list[dict]) -> str:
         msg = resp.choices[0].message
 
         if not msg.tool_calls:
-            return msg.content or "No pude generar una respuesta."
+            resultado = msg.content or "No pude generar una respuesta."
+            if cache_agente.es_historico(pregunta):
+                cache_agente.set("pedidos", pregunta, resultado)
+            return resultado
 
         mensajes.append(msg)
 
@@ -131,4 +140,4 @@ def responder(pregunta: str, historial: list[dict]) -> str:
                 "content": contenido,
             })
 
-    return "No pude completar la consulta. Intenta reformular tu pregunta."
+    return "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
