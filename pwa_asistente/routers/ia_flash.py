@@ -205,12 +205,20 @@ def ia_inventario(
         ORDER BY el.Fecha_Caducidad ASC
     """, (cve_sucursal,))
 
-    # Mismo criterio que el detalle: sin stock + >= $50/mes promedio en 3 meses
+    # Mismo criterio que el detalle: agrupa por código de barras + >= $50/mes promedio en 3 meses
     sin_stock = query(f"""
+        WITH cb_canon AS (
+            SELECT Cve_Producto, MIN(Codigo_Barras) AS barcode_canon
+            FROM IM_Codigos_Barra
+            GROUP BY Cve_Producto
+        )
         SELECT COUNT(*) AS total
         FROM (
-            SELECT ea.Cve_Producto
-            FROM IN_Existencias_Alm ea
+            SELECT cb_canon.barcode_canon
+            FROM cb_canon
+            JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
+                                      AND ea.Cve_Sucursal = ?
+                                      AND ea.Status       = 'AC'
             LEFT JOIN (
                 SELECT fd.Cve_Producto, SUM(fd.Importe_Neto) AS importe
                 FROM FT_Facturas_D fd
@@ -218,14 +226,12 @@ def ia_inventario(
                   ON fd.Cve_Folio      = fc.Cve_Folio
                  AND fd.Cve_Sucursal   = fc.Cve_Sucursal
                  AND fd.Cve_Movimiento = fc.Cve_Movimiento
-                WHERE fc.Cve_Sucursal = ?
-                  AND fc.Status      <> 'C'
-                  AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
+                WHERE fc.Cve_Sucursal      = ?
+                  AND fc.Status           <> 'C'
+                  AND fc.Fecha_Documento  >= DATEADD(MONTH, -3, {hoy()})
                 GROUP BY fd.Cve_Producto
-            ) v ON ea.Cve_Producto = v.Cve_Producto
-            WHERE ea.Cve_Sucursal = ?
-              AND ea.Status       = 'AC'
-            GROUP BY ea.Cve_Producto
+            ) v ON v.Cve_Producto = cb_canon.Cve_Producto
+            GROUP BY cb_canon.barcode_canon
             HAVING SUM(ea.Existencia) <= 0
                AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
         ) t
