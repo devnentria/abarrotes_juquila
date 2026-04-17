@@ -192,9 +192,14 @@ def ia_inventario(
     nombre_suc = suc[0]["Nombre"]
 
     # Leer datos del detalle de stock (misma fuente que la tarjeta)
+    # Si no hay cache (antes del cron), calcularlo ahora
     stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}")
-    sin_stock_list = stock_cache["sin_stock"]   if stock_cache else []
-    caducidades    = stock_cache["caducidades"] if stock_cache else []
+    if stock_cache is None:
+        from pwa_asistente.routers.vistas import stock_detalle
+        stock_detalle(cve_sucursal)
+        stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
+    sin_stock_list = stock_cache.get("sin_stock",   [])
+    caducidades    = stock_cache.get("caducidades", [])
 
     n_sin       = len(sin_stock_list)
     n_en_camino = sum(1 for p in sin_stock_list if p.get("en_camino", 0) > 0)
