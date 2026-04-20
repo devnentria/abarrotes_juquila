@@ -56,7 +56,6 @@ def set(clave: str, payload: dict) -> None:
             "VALUES (?, ?, datetime('now'))",
             (clave, json.dumps(payload, ensure_ascii=False, default=str)),
         )
-        conn.commit()
 
 
 def invalidate(clave: str) -> None:
@@ -68,4 +67,3 @@ def invalidate(clave: str) -> None:
     """
     with get_connection() as conn:
         conn.execute("DELETE FROM cache_dashboard WHERE clave = ?", (clave,))
-        conn.commit()

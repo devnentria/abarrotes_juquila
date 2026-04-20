@@ -25,6 +25,7 @@ Qué hace:
 """
 import sys
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -83,14 +84,16 @@ def main() -> None:
     log.info(f"Sucursales a procesar: {sucursales}")
 
     errores = []
-    for cve in sucursales:
-        try:
-            log.info(f"Procesando sucursal {cve}...")
-            refresh_sucursal(cve)
-            log.info(f"Sucursal {cve} completada")
-        except Exception as e:
-            log.error(f"Error en sucursal {cve}: {e}")
-            errores.append((cve, str(e)))
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futuros = {pool.submit(refresh_sucursal, cve): cve for cve in sucursales}
+        for futuro in as_completed(futuros):
+            cve = futuros[futuro]
+            try:
+                futuro.result()
+                log.info(f"Sucursal {cve} completada")
+            except Exception as e:
+                log.error(f"Error en sucursal {cve}: {e}")
+                errores.append((cve, str(e)))
 
     duracion = (datetime.now() - inicio).total_seconds()
     log.info(f"=== Cron refresh terminado en {duracion:.1f}s — errores: {len(errores)} ===")

@@ -29,11 +29,12 @@ from shared.config import IA_COSTO_POR_CONSULTA, IA_FLASH_MODEL, OPENAI_API_KEY
 from shared.database import query, hoy
 from shared.database_local import execute as execute_local, verificar_mes_ia
 from shared import cache_dashboard as _cache
+from pwa_asistente.routers.vistas import stock_detalle
 
 router = APIRouter(prefix="/api/ia", dependencies=[Depends(get_current_user)])
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
-_MODEL  = IA_FLASH_MODEL  # Modelo rápido para flash — independiente del chat principal
+_MODEL  = IA_FLASH_MODEL
 
 
 def _primer_nombre(nombre_completo: str) -> str:
@@ -48,6 +49,16 @@ def _flash(prompt: str) -> str:
         messages=[{"role": "user", "content": prompt}],
     )
     return resp.choices[0].message.content.strip()
+
+
+def _registrar_consulta(usuario_id: int) -> None:
+    """Incrementa el contador de consultas IA del usuario."""
+    verificar_mes_ia(usuario_id, date.today().strftime("%Y-%m"))
+    execute_local(
+        "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
+        "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
+        (IA_COSTO_POR_CONSULTA, usuario_id),
+    )
 
 
 # ── Resumen de sucursal — Inicio ──────────────────────────────────────────────
@@ -154,12 +165,7 @@ def ia_sucursal(
     texto = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
     if regenerar:
-        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-        execute_local(
-            "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
-            (IA_COSTO_POR_CONSULTA, usuario["id"]),
-        )
+        _registrar_consulta(usuario["id"])
     return JSONResponse({"texto": texto})
 
 
@@ -195,7 +201,6 @@ def ia_inventario(
     # Si no hay cache (antes del cron), calcularlo ahora
     stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}")
     if stock_cache is None:
-        from pwa_asistente.routers.vistas import stock_detalle
         stock_detalle(cve_sucursal)
         stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
     sin_stock_list = stock_cache.get("sin_stock",   [])
@@ -207,7 +212,7 @@ def ia_inventario(
         p["producto"] for p in sin_stock_list[:3] if p.get("producto")
     ) or "ninguno"
     cad_txt = ", ".join(
-        f"{r['producto']} (lote {r['lote']}, {r['dias']} días)"
+        f"{r['producto']} (lote {r['lote']}, {r['dias_para_caducar']} días)"
         for r in caducidades[:3]
     ) or "ninguna en los próximos 60 días"
 
@@ -260,12 +265,7 @@ def ia_inventario(
     texto = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
     if regenerar:
-        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-        execute_local(
-            "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
-            (IA_COSTO_POR_CONSULTA, usuario["id"]),
-        )
+        _registrar_consulta(usuario["id"])
     return JSONResponse({"texto": texto})
 
 
@@ -364,10 +364,5 @@ def ia_medicos(
 
     texto = _flash(prompt)
     if regenerar:
-        verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-        execute_local(
-            "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
-            (IA_COSTO_POR_CONSULTA, usuario["id"]),
-        )
+        _registrar_consulta(usuario["id"])
     return JSONResponse({"texto": texto})
