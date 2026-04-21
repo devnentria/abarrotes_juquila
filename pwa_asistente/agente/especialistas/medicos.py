@@ -51,6 +51,13 @@ REGLAS IMPORTANTES:
   - ISNULL(cedula, '') para manejar nulos
   - TOP N máximo 20
 
+COMPORTAMIENTO — REGLA CRÍTICA:
+  - Ejecuta SIEMPRE con la información disponible. No pidas confirmaciones innecesarias.
+  - Valores por defecto: todas las sucursales, últimos 3 meses, excluir canceladas.
+  - Si el usuario da suficiente contexto, consulta de inmediato sin preguntar.
+  - Solo haz UNA pregunta si falta algo completamente indispensable.
+  - Nunca hagas más de una pregunta por respuesta.
+
 FORMATO DE RESPUESTA (Markdown):
   - **Negritas** para nombres de médicos y cédulas
   - ⚠ para duplicados confirmados
