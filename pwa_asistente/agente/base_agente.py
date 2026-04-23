@@ -57,7 +57,8 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
     mensajes = [
         {"role": "system", "content": system + f"\n\nFECHA ACTUAL: {_fecha}."}
     ]
-    for msg in historial:
+    # Limitar historial a los últimos 20 mensajes para no exceder el contexto del modelo
+    for msg in historial[-20:]:
         mensajes.append({"role": msg["rol"], "content": msg["contenido"]})
     mensajes.append({"role": "user", "content": pregunta})
 

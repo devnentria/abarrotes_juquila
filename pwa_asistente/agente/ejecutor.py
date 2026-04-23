@@ -83,4 +83,46 @@ def run(sql: str) -> list[dict]:
     if not limpio.upper().lstrip("(").startswith("SELECT"):
         raise ValueError("La consulta debe comenzar con SELECT.")
 
-    return _query_erp(limpio)
+    try:
+        return _query_erp(limpio)
+    except Exception as e:
+        # Si falla por columna inexistente, reconstruir la consulta sin ella y reintentar
+        col_match = re.search(r"Invalid column name '(\w+)'", str(e))
+        if col_match:
+            col      = col_match.group(1)
+            sql_fix  = limpio
+
+            # 1. Si la columna aparece en un JOIN ON → eliminar todo ese JOIN
+            #    y las referencias al alias de esa tabla en SELECT/WHERE
+            join_m = re.search(
+                rf'(?:LEFT\s+|RIGHT\s+|INNER\s+)?JOIN\s+(\w+)\s+(\w+)\s+ON\s+[^\n]*\b{re.escape(col)}\b[^\n]*',
+                sql_fix, re.IGNORECASE,
+            )
+            if join_m:
+                alias = join_m.group(2)
+                # Quitar el JOIN completo
+                sql_fix = re.sub(
+                    rf'(?:LEFT\s+|RIGHT\s+|INNER\s+)?JOIN\s+\w+\s+{re.escape(alias)}\s+ON\s+[^\n]+',
+                    ' ', sql_fix, flags=re.IGNORECASE,
+                )
+                # Quitar columnas del alias en SELECT: , alias.campo AS x
+                sql_fix = re.sub(
+                    rf',?\s*\b{re.escape(alias)}\.\w+(?:\s+AS\s+\w+)?',
+                    '', sql_fix, flags=re.IGNORECASE,
+                )
+                # Neutralizar condiciones WHERE/AND que usen ese alias
+                sql_fix = re.sub(
+                    rf'\b{re.escape(alias)}\.\w+\s*(?:=|LIKE|IN|IS\s+NULL|IS\s+NOT\s+NULL)[^\n,)]*',
+                    '1=1', sql_fix, flags=re.IGNORECASE,
+                )
+            else:
+                # Columna en SELECT directo — solo eliminarla
+                sql_fix = re.sub(
+                    rf'(?:,\s*)?\b\w+\.{re.escape(col)}\b(?:\s+AS\s+\w+)?'
+                    rf'|(?:,\s*)?\b{re.escape(col)}\b(?:\s+AS\s+\w+)?',
+                    '', sql_fix, flags=re.IGNORECASE,
+                )
+
+            if sql_fix.strip() != limpio.strip():
+                return _query_erp(sql_fix)
+        raise
