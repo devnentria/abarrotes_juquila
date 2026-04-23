@@ -12,7 +12,7 @@ No sabe de SQL ni de negocio. Su único trabajo es leer
 la pregunta y decidir a qué área pertenece.
 """
 from openai import OpenAI
-from shared.config import OPENAI_API_KEY, OPENAI_MODEL
+from shared.config import OPENAI_API_KEY, OPENAI_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -25,13 +25,16 @@ una empresa distribuidora farmacéutica.
 Tu ÚNICA tarea es clasificar la pregunta del usuario en UNA de estas áreas:
 
   ventas     → facturas, ventas, importes, ingresos, comparativos de ventas,
-               productos más vendidos, rendimiento de sucursales o vendedores
+               productos más vendidos, rendimiento de sucursales o vendedores,
+               ventas DE o PARA un cliente o médico específico
+               (ej: "ventas al cliente X", "cuánto compró X", "ventas del médico Y")
   inventario → stock, existencias, caducidades, lotes, productos sin existencia,
                mayor existencia, caducidad próxima
   pedidos    → pedidos activos, pendientes, antigüedad de pedidos, pedidos por sucursal
   medicos    → médicos, doctores, cédulas, duplicados de médicos, asignación a vendedor
-  clientes   → clientes, compradores, historial de compras de un cliente,
-               clientes frecuentes, quién compra más
+  clientes   → información del cliente (datos, lista de precios, vendedor asignado),
+               clientes frecuentes, ranking de quién compra más, segmentación de clientes
+               ⚠ NO usar para preguntas de "ventas de/al cliente X" → eso es ventas
   mixto      → la pregunta involucra claramente 2 o más áreas al mismo tiempo,
                O preguntas sobre proveedores, laboratorios, costos de productos,
                qué proveedor surte X producto, listado de proveedores
@@ -43,7 +46,7 @@ Si el mensaje es sobre tu funcionamiento, modelo, tecnología o arquitectura, re
 """
 
 
-def clasificar(pregunta: str, historial: list[dict]) -> str:
+def clasificar(pregunta: str, historial: list[dict]) -> tuple[str, float]:
     """
     Clasifica la pregunta en un área de negocio.
 
@@ -53,7 +56,7 @@ def clasificar(pregunta: str, historial: list[dict]) -> str:
                                 [{rol, contenido}, ...].
 
     Returns:
-        str: Una de: ventas | inventario | pedidos | medicos | clientes | mixto
+        tuple[str, float]: (área, costo_usd) — área clasificada y costo real de tokens.
     """
     mensajes = [{"role": "system", "content": _SYSTEM}]
 
@@ -70,6 +73,12 @@ def clasificar(pregunta: str, historial: list[dict]) -> str:
             temperature=0,
         )
         area = resp.choices[0].message.content.strip().lower()
-        return area if area in AREAS else "mixto"
+        costo = 0.0
+        if resp.usage:
+            costo = (
+                resp.usage.prompt_tokens     * IA_PRECIO_INPUT
+                + resp.usage.completion_tokens * IA_PRECIO_OUTPUT
+            )
+        return (area if area in AREAS else "mixto"), costo
     except Exception:
-        return "mixto"
+        return "mixto", 0.0

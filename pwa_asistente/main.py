@@ -30,6 +30,13 @@ from pwa_asistente.routers import auth, chat, ia_flash, paginas, vistas
 # ── Inicializar BD local al arrancar ─────────────────────────────────────────
 init_db()
 
+# Jobs que quedaron en "pending" de un proceso anterior no se pueden recuperar
+from shared.database_local import execute as _execute
+_execute(
+    "UPDATE chat_jobs SET estado='error', respuesta='El servidor se reinició mientras procesaba tu consulta. Intenta de nuevo.', "
+    "terminado_en=datetime('now') WHERE estado='pending'"
+)
+
 # ── Instancia principal ───────────────────────────────────────────────────────
 app = FastAPI(
     title="PWA Asistente — Suite Analítica Nentria",

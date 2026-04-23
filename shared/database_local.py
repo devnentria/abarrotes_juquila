@@ -96,6 +96,19 @@ def init_db() -> None:
                 payload      TEXT    NOT NULL,
                 generado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS chat_jobs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id      INTEGER NOT NULL,
+                conversacion_id INTEGER,
+                pregunta        TEXT    NOT NULL,
+                respuesta       TEXT,
+                area            TEXT,
+                estado          TEXT    NOT NULL DEFAULT 'pending',
+                creado_en       TEXT    NOT NULL DEFAULT (datetime('now')),
+                terminado_en    TEXT,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+            );
         """)
         # Migraciones: agregar columnas si la tabla ya existía sin ellas
         migraciones = [
@@ -122,6 +135,18 @@ def init_db() -> None:
                 clave        TEXT    PRIMARY KEY,
                 payload      TEXT    NOT NULL,
                 generado_en  TEXT    NOT NULL DEFAULT (datetime('now'))
+            )""",
+            """CREATE TABLE IF NOT EXISTS chat_jobs (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id      INTEGER NOT NULL,
+                conversacion_id INTEGER,
+                pregunta        TEXT    NOT NULL,
+                respuesta       TEXT,
+                area            TEXT,
+                estado          TEXT    NOT NULL DEFAULT 'pending',
+                creado_en       TEXT    NOT NULL DEFAULT (datetime('now')),
+                terminado_en    TEXT,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
             )""",
         ]
         for sql in migraciones:

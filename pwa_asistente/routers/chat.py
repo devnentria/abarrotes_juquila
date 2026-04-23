@@ -13,10 +13,13 @@ Endpoints:
   POST   /api/chat/conversaciones           → Crea una nueva conversación
   GET    /api/chat/conversaciones/{id}      → Mensajes de una conversación
   DELETE /api/chat/conversaciones/{id}      → Elimina una conversación
-  POST   /api/chat/mensaje                  → Envía mensaje y obtiene respuesta del agente
+  POST   /api/chat/mensaje                  → Envía mensaje (respuesta síncrona)
+  POST   /api/chat/mensaje/async            → Envía mensaje (procesamiento en background)
+  GET    /api/chat/job/{id}                 → Consulta estado de un job async
 """
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Optional
 
@@ -25,12 +28,14 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
-from shared.config import IA_COSTO_POR_CONSULTA, IA_RATIO_PWA
+from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director, loop_stream
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
 )
+
+_pool = ThreadPoolExecutor(max_workers=4)
 
 router = APIRouter(prefix="/api/chat")
 
@@ -138,7 +143,14 @@ def eliminar_conversacion(conv_id: int, usuario: dict = Depends(get_current_user
 
 # ── Helper: guardar mensajes y actualizar contador ────────────────────────────
 
-def _guardar_y_contar(conv_id: int, pregunta: str, respuesta: str, usuario_id: int) -> None:
+def _guardar_y_contar(
+    conv_id: int,
+    pregunta: str,
+    respuesta: str,
+    usuario_id: int,
+    costo_usd: float = 0.0,
+    es_ia: bool = False,
+) -> None:
     execute(
         "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
         (conv_id, "user", pregunta),
@@ -151,19 +163,13 @@ def _guardar_y_contar(conv_id: int, pregunta: str, respuesta: str, usuario_id: i
         "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
         (pregunta[:80], conv_id),
     )
-    total_global = fetch_one(
-        "SELECT COUNT(*) AS total FROM chat_mensajes cm "
-        "JOIN chat_conversaciones cc ON cm.conversacion_id = cc.id "
-        "WHERE cc.usuario_id = ? AND cm.rol = 'user'",
-        (usuario_id,),
-    )["total"]
-    if total_global % IA_RATIO_PWA == 0:
+    if es_ia:
         execute(
             "UPDATE usuarios "
             "SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) "
+            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) "
             "WHERE id = ?",
-            (IA_COSTO_POR_CONSULTA, usuario_id),
+            (costo_usd, usuario_id),
         )
 
 
@@ -178,7 +184,7 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
       3. Director clasifica el área
       4. Especialista responde consultando el ERP
       5. Guarda ambos mensajes en la BD
-      6. Actualiza contador de consultas_ia según ratio PWA
+      6. Actualiza consultas_ia (+1) y costo_ia_usd (tokens reales)
     """
     if not body.mensaje.strip():
         raise HTTPException(400, "El mensaje no puede estar vacío")
@@ -222,6 +228,7 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
 
     # 4. Saludo o pregunta sobre capacidades — respuesta instantánea sin OpenAI
     msg = body.mensaje.strip()
+    costo_usd = 0.0
     if _SALUDO.match(msg):
         area = "saludo"
         respuesta = _RESPUESTA_SALUDO
@@ -230,18 +237,28 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
         respuesta = _RESPUESTA_CAPACIDADES
     else:
         # Director clasifica y especialista responde
-        area = director.clasificar(body.mensaje, historial)
+        area, costo_director = director.clasificar(body.mensaje, historial)
         fn = _ESPECIALISTAS.get(area, mixto.responder)
         try:
-            respuesta = fn(body.mensaje, historial)
-        except Exception as e:
+            resultado  = fn(body.mensaje, historial)
+            respuesta  = resultado.texto
+            costo_usd  = costo_director + (
+                resultado.tokens_prompt     * IA_PRECIO_INPUT
+                + resultado.tokens_completion * IA_PRECIO_OUTPUT
+            )
+        except Exception:
             respuesta = (
                 "Ocurrió un error al procesar tu consulta. "
                 "Intenta de nuevo o reformula la pregunta."
             )
+            costo_usd = costo_director
 
     # 5. Guardar mensajes y actualizar contadores
-    _guardar_y_contar(conv_id, body.mensaje, respuesta, usuario["id"])
+    _guardar_y_contar(
+        conv_id, body.mensaje, respuesta, usuario["id"],
+        costo_usd=costo_usd if area not in ("saludo", "capacidades") else 0.0,
+        es_ia=area not in ("saludo", "capacidades"),
+    )
 
     return JSONResponse({
         "respuesta":      respuesta,
@@ -323,7 +340,7 @@ def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current
 
         yield _sse({"type": "status", "text": "Consultando el sistema..."})
 
-        area = director.clasificar(msg, historial)
+        area, costo_director = director.clasificar(msg, historial)
         especialista = _ESPECIALISTAS.get(area, None)
 
         # Obtener el system prompt del especialista correspondiente
@@ -356,7 +373,179 @@ def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current
             respuesta_completa = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
             yield _sse({"type": "token", "text": respuesta_completa})
 
-        _guardar_y_contar(conv_id, msg, respuesta_completa, usuario_id)
+        # El costo del director siempre se registra; el del stream no tiene token count exacto
+        _guardar_y_contar(conv_id, msg, respuesta_completa, usuario_id,
+                          costo_usd=costo_director, es_ia=True)
         yield _sse({"type": "done", "conversacion_id": conv_id, "area": area})
 
     return StreamingResponse(_generador(), media_type="text/event-stream")
+
+
+# ── Procesamiento en background ───────────────────────────────────────────────
+
+def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_id: int) -> None:
+    """
+    Ejecuta la consulta del agente en un thread de background y guarda el resultado.
+    Se llama desde el pool de threads — no bloquea el request HTTP.
+    """
+    costo_usd = 0.0
+    try:
+        area, costo_director = director.clasificar(msg, historial)
+        fn                   = _ESPECIALISTAS.get(area, mixto.responder)
+        resultado            = fn(msg, historial)
+        respuesta            = resultado.texto
+        costo_usd            = costo_director + (
+            resultado.tokens_prompt     * IA_PRECIO_INPUT
+            + resultado.tokens_completion * IA_PRECIO_OUTPUT
+        )
+        estado = "done"
+    except Exception:
+        respuesta = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
+        area      = "error"
+        estado    = "error"
+
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "assistant", respuesta),
+    )
+
+    execute(
+        "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
+        "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+        (costo_usd, usuario_id),
+    )
+
+    execute(
+        "UPDATE chat_jobs SET estado = ?, respuesta = ?, area = ?, "
+        "    terminado_en = datetime('now') WHERE id = ?",
+        (estado, respuesta, area, job_id),
+    )
+
+
+@router.post("/mensaje/async")
+def enviar_mensaje_async(body: MensajeBody, usuario: dict = Depends(get_current_user)):
+    """
+    Envía el mensaje al agente en background y devuelve un job_id inmediatamente.
+    El frontend debe hacer polling a GET /api/chat/job/{job_id} cada 2 s.
+
+    Para saludos y preguntas sobre capacidades responde de forma síncrona
+    (estado='done' en la misma respuesta) sin crear un job real.
+    """
+    msg = body.mensaje.strip()
+    if not msg:
+        raise HTTPException(400, "El mensaje no puede estar vacío")
+
+    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
+    u = fetch_one("SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
+    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
+        raise HTTPException(
+            429,
+            "Has alcanzado tu límite de consultas de IA. "
+            "Contacta a tu administrador para ampliar el límite.",
+        )
+
+    # Crear o verificar conversación
+    conv_id = body.conversacion_id
+    if not conv_id:
+        conv_id = execute(
+            "INSERT INTO chat_conversaciones (usuario_id, titulo) VALUES (?, ?)",
+            (usuario["id"], msg[:80]),
+        )
+    else:
+        conv = fetch_one(
+            "SELECT id FROM chat_conversaciones WHERE id = ? AND usuario_id = ?",
+            (conv_id, usuario["id"]),
+        )
+        if not conv:
+            raise HTTPException(404, "Conversación no encontrada")
+
+    # Historial ANTES de guardar el mensaje del usuario
+    historial = fetch_all(
+        "SELECT rol, contenido FROM chat_mensajes WHERE conversacion_id = ? ORDER BY id",
+        (conv_id,),
+    )
+
+    # Respuestas instantáneas — no necesitan thread
+    if _SALUDO.match(msg):
+        respuesta = _RESPUESTA_SALUDO
+        area      = "saludo"
+    elif _CAPACIDADES.search(msg) and len(msg) < 120:
+        respuesta = _RESPUESTA_CAPACIDADES
+        area      = "capacidades"
+    else:
+        respuesta = None
+        area      = None
+
+    if respuesta is not None:
+        execute(
+            "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+            (conv_id, "user", msg),
+        )
+        execute(
+            "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+            (conv_id, "assistant", respuesta),
+        )
+        execute(
+            "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
+            (msg[:80], conv_id),
+        )
+        job_id = execute(
+            "INSERT INTO chat_jobs (usuario_id, conversacion_id, pregunta, respuesta, area, estado, terminado_en) "
+            "VALUES (?, ?, ?, ?, ?, 'done', datetime('now'))",
+            (usuario["id"], conv_id, msg, respuesta, area),
+        )
+        return JSONResponse({
+            "job_id": job_id, "conversacion_id": conv_id,
+            "estado": "done", "respuesta": respuesta, "area": area,
+        })
+
+    # Guardar mensaje del usuario inmediatamente
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "user", msg),
+    )
+    execute(
+        "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
+        (msg[:80], conv_id),
+    )
+
+    job_id = execute(
+        "INSERT INTO chat_jobs (usuario_id, conversacion_id, pregunta) VALUES (?, ?, ?)",
+        (usuario["id"], conv_id, msg),
+    )
+
+    _pool.submit(_procesar_job, job_id, conv_id, msg, historial, usuario["id"])
+
+    return JSONResponse({"job_id": job_id, "conversacion_id": conv_id, "estado": "pending"})
+
+
+@router.get("/job/{job_id}")
+def obtener_job(job_id: int, usuario: dict = Depends(get_current_user)):
+    """
+    Devuelve el estado de un job async.
+    Si el job lleva más de 10 minutos en 'pending' (p. ej. reinicio del servidor),
+    lo marca como 'error' automáticamente.
+    """
+    job = fetch_one(
+        "SELECT id, estado, respuesta, area, conversacion_id, creado_en "
+        "FROM chat_jobs WHERE id = ? AND usuario_id = ?",
+        (job_id, usuario["id"]),
+    )
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+
+    if job["estado"] == "pending":
+        stale = fetch_one(
+            "SELECT id FROM chat_jobs WHERE id = ? AND creado_en < datetime('now', '-10 minutes')",
+            (job_id,),
+        )
+        if stale:
+            msg_error = "La consulta fue interrumpida. Intenta de nuevo."
+            execute(
+                "UPDATE chat_jobs SET estado = 'error', respuesta = ?, terminado_en = datetime('now') WHERE id = ?",
+                (msg_error, job_id),
+            )
+            job["estado"]   = "error"
+            job["respuesta"] = msg_error
+
+    return JSONResponse(job)

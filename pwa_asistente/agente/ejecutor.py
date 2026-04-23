@@ -54,6 +54,24 @@ def run(sql: str) -> list[dict]:
         ValueError: Si la consulta contiene instrucciones no permitidas
                     o no comienza con SELECT.
     """
+    # Correcciones de errores conocidos generados por el modelo
+    # 1. GC_Clientes no existe — la tabla correcta es CM_Clientes
+    sql = re.sub(r'\bGC_Clientes\b', 'CM_Clientes', sql, flags=re.IGNORECASE)
+
+    # 2. CM_Clientes usa Razon_Social, no Nombre — corregir el alias que apunte a CM_Clientes
+    alias_match = re.search(
+        r'\bCM_Clientes\b(?:\s+(?:AS\s+)?(\w+))?', sql, re.IGNORECASE
+    )
+    if alias_match:
+        alias = alias_match.group(1)
+        if alias:
+            sql = re.sub(
+                rf'\b{re.escape(alias)}\.Nombre\b', f'{alias}.Razon_Social',
+                sql, flags=re.IGNORECASE
+            )
+        sql = re.sub(r'\bCM_Clientes\.Nombre\b', 'CM_Clientes.Razon_Social',
+                     sql, flags=re.IGNORECASE)
+
     limpio = sql.strip()
 
     if _PROHIBIDAS.search(limpio):
