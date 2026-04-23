@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from shared.auth import get_current_user
-from shared.config import IA_COSTO_POR_CONSULTA, IA_FLASH_MODEL, OPENAI_API_KEY
+from shared.config import IA_FLASH_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, OPENAI_API_KEY
 from shared.database import query, hoy
 from shared.database_local import execute as execute_local, verificar_mes_ia
 from shared import cache_dashboard as _cache
@@ -42,23 +42,49 @@ def _primer_nombre(nombre_completo: str) -> str:
     return (nombre_completo or "").split()[0].capitalize()
 
 
-def _flash(prompt: str) -> str:
-    """Llamada mínima a la IA — 1 turno, sin historial, sin tools."""
+def _flash(prompt: str) -> tuple[str, float]:
+    """Llamada mínima a la IA — 1 turno, sin historial, sin tools.
+
+    Returns:
+        (texto, costo_usd): respuesta del modelo y costo real calculado con tokens.
+    """
     resp = _client.chat.completions.create(
         model=_MODEL,
         messages=[{"role": "user", "content": prompt}],
     )
-    return resp.choices[0].message.content.strip()
+    texto = resp.choices[0].message.content.strip()
+    costo = 0.0
+    if resp.usage:
+        costo = (
+            resp.usage.prompt_tokens     * IA_PRECIO_INPUT
+            + resp.usage.completion_tokens * IA_PRECIO_OUTPUT
+        )
+    return texto, costo
 
 
-def _registrar_consulta(usuario_id: int) -> None:
-    """Incrementa el contador de consultas IA del usuario."""
+def _registrar_costo(usuario_id: int, costo_usd: float, sumar_consulta: bool = False) -> None:
+    """
+    Acumula el costo real de tokens en el usuario.
+
+    Args:
+        usuario_id     (int):   ID del usuario (0 = cron/sistema, se ignora).
+        costo_usd      (float): Costo real calculado con tokens del modelo.
+        sumar_consulta (bool):  Si True, también incrementa consultas_ia (+1 cuota del cliente).
+    """
+    if usuario_id == 0:
+        return  # Llamada del cron — no hay usuario real que actualizar
     verificar_mes_ia(usuario_id, date.today().strftime("%Y-%m"))
-    execute_local(
-        "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-        "    costo_ia_usd = ROUND(costo_ia_usd + ?, 4) WHERE id = ?",
-        (IA_COSTO_POR_CONSULTA, usuario_id),
-    )
+    if sumar_consulta:
+        execute_local(
+            "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
+            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+            (costo_usd, usuario_id),
+        )
+    else:
+        execute_local(
+            "UPDATE usuarios SET costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+            (costo_usd, usuario_id),
+        )
 
 
 # ── Resumen de sucursal — Inicio ──────────────────────────────────────────────
@@ -162,10 +188,9 @@ def ia_sucursal(
         f"Sin títulos, sin viñetas, sin saludos extensos."
     )
 
-    texto = _flash(prompt)
+    texto, costo = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
-    if regenerar:
-        _registrar_consulta(usuario["id"])
+    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
     return JSONResponse({"texto": texto})
 
 
@@ -262,10 +287,9 @@ def ia_inventario(
         f"Destaca el problema más grave. Sin títulos ni viñetas."
     )
 
-    texto = _flash(prompt)
+    texto, costo = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
-    if regenerar:
-        _registrar_consulta(usuario["id"])
+    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
     return JSONResponse({"texto": texto})
 
 
@@ -362,7 +386,6 @@ def ia_medicos(
             f"Sin títulos ni viñetas."
         )
 
-    texto = _flash(prompt)
-    if regenerar:
-        _registrar_consulta(usuario["id"])
+    texto, costo = _flash(prompt)
+    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
     return JSONResponse({"texto": texto})

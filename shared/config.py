@@ -53,19 +53,20 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 
 
 # ── Consumo de IA ────────────────────────────────────────────────────────────
-# Cada N mensajes del usuario equivale a 1 consulta descontada del límite.
-# PWA (chat móvil/desktop): menos complejo → cada 3 mensajes = 1 consulta
-# Studio (dashboards, gráficas): más complejo → cada 2 mensajes = 1 consulta
-IA_RATIO_PWA:    int = int(os.getenv("IA_RATIO_PWA",    "3"))
-IA_RATIO_STUDIO: int = int(os.getenv("IA_RATIO_STUDIO", "2"))
+# consultas_ia  → cuota de negocio: +1 por cada pregunta real al agente IA
+# costo_ia_usd  → costo real calculado con tokens consumidos de la API de OpenAI
+#
+# Precios por token según modelo (USD):
+#   Modelo          Input/1M     Output/1M
+#   gpt-4o-mini     $0.15        $0.60      ← modelo actual
+#   gpt-4.1-nano    $0.10        $0.40
+#   gpt-4.1-mini    $0.40        $1.60
+#   gpt-4o          $2.50        $10.00
+IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.00000015"))  # por token input
+IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.00000060"))  # por token output
 
-# Costo estimado por consulta (1 incremento del contador).
-# Ajustar según el modelo activo en OPENAI_MODEL:
-#   gpt-4o-mini → ~$0.005 USD por consulta
-#   gpt-5-mini  → ~$0.008 USD por consulta
-#   gpt-4o      → ~$0.025 USD por consulta
-#   gpt-o3-mini → ~$0.06  USD por consulta  (studio)
-IA_COSTO_POR_CONSULTA: float = float(os.getenv("IA_COSTO_POR_CONSULTA", "0.008"))
+# Ratio Studio: cuántos mensajes = 1 consulta descontada (para dashboards)
+IA_RATIO_STUDIO: int = int(os.getenv("IA_RATIO_STUDIO", "1"))
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 # Generar un secret seguro: python -c "import secrets; print(secrets.token_hex(32))"

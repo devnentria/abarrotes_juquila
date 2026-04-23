@@ -190,6 +190,7 @@ function showView(name) {
     btn.classList.toggle('active', btn.dataset.view === name);
   });
   document.getElementById('header-subtitle').textContent = SUBTITLES[name] || '';
+  if (name === 'chat') _recuperarJobPendiente();
 }
 
 // ── Render: Inicio — ventas del mes por sucursal ──────────────────────────────
@@ -746,10 +747,7 @@ function showTyping() {
 
 function hideTyping() { document.getElementById('typing-indicator')?.remove(); }
 
-// ── Chat — AbortController para timeout ──────────────────────────────────────
-let _chatAbortController = null;
-
-// ── Chat — enviar mensaje ─────────────────────────────────────────────────────
+// ── Chat — enviar mensaje (async + polling) ───────────────────────────────────
 async function enviarMensaje() {
   if (chat.enviando) return;
   const input = document.getElementById('chat-input');
@@ -761,26 +759,12 @@ async function enviarMensaje() {
   appendBubble(text, 'user');
   showTyping();
 
-  _chatAbortController = new AbortController();
-  const timeoutId = setTimeout(() => _chatAbortController?.abort(), 90_000);
-
-  // Crear bubble del bot vacía para ir llenando con el stream
-  const messages = document.getElementById('chat-messages');
-  const botBubble = document.createElement('div');
-  botBubble.className = 'chat-bubble chat-bubble-bot';
-  const botContent = document.createElement('div');
-  botContent.className = 'chat-bubble-content';
-  botBubble.appendChild(botContent);
-  let rawText = '';
-
   try {
-    const res = await authFetch('/api/chat/mensaje/stream', {
+    const res = await authFetch('/api/chat/mensaje/async', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ mensaje: text, conversacion_id: chat.conversacionId }),
-      signal:  _chatAbortController.signal,
     });
-    clearTimeout(timeoutId);
 
     if (res.status === 429) {
       hideTyping();
@@ -789,78 +773,85 @@ async function enviarMensaje() {
       return;
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
+    const data = await res.json();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // guardar línea incompleta
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const json = line.slice(6).trim();
-        if (!json) continue;
-        let evt;
-        try { evt = JSON.parse(json); } catch { continue; }
-
-        if (evt.type === 'status') {
-          // Reemplazar los puntitos con el mensaje de estado
-          hideTyping();
-          const statusDiv = document.createElement('div');
-          statusDiv.className = 'chat-typing chat-status-msg';
-          statusDiv.id = 'chat-status-msg';
-          statusDiv.textContent = evt.text;
-          messages.appendChild(statusDiv);
-          messages.scrollTop = messages.scrollHeight;
-
-        } else if (evt.type === 'token') {
-          // Primer token — quitar status y mostrar bubble
-          document.getElementById('chat-status-msg')?.remove();
-          if (!botBubble.parentNode) {
-            messages.appendChild(botBubble);
-          }
-          rawText += evt.text;
-          botContent.innerHTML = renderMarkdown(rawText);
-          messages.scrollTop = messages.scrollHeight;
-
-        } else if (evt.type === 'done') {
-          if (!chat.conversacionId && evt.conversacion_id) {
-            chat.conversacionId = evt.conversacion_id;
-            document.getElementById('chat-titulo-actual').textContent =
-              text.length > 40 ? text.slice(0, 40) + '…' : text;
-          }
-        } else if (evt.type === 'error') {
-          document.getElementById('chat-status-msg')?.remove();
-          hideTyping();
-          appendBubble(evt.text, 'bot');
-        }
-      }
+    if (!chat.conversacionId && data.conversacion_id) {
+      chat.conversacionId = data.conversacion_id;
+      document.getElementById('chat-titulo-actual').textContent =
+        text.length > 40 ? text.slice(0, 40) + '…' : text;
     }
 
-    // Si no llegó ningún token, mostrar error
-    if (!rawText) {
+    // Respuesta instantánea (saludo / capacidades) — no hace falta polling
+    if (data.estado === 'done') {
       hideTyping();
-      appendBubble('Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor.', 'bot');
+      appendBubble(data.respuesta, 'bot');
+      return;
     }
 
-  } catch (err) {
-    clearTimeout(timeoutId);
-    document.getElementById('chat-status-msg')?.remove();
+    // Guardar job en localStorage para recuperación si el usuario cierra la app
+    localStorage.setItem('chat_pending_job', JSON.stringify({
+      job_id:  data.job_id,
+      conv_id: data.conversacion_id,
+      pregunta: text,
+    }));
+
+    await _pollJob(data.job_id);
+
+  } catch {
     hideTyping();
-    botBubble.remove();
-    if (err.name === 'AbortError') {
-      appendBubble('Consulta cancelada.', 'bot');
-    } else {
-      appendBubble('Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor.', 'bot');
-    }
+    appendBubble('Error de conexión. Intenta de nuevo.', 'bot');
   } finally {
-    _chatAbortController = null;
     chat.enviando = false;
+  }
+}
+
+// Polling cada 2 s hasta que el job termine (máx. 5 min)
+async function _pollJob(jobId) {
+  const MAX = 150;
+  for (let i = 0; i < MAX; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res  = await authFetch(`/api/chat/job/${jobId}`);
+      const data = await res.json();
+      if (data.estado === 'done' || data.estado === 'error') {
+        hideTyping();
+        appendBubble(data.respuesta || 'Error al procesar. Intenta de nuevo.', 'bot');
+        localStorage.removeItem('chat_pending_job');
+        return;
+      }
+    } catch {
+      // Error de red transitorio — seguir intentando
+    }
+  }
+  hideTyping();
+  appendBubble('La consulta tardó demasiado. Intenta de nuevo.', 'bot');
+  localStorage.removeItem('chat_pending_job');
+}
+
+// Recuperar job pendiente al volver a la vista de chat
+async function _recuperarJobPendiente() {
+  const raw = localStorage.getItem('chat_pending_job');
+  if (!raw) return;
+  let saved;
+  try { saved = JSON.parse(raw); } catch { localStorage.removeItem('chat_pending_job'); return; }
+
+  try {
+    const res  = await authFetch(`/api/chat/job/${saved.job_id}`);
+    const data = await res.json();
+
+    if (data.estado === 'done' || data.estado === 'error') {
+      // Ya terminó — cargar conversación para mostrar el resultado
+      localStorage.removeItem('chat_pending_job');
+      await cargarConversacion(saved.conv_id);
+      return;
+    }
+
+    // Aún pendiente — mostrar conversación + spinner y reanudar polling
+    await cargarConversacion(saved.conv_id);
+    showTyping();
+    await _pollJob(saved.job_id);
+  } catch {
+    localStorage.removeItem('chat_pending_job');
   }
 }
 
