@@ -21,9 +21,9 @@ TABLAS DE VENTAS:
 FT_Facturas_C — encabezado de facturas
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
   Fecha_Documento (datetime), Importe_Total (decimal),
-  Cve_Cliente (int), Cve_Vendedor (varchar), Cve_Medico (int), Status (char)
-  Cve_Medico → médico prescriptor (JOIN con GC_Medicos)
+  Cve_Cliente (int), Cve_Vendedor (varchar), Status (char)
   ⚠ Filtrar: Status <> 'C'
+  ⚠ NO existe Cve_Medico en esta tabla — los médicos se relacionan solo como clientes (CM_Clientes)
 
 FT_Facturas_D — detalle de facturas
   Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
@@ -54,24 +54,69 @@ CLASIFICACIÓN DE CLIENTES (no existe campo directo — se determina por precio 
   Si el usuario pide "cliente final" / "distribuidor": aplicar criterio ABS() sin pedir confirmación.
 
 BÚSQUEDA POR NOMBRE (protocolo obligatorio cuando busquen una persona):
-  1. Buscar en CM_Clientes WHERE Razon_Social LIKE '%nombre%'
-     → Resultado exacto: mostrar sus ventas y terminar.
-     → Sin resultado exacto: continuar pasos 2 y 3 (ambos obligatorios).
-  2. Buscar difuso en CM_Clientes por palabras individuales → listar similares en la respuesta.
-  3. SIEMPRE buscar también en GC_Medicos WHERE Nombre LIKE '%nombre%'
-     → Si se encuentra: verificar ventas via FT_Facturas_C.Cve_Medico.
-  Respuesta final: clientes similares + si es médico + ventas del médico (si las hay).
+
+  PASO 1 — Buscar en CM_Clientes WHERE Razon_Social LIKE '%nombre_completo%'
+    → Coincidencia exacta: mostrar sus ventas. FIN.
+    → Sin coincidencia exacta: ir a PASO 2.
+
+  PASO 2 — Buscar por CADA PALABRA POR SEPARADO en CM_Clientes:
+    WHERE Razon_Social LIKE '%palabra1%' OR Razon_Social LIKE '%palabra2%' OR Razon_Social LIKE '%palabra3%'
+    → Mostrar la lista de nombres encontrados (sin sus ventas — solo los nombres como referencia).
+    → Continuar al PASO 3.
+
+  PASO 3 — Buscar en GC_Medicos por CADA PALABRA POR SEPARADO:
+    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%' OR Nombre LIKE '%palabra3%'
+    → Si NO se encuentra en GC_Medicos: responder "No existe cliente ni médico con ese nombre."
+    → Si SE ENCUENTRA en GC_Medicos: ir a PASO 4.
+
+  PASO 4 — El médico existe. Buscar si también es cliente:
+    SELECT c.Cve_Cliente, c.Razon_Social FROM CM_Clientes c
+    WHERE c.Razon_Social LIKE '%palabra1%' OR c.Razon_Social LIKE '%palabra2%' OR c.Razon_Social LIKE '%palabra3%'
+    → Si hay coincidencia de cliente: mostrar sus ventas reales desde FT_Facturas_C. FIN.
+    → Si NO hay coincidencia de cliente: responder exactamente:
+      "**[Nombre]** está registrado como médico en el directorio pero no tiene cuenta de cliente —
+       no hay ventas registradas a su nombre."
+      ⛔ PROHIBIDO: mostrar ventas de OTROS clientes como sustituto.
+      ⛔ PROHIBIDO: mostrar "ventas relacionadas" o "clientes similares" con sus importes.
+      ⛔ PROHIBIDO: preguntar al usuario si desea revisar algo más en este punto.
 
 RANKING DE MÉDICOS POR VENTAS:
-  · Como prescriptores: JOIN FT_Facturas_C fc con GC_Medicos m ON fc.Cve_Medico = m.Cve_Medico
-                        WHERE fc.Cve_Medico > 0 → SUM(Importe_Total)
-  · Como clientes directos: CM_Clientes WHERE Razon_Social IN (SELECT Nombre FROM GC_Medicos)
-  Presentar ambas fuentes separadas. NUNCA sustituir por vendedores.
+  · Los médicos compran como clientes directos: JOIN CM_Clientes c ON c.Razon_Social = m.Nombre
+    o bien: CM_Clientes WHERE Razon_Social IN (SELECT Nombre FROM GC_Medicos)
+  · NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
+  · NUNCA sustituir por vendedores.
 
 TOTALES DE VENTA:
   · Por sucursal/período/ranking: SUM(fc.Importe_Total) FROM FT_Facturas_C
   · Por producto: SUM(fd.Importe_Neto) FROM FT_Facturas_D JOIN FT_Facturas_C
   · NO filtrar por Cve_Movimiento salvo que se pida explícitamente
+
+CONSULTA DE VENDEDOR ESPECÍFICO — OBLIGATORIO cuando se mencione un nombre de vendedor:
+  1. Buscar en GC_Vendedores WHERE Nombre LIKE '%nombre%' para encontrar al vendedor
+  2. Si se piden sus ventas por mes:
+     SELECT DATENAME(MONTH, fc.Fecha_Documento) AS Mes, YEAR(fc.Fecha_Documento) AS Año,
+     SUM(fc.Importe_Total) AS Total
+     FROM FT_Facturas_C fc
+     JOIN GC_Vendedores v ON v.Cve_Vendedor = fc.Cve_Vendedor
+     WHERE v.Nombre LIKE '%Violeta%' AND fc.Status <> 'C'
+     GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
+     ORDER BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento)
+  3. Si se piden médicos relacionados: usar EXACTAMENTE esta consulta (sin agregar ventas):
+     SELECT m.Nombre, ISNULL(m.cedula,'') AS Cedula
+     FROM GC_Medicos m
+     JOIN GC_Vendedores v ON LTRIM(RTRIM(CAST(m.cve_vendedor AS varchar))) = LTRIM(RTRIM(CAST(v.Cve_Vendedor AS varchar)))
+     WHERE v.Nombre LIKE '%nombre_vendedor%'
+     ⛔ PROHIBIDO agregar JOIN a FT_Facturas_C o FT_Facturas_D en esta consulta.
+     ⛔ PROHIBIDO agregar columna de ventas o importes en la tabla de médicos relacionados.
+     → Tabla resultado: solo columnas Médico | Cédula.
+  ⚠ NUNCA sustituir con ranking general de vendedores cuando se pregunta por uno específico.
+  ⚠ Si una subconsulta falla, simplificarla y reintentarla de inmediato — nunca preguntar al usuario.
+
+DETALLE DE VENTAS POR CLIENTE — OBLIGATORIO:
+  · Cuando se consultan ventas de un cliente específico, SIEMPRE mostrar tabla con:
+    Fecha | Importe | Vendedor
+  · Incluir fila TOTAL al final con ROLLUP
+  · NUNCA responder solo con un número total sin la tabla de detalle
 """
 
 _SYSTEM = build(

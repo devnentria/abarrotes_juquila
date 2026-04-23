@@ -22,9 +22,10 @@ GC_Medicos — catálogo principal de médicos (ya en tablas maestras, ampliado 
   ⚠ Usar LTRIM(RTRIM()) al comparar nombres y cédulas (hay espacios extra en el ERP)
   ⚠ ISNULL(cedula, '') para manejar cédulas nulas
 
-FT_Facturas_C — para calcular ventas generadas por médico prescriptor
-  Cve_Medico (int), Importe_Total (decimal), Fecha_Documento (datetime), Status (char)
-  ⚠ Filtrar: Status <> 'C' · Cve_Medico > 0
+FT_Facturas_C — para calcular ventas de médicos como clientes directos
+  Cve_Cliente (int), Importe_Total (decimal), Fecha_Documento (datetime), Status (char)
+  ⚠ Filtrar: Status <> 'C'
+  ⚠ NO existe Cve_Medico en FT_Facturas_C — buscar médicos como clientes via CM_Clientes.Razon_Social
 """
 
 _REGLAS = """
@@ -33,9 +34,16 @@ DETECCIÓN DE DUPLICADOS:
   · Por nombre: mismo UPPER(LTRIM(RTRIM(Nombre))) en más de un registro
   · Médico sin cédula puede estar duplicado solo por nombre
 
+BÚSQUEDA DE MÉDICOS POR NOMBRE — OBLIGATORIO:
+  · Buscar SIEMPRE por cada palabra por separado:
+    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%' OR Nombre LIKE '%palabra3%'
+    Ejemplo: "Luz Stella Seamanduras" → LIKE '%Luz%' OR LIKE '%Stella%' OR LIKE '%Seamanduras%'
+  · NUNCA buscar el nombre completo junto — dividir siempre en palabras individuales.
+
 VENTAS POR MÉDICO:
-  · Como prescriptor: JOIN FT_Facturas_C ON Cve_Medico → importe total generado por sus recetas
-  · Como cliente: JOIN CM_Clientes WHERE Razon_Social IN (SELECT Nombre FROM GC_Medicos)
+  · Si el médico compra como cliente: buscar en CM_Clientes WHERE Razon_Social LIKE '%palabra1%' OR ...
+    luego: JOIN FT_Facturas_C fc ON fc.Cve_Cliente = c.Cve_Cliente
+  · NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe en esta base de datos.
 
 FORMATO ADICIONAL MÉDICOS:
   · ⚠ para duplicados confirmados · Agrupar por vendedor cuando sea relevante
