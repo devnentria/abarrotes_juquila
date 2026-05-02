@@ -47,13 +47,38 @@ IM_Productos_Proveedor — costo cotizado por proveedor
 """
 
 _REGLAS = """
-PRECIOS DE VENTA (3 tipos — reportar los 3 o aclarar cuál se pide):
-  · Precio_Publico           → público general
-  · Precio_Minimo_Venta_Base → venta directa / base
-  · Precio                   → precio pactado (puede incluir descuento)
-  Para precio en período específico: AVG de cada tipo en FT_Facturas_D por rango de fecha.
-  ⚠ Nunca preguntar qué tipo de precio quiere — reportar los 3 en tabla.
-  ⚠ Si piden precio en fecha pasada sin especificar mes/año: pedir el período antes de consultar.
+PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO (productos con variantes):
+
+  PASO 1 — Encontrar TODAS las variantes del producto (incluye promociones):
+    SELECT p.Cve_Producto, p.Descripcion
+    FROM IM_Productos_Gral p
+    WHERE p.Descripcion LIKE '%nombre_producto%'
+    → Si hay más de 1 resultado: consolidar TODAS las variantes en el siguiente paso.
+    ⚠ NUNCA consultar solo una variante si existen varias — omitirías ventas a precio promocional.
+
+  PASO 2 — Consultar precios promedio de TODAS las variantes juntas:
+    SELECT
+      AVG(fd.Precio_Publico)           AS Precio_Publico_Prom,
+      AVG(fd.Precio_Minimo_Venta_Base) AS Precio_Base_Prom,
+      AVG(fd.Precio)                   AS Precio_Pactado_Prom,
+      COUNT(DISTINCT fc.Cve_Folio)     AS Num_Ventas
+    FROM FT_Facturas_D fd
+    JOIN FT_Facturas_C fc
+      ON fc.Cve_Folio = fd.Cve_Folio AND fc.Cve_Sucursal = fd.Cve_Sucursal
+         AND fc.Cve_Movimiento = fd.Cve_Movimiento
+    JOIN IM_Productos_Gral p ON p.Cve_Producto = fd.Cve_Producto
+    WHERE fc.Status <> 'C'
+      AND p.Descripcion LIKE '%nombre_producto%'
+      AND [filtro de período sobre fc.Fecha_Documento]
+
+  3 tipos de precio a reportar siempre (en tabla):
+    · Precio_Publico           → público general
+    · Precio_Minimo_Venta_Base → venta directa / base
+    · Precio                   → precio pactado (puede incluir descuento)
+
+  ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 en tabla.
+  ⚠ Si no hay ventas en el período: declararlo directamente y ampliar al período anterior.
+  ⚠ Si piden precio sin especificar mes/año y no hay contexto: preguntar el período antes de consultar.
 
 CLASIFICACIÓN DE CLIENTES (no existe campo directo — se determina por precio cobrado):
   · Cliente final   → precio ≈ Precio_Minimo_Venta_Base (más alto)
