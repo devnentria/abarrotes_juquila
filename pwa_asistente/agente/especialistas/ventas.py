@@ -47,16 +47,13 @@ IM_Productos_Proveedor — costo cotizado por proveedor
 """
 
 _REGLAS = """
-PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO (productos con variantes):
+PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
 
-  PASO 1 — Encontrar TODAS las variantes del producto (incluye promociones):
-    SELECT p.Cve_Producto, p.Descripcion
-    FROM IM_Productos_Gral p
-    WHERE p.Descripcion LIKE '%nombre_producto%'
-    → Si hay más de 1 resultado: consolidar TODAS las variantes en el siguiente paso.
-    ⚠ NUNCA consultar solo una variante si existen varias — omitirías ventas a precio promocional.
+  ⚠ FUENTE EXCLUSIVA para precios de venta: FT_Facturas_D (fd)
+  ⚠ NUNCA usar IT_Movimientos_D ni IT_Movimientos_C para precios de venta — son tablas de inventario.
+  ⚠ NUNCA devolver filas individuales sin GROUP BY — agrega SIEMPRE con AVG y GROUP BY.
 
-  PASO 2 — Consultar precios promedio SEPARADOS por variante (GROUP BY Descripcion):
+  Consulta estándar (una sola query, cubre todas las variantes del producto):
     SELECT
       p.Descripcion                    AS Presentacion,
       AVG(fd.Precio_Publico)           AS Precio_Publico_Prom,
@@ -73,16 +70,12 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO (productos con variantes):
       AND [filtro de período sobre fc.Fecha_Documento]
     GROUP BY p.Cve_Producto, p.Descripcion
     ORDER BY p.Descripcion
-  ⚠ NUNCA hacer AVG global de todas las variantes — mezclaría presentaciones con precios distintos.
 
-  3 tipos de precio a reportar siempre (en tabla):
-    · Precio_Publico           → público general
-    · Precio_Minimo_Venta_Base → venta directa / base
-    · Precio                   → precio pactado (puede incluir descuento)
-
-  ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 en tabla.
-  ⚠ Si no hay ventas en el período: declararlo directamente y ampliar al período anterior.
-  ⚠ Si piden precio sin especificar mes/año y no hay contexto: preguntar el período antes de consultar.
+  Resultado esperado: una fila por presentación/variante, con sus 3 precios promedio.
+  ⚠ NUNCA mezclar variantes en un AVG global (ej. Lorelin 11.25mg ≠ Lorelin 3.75mg).
+  ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 siempre.
+  ⚠ Si no hay ventas en el período: declararlo y ampliar al período anterior.
+  ⚠ Si piden precio sin mes/año y no hay contexto: preguntar el período antes de consultar.
 
 CLASIFICACIÓN DE CLIENTES (no existe campo directo — se determina por precio cobrado):
   · Cliente final   → precio ≈ Precio_Minimo_Venta_Base (más alto)
