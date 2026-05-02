@@ -81,6 +81,18 @@ RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
   GROUP BY m.Cve_Medico, m.Nombre
   ORDER BY Total_Prescrito DESC
 
+MÉDICOS SIN CÉDULA — REGLA OBLIGATORIA:
+  · Filtrar SIEMPRE registros de sistema: WHERE LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')
+  · Limitar a TOP 50 ORDER BY m.Nombre — aclarar al usuario cuántos hay en total:
+    "Se encontraron X médicos sin cédula. Mostrando los primeros 50 ordenados alfabéticamente."
+  · Query estándar:
+    SELECT TOP 50 m.Nombre, v.Nombre AS Vendedor
+    FROM GC_Medicos m
+    LEFT JOIN GC_Vendedores v ON LTRIM(RTRIM(CAST(m.cve_vendedor AS varchar))) = LTRIM(RTRIM(CAST(v.Cve_Vendedor AS varchar)))
+    WHERE (m.Cedula IS NULL OR LTRIM(RTRIM(m.Cedula)) = '')
+      AND LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')
+    ORDER BY m.Nombre
+
 FORMATO ADICIONAL MÉDICOS:
   · ⚠ NUNCA mostrar Cve_Medico — es código interno. En resultados: SOLO m.Nombre, NUNCA m.Cve_Medico.
   · ⚠ para duplicados confirmados · Agrupar por vendedor cuando sea relevante

@@ -58,6 +58,22 @@ REGLAS DE INVENTARIO:
   · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir la fecha antes de consultar.
   · Para costo de compra: usar TOP 1 ORDER BY Fecha_Documento DESC por defecto. Solo AVG si el usuario lo pide.
 
+PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
+  SELECT p.Descripcion, SUM(imd.Cantidad) AS Piezas_Compradas,
+         AVG(imd.Costo_Unitario) AS Costo_Promedio
+  FROM IT_Movimientos_D imd
+  JOIN IT_Movimientos_C imc ON imc.Cve_Folio = imd.Cve_Folio
+                            AND imc.Cve_Movimiento = imd.Cve_Movimiento
+                            AND imc.Cve_Almacen = imd.Cve_Almacen
+  JOIN IM_Productos_Gral p  ON CAST(p.Cve_Producto AS varchar) = imd.Cve_Producto
+  WHERE imc.Cve_Movimiento = 'EC'
+    AND p.Descripcion LIKE '%nombre_producto%'
+    AND [filtro de período sobre imc.Fecha_Documento]
+  GROUP BY p.Cve_Producto, p.Descripcion
+  ORDER BY p.Descripcion
+  · Incluir SIEMPRE todas las variantes/presentaciones del producto (normales + promos)
+  · Si el producto tiene una sola variante: mostrar también el costo unitario promedio del período
+
 FORMATO ADICIONAL INVENTARIO:
   · ⚠ para alertas de caducidad próxima · 🔴 para sin existencia o caducado
   · Existencias históricas: mostrar desglose por sucursal/presentación + total general en negritas

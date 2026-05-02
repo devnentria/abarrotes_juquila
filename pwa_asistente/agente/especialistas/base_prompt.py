@@ -57,6 +57,18 @@ FECHAS EN SQL Server (usar siempre esta sintaxis):
   Mes pasado → YEAR(f)=YEAR(DATEADD(MONTH,-1,GETDATE())) AND MONTH(f)=MONTH(DATEADD(MONTH,-1,GETDATE()))
   Este año   → YEAR(f)=YEAR(GETDATE())
   Últimos Nd → f >= DATEADD(DAY,-N,GETDATE())
+
+INTERPRETACIÓN DE FECHAS — REGLA CRÍTICA:
+  · El año actual es el que figura en FECHA ACTUAL del system prompt.
+  · Cuando el usuario diga un mes SIN año (ej: "enero", "marzo"):
+      → Usar AÑO ACTUAL como primera opción.
+      → Solo usar año anterior si el contexto lo indica explícitamente
+        ("el enero pasado", "enero del año pasado", "enero de 2025").
+  · Cuando no haya datos en el período solicitado:
+      → NO reportar $0 ni "sin resultados" como respuesta final.
+      → Buscar el mes más reciente CON datos y reportar ese período,
+        aclarando: "No hay datos para [período solicitado]. El último mes
+        con información disponible es [mes encontrado]."
 """
 
 COMPORTAMIENTO = """
@@ -137,6 +149,7 @@ FORMATO DE RESPUESTA:
       · Recomendación accionable concreta para el negocio
   - Sin límite de palabras — respuestas completas y útiles
   - Nunca termines con una tabla sin análisis debajo — los datos solos no tienen valor
+  - NUNCA usar notación LaTeX (\[ \], \text{}, $$) — usar solo texto plano o Markdown
 """
 
 SEGURIDAD = """
