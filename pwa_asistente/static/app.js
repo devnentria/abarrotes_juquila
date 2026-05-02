@@ -833,7 +833,7 @@ function expandirTabla(id) {
   });
 })();
 
-function appendBubble(text, role, jobId = null) {
+function appendBubble(text, role) {
   const messages = document.getElementById('chat-messages');
   const wrap     = document.createElement('div');
   wrap.className = `chat-bubble chat-bubble-${role === 'user' ? 'user' : 'bot'}`;
@@ -842,31 +842,8 @@ function appendBubble(text, role, jobId = null) {
   content.innerHTML = renderMarkdown(text);
   wrap.appendChild(content);
 
-  if (role === 'bot' && jobId) {
-    const fb = document.createElement('div');
-    fb.className = 'chat-feedback';
-    fb.innerHTML = `
-      <button title="Respuesta correcta" onclick="enviarFeedback(this, ${jobId}, 'positivo')">👍</button>
-      <button title="Respuesta incorrecta" onclick="enviarFeedback(this, ${jobId}, 'negativo')">👎</button>
-    `;
-    wrap.appendChild(fb);
-  }
-
   messages.appendChild(wrap);
   messages.scrollTop = messages.scrollHeight;
-}
-
-async function enviarFeedback(btn, jobId, tipo) {
-  const barra = btn.closest('.chat-feedback');
-  barra.querySelectorAll('button').forEach(b => b.classList.remove('activo', 'activo-positivo', 'activo-negativo'));
-  btn.classList.add('activo', tipo === 'positivo' ? 'activo-positivo' : 'activo-negativo');
-  try {
-    await authFetch('/api/chat/feedback', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ job_id: jobId, tipo }),
-    });
-  } catch { /* silencioso — el feedback es best-effort */ }
 }
 
 function showTyping() {
@@ -918,7 +895,7 @@ async function enviarMensaje() {
     // Respuesta instantánea (saludo / capacidades) — no hace falta polling
     if (data.estado === 'done') {
       hideTyping();
-      appendBubble(data.respuesta, 'bot', data.job_id || null);
+      appendBubble(data.respuesta, 'bot');
       return;
     }
 
@@ -949,7 +926,7 @@ async function _pollJob(jobId) {
       const data = await res.json();
       if (data.estado === 'done' || data.estado === 'error') {
         hideTyping();
-        appendBubble(data.respuesta || 'Error al procesar. Intenta de nuevo.', 'bot', jobId);
+        appendBubble(data.respuesta || 'Error al procesar. Intenta de nuevo.', 'bot');
         localStorage.removeItem('chat_pending_job');
         return;
       }
