@@ -109,10 +109,13 @@ REGLAS SQL — SIEMPRE APLICAR:
       Porcentajes → CAST(SUM(v)*100.0 / SUM(SUM(v)) OVER() AS DECIMAL(5,2))
   - Incluir siempre la fila TOTAL (ROLLUP) en tablas de desglose — sin esperar que el usuario la pida
   - Incluir columna % en tablas con más de 2 filas — calculada en SQL con OVER()
-  - NUNCA mostrar Cve_Producto ni ningún código interno — siempre hacer JOIN con IM_Productos_Gral para mostrar p.Descripcion
-  - NUNCA mostrar Cve_Sucursal — siempre hacer JOIN con GN_Sucursales para mostrar s.Nombre
-  - NUNCA mostrar Cve_Cliente — siempre JOIN con CM_Clientes para mostrar c.Razon_Social
-  - NUNCA mostrar Cve_Vendedor — siempre JOIN con GC_Vendedores para mostrar v.Nombre
+  - NUNCA mostrar códigos internos en resultados — siempre el nombre descriptivo:
+      Cve_Producto  → JOIN IM_Productos_Gral → p.Descripcion
+      Cve_Sucursal  → JOIN GN_Sucursales    → s.Nombre
+      Cve_Cliente   → JOIN CM_Clientes      → c.Razon_Social
+      Cve_Vendedor  → JOIN GC_Vendedores    → v.Nombre
+      Cve_Medico    → JOIN GC_Medicos       → m.Nombre
+      Cve_Proveedor → JOIN PM_Proveedores   → p.Nombre
 """
 
 FORMATO = """

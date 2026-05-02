@@ -53,8 +53,11 @@ _PALABRAS_PERIODO = frozenset({
     'mismo', 'pasado', 'anterior', 'actual', 'presente', 'completo', 'entero',
 })
 
-# "del X" donde X empieza en mayúscula y no es una palabra de período → entidad
+# "del X" / "de X" donde X empieza en mayúscula y no es una palabra de período → entidad
 _RE_DEL_NOMBRE = re.compile(r'\bdel?\s+([A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ]+)', re.UNICODE)
+
+# "el Lorelin", "el Ozempic" (artículo masculino + nombre propio) → entidad específica
+_RE_EL_NOMBRE = re.compile(r'\bel\s+([A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ]+)', re.UNICODE)
 
 # ── Patrones por función ──────────────────────────────────────────────────────
 
@@ -134,6 +137,10 @@ def detectar(pregunta: str) -> Optional[tuple]:
         return None
     # "del Ozempic", "del Cliente X", "de Farmacia X" → entidad por nombre propio
     for m in _RE_DEL_NOMBRE.finditer(pregunta):
+        if m.group(1).lower() not in _PALABRAS_PERIODO:
+            return None
+    # "el Lorelin", "el Ozempic" → entidad por nombre propio con artículo
+    for m in _RE_EL_NOMBRE.finditer(pregunta):
         if m.group(1).lower() not in _PALABRAS_PERIODO:
             return None
 

@@ -126,6 +126,26 @@ TOTALES DE VENTA:
   · Por producto: SUM(fd.Importe_Neto) FROM FT_Facturas_D JOIN FT_Facturas_C
   · NO filtrar por Cve_Movimiento salvo que se pida explícitamente
 
+MARGEN BRUTO — CÁLCULO OBLIGATORIO:
+  · fd.Costo = costo unitario al momento de la venta (fuente histórica real).
+  · ⚠ NUNCA usar IM_Productos_Proveedor para margen — tiene costos actuales, no históricos.
+  · Margen bruto = SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo)
+  · % Margen     = Margen / SUM(fd.Importe_Neto) * 100  (usar NULLIF para evitar div/0)
+
+  Consulta estándar de margen por período:
+    SELECT
+      SUM(fd.Importe_Neto)                                                          AS Ventas,
+      SUM(fd.Cantidad * fd.Costo)                                                   AS Costo_Total,
+      SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo)                            AS Margen_Bruto,
+      CAST((SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo))
+           * 100.0 / NULLIF(SUM(fd.Importe_Neto), 0) AS DECIMAL(5,1))              AS Pct_Margen
+    FROM FT_Facturas_D fd
+    JOIN FT_Facturas_C fc
+      ON fc.Cve_Folio = fd.Cve_Folio AND fc.Cve_Sucursal = fd.Cve_Sucursal
+         AND fc.Cve_Movimiento = fd.Cve_Movimiento
+    WHERE fc.Status <> 'C'
+      AND [filtro de período sobre fc.Fecha_Documento]
+
 CONSULTA DE VENDEDOR ESPECÍFICO — OBLIGATORIO cuando se mencione un nombre de vendedor:
   1. Buscar en GC_Vendedores WHERE Nombre LIKE '%nombre%' para encontrar al vendedor
   2. Si se piden sus ventas por mes:

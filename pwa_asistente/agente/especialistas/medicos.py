@@ -82,6 +82,7 @@ RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
   ORDER BY Total_Prescrito DESC
 
 FORMATO ADICIONAL MÉDICOS:
+  · ⚠ NUNCA mostrar Cve_Medico — es código interno. En resultados: SOLO m.Nombre, NUNCA m.Cve_Medico.
   · ⚠ para duplicados confirmados · Agrupar por vendedor cuando sea relevante
 """
 

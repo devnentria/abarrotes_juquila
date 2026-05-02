@@ -18,25 +18,31 @@ from pwa_asistente.agente.especialistas.base_prompt import build
 _SCHEMA = """
 TABLAS DE CLIENTES Y VENTAS:
 
-FT_Facturas_C — historial de compras
+FT_Facturas_C — historial de ventas al cliente
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
   Cve_Cliente (int), Fecha_Documento (datetime),
   Importe_Total (decimal), Cve_Vendedor (varchar), Status (varchar)
   ⚠ Filtrar: Status <> 'C'
 
-FT_Facturas_D — detalle de compras
+FT_Facturas_D — detalle de ventas al cliente
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
   Cve_Producto (int), Cantidad (decimal), Importe_Neto (decimal)
   JOIN con FT_Facturas_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
 """
 
 _REGLAS = """
+TERMINOLOGÍA OBLIGATORIA:
+  · FT_Facturas_C registra VENTAS de la empresa a clientes — NUNCA llamarlas "compras del cliente".
+  · "Clientes con más compras" = "clientes con más ventas registradas" → usar siempre "ventas".
+  · NUNCA escribir "el cliente realizó X compras" → escribir "se registraron X ventas al cliente".
+  · NUNCA "historial de compras" → "historial de ventas" o "facturas al cliente".
+
 ANÁLISIS ÚTILES DE CLIENTES:
-  · Top clientes por monto comprado en un período
+  · Top clientes por monto de ventas en un período
   · Clientes inactivos: LEFT JOIN con FT_Facturas_C buscando última fecha lejana o NULL
-  · Productos favoritos de un cliente: GROUP BY Cve_Producto ORDER BY SUM(Cantidad) DESC
+  · Productos más vendidos a un cliente: GROUP BY Cve_Producto ORDER BY SUM(Cantidad) DESC
   · Clientes por vendedor asignado: JOIN CM_Clientes con GC_Vendedores
-  · Frecuencia de compra: COUNT(DISTINCT Cve_Folio) por cliente en el período
+  · Frecuencia de visita/venta: COUNT(DISTINCT Cve_Folio) por cliente en el período
 
 BÚSQUEDA DE CLIENTE POR NOMBRE:
   Usar CM_Clientes.Razon_Social LIKE '%nombre%'
