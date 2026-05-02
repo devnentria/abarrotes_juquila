@@ -60,6 +60,54 @@ ESTRATEGIA PARA PREGUNTAS MIXTAS:
   Ejemplo: "¿Qué sucursal vende más pero tiene más pedidos pendientes?"
   → Consulta 1: TOP sucursales por ventas · Consulta 2: Pedidos activos por sucursal · Síntesis: cruzar ambos
 
+ÚLTIMO COSTO DE COMPRA — PROTOCOLO OBLIGATORIO:
+  ⚠ FUENTE CORRECTA: IT_Movimientos_D + IT_Movimientos_C (compras reales al proveedor)
+  ⚠ NO usar IM_Productos_Proveedor.Costo_Cotizado para "último costo" — es precio cotizado, no el pagado
+
+  Consulta estándar (último costo real por presentación):
+    SELECT TOP 1 p.Descripcion, imd.Costo_Unitario, imc.Fecha_Documento AS Fecha_Compra
+    FROM IT_Movimientos_D imd
+    JOIN IT_Movimientos_C imc ON imc.Cve_Folio = imd.Cve_Folio
+                              AND imc.Cve_Movimiento = imd.Cve_Movimiento
+                              AND imc.Cve_Almacen = imd.Cve_Almacen
+    JOIN IM_Productos_Gral p  ON p.Cve_Producto = imd.Cve_Producto
+    WHERE imc.Cve_Movimiento = 'EC'
+      AND p.Descripcion LIKE '%nombre_producto%'
+    ORDER BY imc.Fecha_Documento DESC
+
+  Si el producto tiene varias presentaciones — mostrar el último costo de CADA UNA:
+    SELECT p.Descripcion,
+           MAX(imc.Fecha_Documento) AS Ultima_Compra,
+           MAX(imd.Costo_Unitario)  AS Ultimo_Costo
+    FROM IT_Movimientos_D imd
+    JOIN IT_Movimientos_C imc ON imc.Cve_Folio = imd.Cve_Folio
+                              AND imc.Cve_Movimiento = imd.Cve_Movimiento
+                              AND imc.Cve_Almacen = imd.Cve_Almacen
+    JOIN IM_Productos_Gral p  ON p.Cve_Producto = imd.Cve_Producto
+    WHERE imc.Cve_Movimiento = 'EC'
+      AND p.Descripcion LIKE '%nombre_producto%'
+    GROUP BY p.Cve_Producto, p.Descripcion
+    ORDER BY p.Descripcion
+
+MARGEN BRUTO — PROTOCOLO OBLIGATORIO (cuando llegue a mixto):
+  · fd.Costo = costo unitario al momento de la venta (fuente histórica real)
+  · Margen bruto = SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo)
+  · % Margen     = Margen / SUM(fd.Importe_Neto) * 100
+
+  Consulta estándar:
+    SELECT
+      SUM(fd.Importe_Neto)                                                         AS Ventas,
+      SUM(fd.Cantidad * fd.Costo)                                                  AS Costo_Total,
+      SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo)                           AS Margen_Bruto,
+      CAST((SUM(fd.Importe_Neto) - SUM(fd.Cantidad * fd.Costo))
+           * 100.0 / NULLIF(SUM(fd.Importe_Neto), 0) AS DECIMAL(5,1))             AS Pct_Margen
+    FROM FT_Facturas_D fd
+    JOIN FT_Facturas_C fc ON fc.Cve_Folio = fd.Cve_Folio
+                          AND fc.Cve_Sucursal = fd.Cve_Sucursal
+                          AND fc.Cve_Movimiento = fd.Cve_Movimiento
+    WHERE fc.Status <> 'C'
+      AND [filtro de período sobre fc.Fecha_Documento]
+
 FORMATO ADICIONAL MIXTO:
   · Secciones separadas si la respuesta cubre múltiples áreas
   · Conclusión ejecutiva al final que integre todos los hallazgos
