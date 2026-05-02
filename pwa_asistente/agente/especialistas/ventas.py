@@ -72,6 +72,7 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
     ORDER BY p.Descripcion
 
   Resultado esperado: una fila por presentación/variante, con sus 3 precios promedio.
+  ⚠ NUNCA usar MIN() ni MAX() para precios — producen valores atípicos sin contexto.
   ⚠ NUNCA mezclar variantes en un AVG global (ej. Lorelin 11.25mg ≠ Lorelin 3.75mg).
   ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 siempre.
   ⚠ Si no hay ventas en el período: declararlo y ampliar al período anterior.
