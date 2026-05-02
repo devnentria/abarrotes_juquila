@@ -14,6 +14,7 @@ lanza ValueError antes de llegar al ERP.
 """
 import re
 from shared.database import query as _query_erp
+from pwa_asistente.agente import sql_blacklist
 
 # Palabras clave que NUNCA deben llegar al ERP
 _PROHIBIDAS = re.compile(
@@ -91,8 +92,9 @@ def run(sql: str) -> list[dict]:
         # Si falla por columna inexistente, reconstruir la consulta sin ella y reintentar
         col_match = re.search(r"Invalid column name '(\w+)'", str(e))
         if col_match:
-            col      = col_match.group(1)
-            sql_fix  = limpio
+            col = col_match.group(1)
+            sql_blacklist.registrar_columna(col, limpio)
+            sql_fix = limpio
 
             # 1. Si la columna aparece en un JOIN ON → eliminar todo ese JOIN
             #    y las referencias al alias de esa tabla en SELECT/WHERE
@@ -139,4 +141,10 @@ def run(sql: str) -> list[dict]:
             if sql_fix.strip() != limpio.strip():
                 print(f"\n── SQL corregido (retry) ──────────────────────\n{sql_fix.strip()}\n──────────────────────────────────────────────\n", flush=True)
                 return _query_erp(sql_fix)
+
+        # Tabla inexistente (42S02)
+        table_match = re.search(r"Invalid object name '(\w+)'", str(e))
+        if table_match:
+            sql_blacklist.registrar_tabla(table_match.group(1))
+
         raise

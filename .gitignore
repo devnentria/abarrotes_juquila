@@ -10,3 +10,6 @@ diagramas/
 # Logos sueltos en raíz (van en static/)
 logo.jpeg
 logo_trasparente.png
+
+# Estado de runtime — no va al repo
+sql_blacklist.json

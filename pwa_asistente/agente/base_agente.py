@@ -19,6 +19,7 @@ from shared.config import OPENAI_API_KEY, OPENAI_MODEL, TEST_DATE
 from datetime import date
 from pwa_asistente.agente import ejecutor
 from pwa_asistente.agente import cache_agente
+from pwa_asistente.agente import sql_blacklist
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -55,7 +56,7 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
 
     _fecha = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
     mensajes = [
-        {"role": "system", "content": system + f"\n\nFECHA ACTUAL: {_fecha}."}
+        {"role": "system", "content": system + f"\n\nFECHA ACTUAL: {_fecha}." + sql_blacklist.como_bloque_prompt()}
     ]
     # Limitar historial a los últimos 20 mensajes para no exceder el contexto del modelo
     for msg in historial[-20:]:
