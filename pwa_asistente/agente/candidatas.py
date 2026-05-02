@@ -91,20 +91,19 @@ def registrar(pregunta: str) -> None:
     if len(patron) < 10:
         return
 
-    patrones = _store.datos["patrones"]
-    ahora    = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    if patron not in patrones:
-        # Si ya llegamos al límite, descartar el patrón menos frecuente
-        if len(patrones) >= _MAX_PATRONES:
-            min_key = min(patrones, key=lambda k: patrones[k]["count"])
-            del patrones[min_key]
-        patrones[patron] = {"count": 0, "ejemplo": pregunta, "ultima_vez": ahora}
-
-    entrada = patrones[patron]
-    entrada["count"]     += 1
-    entrada["ultima_vez"] = ahora
-    _store.guardar()
+    with _store.lock:
+        patrones = _store.datos["patrones"]
+        if patron not in patrones:
+            if len(patrones) >= _MAX_PATRONES:
+                min_key = min(patrones, key=lambda k: patrones[k]["count"])
+                del patrones[min_key]
+            patrones[patron] = {"count": 0, "ejemplo": pregunta, "ultima_vez": ahora}
+        entrada = patrones[patron]
+        entrada["count"]     += 1
+        entrada["ultima_vez"] = ahora
+        _store.guardar()
 
     count = entrada["count"]
     if count == UMBRAL_CANDIDATA or (count > UMBRAL_CANDIDATA and count % 10 == 0):

@@ -71,21 +71,22 @@ def registrar_desde_sql(sql: str, filas: list[dict]) -> None:
         if not valores:
             break
 
-        datos = _store.datos[tipo]
-        hubo_cambios = False
-        for termino in likes:
-            clave = termino.strip().lower()
-            if len(clave) < 3:
-                continue
-            existentes = datos.get(clave, [])
-            nuevos = [v for v in valores if v not in existentes]
-            if nuevos:
-                datos[clave] = existentes + nuevos
-                hubo_cambios = True
-                print(f"[nombres_cache] {tipo} '{clave}' → {datos[clave]}", flush=True)
+        with _store.lock:
+            datos = _store.datos[tipo]
+            hubo_cambios = False
+            for termino in likes:
+                clave = termino.strip().lower()
+                if len(clave) < 3:
+                    continue
+                existentes = datos.get(clave, [])
+                nuevos = [v for v in valores if v not in existentes]
+                if nuevos:
+                    datos[clave] = existentes + nuevos
+                    hubo_cambios = True
+                    print(f"[nombres_cache] {tipo} '{clave}' → {datos[clave]}", flush=True)
 
-        if hubo_cambios:
-            _store.guardar()  # Una sola escritura tras procesar todos los términos
+            if hubo_cambios:
+                _store.guardar()
         break
 
 

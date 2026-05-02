@@ -35,11 +35,11 @@ def registrar(job_id: int, tipo: str, pregunta: str, respuesta: str) -> None:
         "respuesta": respuesta[:500],
         "fecha":     datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-    _store.datos.append(entrada)
-    # Mantener solo los últimos MAX_REGISTROS
-    if len(_store.datos) > _MAX_REGISTROS:
-        _store.datos[:] = _store.datos[-_MAX_REGISTROS:]
-    _store.guardar()
+    with _store.lock:
+        _store.datos.append(entrada)
+        if len(_store.datos) > _MAX_REGISTROS:
+            _store.datos[:] = _store.datos[-_MAX_REGISTROS:]
+        _store.guardar()
     print(f"[feedback] {tipo.upper()} registrado — job {job_id}", flush=True)
 
 

@@ -42,17 +42,19 @@ def _extraer_tabla_columna(columna: str, sql: str) -> str:
 
 def registrar_columna(columna: str, sql: str = "") -> None:
     entrada = _extraer_tabla_columna(columna, sql) if sql else columna
-    if entrada not in _store.datos["columnas"]:
-        _store.datos["columnas"].append(entrada)
-        _store.guardar()
-        print(f"[blacklist] Columna inválida registrada: {entrada}", flush=True)
+    with _store.lock:
+        if entrada not in _store.datos["columnas"]:
+            _store.datos["columnas"].append(entrada)
+            _store.guardar()
+            print(f"[blacklist] Columna inválida registrada: {entrada}", flush=True)
 
 
 def registrar_tabla(tabla: str) -> None:
-    if tabla not in _store.datos["tablas"]:
-        _store.datos["tablas"].append(tabla)
-        _store.guardar()
-        print(f"[blacklist] Tabla inválida registrada: {tabla}", flush=True)
+    with _store.lock:
+        if tabla not in _store.datos["tablas"]:
+            _store.datos["tablas"].append(tabla)
+            _store.guardar()
+            print(f"[blacklist] Tabla inválida registrada: {tabla}", flush=True)
 
 
 def como_bloque_prompt() -> str:
