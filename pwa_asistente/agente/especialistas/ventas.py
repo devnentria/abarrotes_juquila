@@ -56,8 +56,9 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO (productos con variantes):
     → Si hay más de 1 resultado: consolidar TODAS las variantes en el siguiente paso.
     ⚠ NUNCA consultar solo una variante si existen varias — omitirías ventas a precio promocional.
 
-  PASO 2 — Consultar precios promedio de TODAS las variantes juntas:
+  PASO 2 — Consultar precios promedio SEPARADOS por variante (GROUP BY Descripcion):
     SELECT
+      p.Descripcion                    AS Presentacion,
       AVG(fd.Precio_Publico)           AS Precio_Publico_Prom,
       AVG(fd.Precio_Minimo_Venta_Base) AS Precio_Base_Prom,
       AVG(fd.Precio)                   AS Precio_Pactado_Prom,
@@ -70,6 +71,9 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO (productos con variantes):
     WHERE fc.Status <> 'C'
       AND p.Descripcion LIKE '%nombre_producto%'
       AND [filtro de período sobre fc.Fecha_Documento]
+    GROUP BY p.Cve_Producto, p.Descripcion
+    ORDER BY p.Descripcion
+  ⚠ NUNCA hacer AVG global de todas las variantes — mezclaría presentaciones con precios distintos.
 
   3 tipos de precio a reportar siempre (en tabla):
     · Precio_Publico           → público general
