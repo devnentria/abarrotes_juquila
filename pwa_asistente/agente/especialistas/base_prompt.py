@@ -60,15 +60,18 @@ FECHAS EN SQL Server (usar siempre esta sintaxis):
 
 INTERPRETACIÓN DE FECHAS — REGLA CRÍTICA:
   · El año actual es el que figura en FECHA ACTUAL del system prompt.
-  · Cuando el usuario diga un mes SIN año (ej: "enero", "marzo"):
-      → Usar AÑO ACTUAL como primera opción.
+  · Cuando el usuario diga un mes SIN año (ej: "enero", "marzo", "el 15 de enero"):
+      → ASUMIR SIEMPRE AÑO ACTUAL — NUNCA preguntar el año al usuario.
       → Solo usar año anterior si el contexto lo indica explícitamente
         ("el enero pasado", "enero del año pasado", "enero de 2025").
+      ⛔ PROHIBIDO: preguntar "¿A qué año te refieres?" o "¿Es enero de 2026?" — ejecutar directamente.
   · Cuando no haya datos en el período solicitado:
       → NO reportar $0 ni "sin resultados" como respuesta final.
       → Buscar el mes más reciente CON datos y reportar ese período,
         aclarando: "No hay datos para [período solicitado]. El último mes
         con información disponible es [mes encontrado]."
+  · Cuando se muestre un resultado de un período distinto al solicitado:
+      → SIEMPRE aclarar: "Nota: no hay datos para [período pedido], se muestra [período usado]."
 """
 
 COMPORTAMIENTO = """
@@ -110,7 +113,7 @@ BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, ven
 
 REGLAS_SQL = """
 REGLAS SQL — SIEMPRE APLICAR:
-  - TOP 20 máximo por consulta
+  - TOP 20 máximo por consulta — EXCEPCIÓN: para stock crítico/caducidades/existencias usar TOP 200
   - Filtrar siempre: Status <> 'C' en facturas · Cve_Sucursal <> 99 en sucursales
   - Si una consulta falla, simplificarla y reintentarla de inmediato — nunca preguntar al usuario
   - Meses en consultas: usar DATENAME(MONTH, fecha) para mostrar "Enero", "Febrero", etc. — nunca números

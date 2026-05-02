@@ -75,19 +75,28 @@ ESTRATEGIA PARA PREGUNTAS MIXTAS:
       AND p.Descripcion LIKE '%nombre_producto%'
     ORDER BY imc.Fecha_Documento DESC
 
-  Si el producto tiene varias presentaciones — mostrar el último costo de CADA UNA:
+  Si el producto tiene varias presentaciones — mostrar el último costo de CADA UNA (una fila por variante):
     SELECT p.Descripcion,
-           MAX(imc.Fecha_Documento) AS Ultima_Compra,
-           MAX(imd.Costo_Unitario)  AS Ultimo_Costo
+           MAX(imc.Fecha_Documento)                                        AS Ultima_Compra,
+           MAX(imd.Costo_Unitario) KEEP (DENSE_RANK LAST ORDER BY imc.Fecha_Documento) AS Ultimo_Costo
+    -- SQL Server no soporta KEEP, usar subconsulta correlacionada:
+    SELECT p.Descripcion,
+           (SELECT TOP 1 imc2.Fecha_Documento
+            FROM IT_Movimientos_D imd2
+            JOIN IT_Movimientos_C imc2 ON imc2.Cve_Folio=imd2.Cve_Folio AND imc2.Cve_Movimiento=imd2.Cve_Movimiento AND imc2.Cve_Almacen=imd2.Cve_Almacen
+            WHERE imd2.Cve_Producto=imd.Cve_Producto AND imc2.Cve_Movimiento='EC'
+            ORDER BY imc2.Fecha_Documento DESC) AS Ultima_Compra,
+           (SELECT TOP 1 imd2.Costo_Unitario
+            FROM IT_Movimientos_D imd2
+            JOIN IT_Movimientos_C imc2 ON imc2.Cve_Folio=imd2.Cve_Folio AND imc2.Cve_Movimiento=imd2.Cve_Movimiento AND imc2.Cve_Almacen=imd2.Cve_Almacen
+            WHERE imd2.Cve_Producto=imd.Cve_Producto AND imc2.Cve_Movimiento='EC'
+            ORDER BY imc2.Fecha_Documento DESC) AS Ultimo_Costo
     FROM IT_Movimientos_D imd
-    JOIN IT_Movimientos_C imc ON imc.Cve_Folio = imd.Cve_Folio
-                              AND imc.Cve_Movimiento = imd.Cve_Movimiento
-                              AND imc.Cve_Almacen = imd.Cve_Almacen
-    JOIN IM_Productos_Gral p  ON p.Cve_Producto = imd.Cve_Producto
-    WHERE imc.Cve_Movimiento = 'EC'
-      AND p.Descripcion LIKE '%nombre_producto%'
-    GROUP BY p.Cve_Producto, p.Descripcion
+    JOIN IM_Productos_Gral p ON p.Cve_Producto = imd.Cve_Producto
+    WHERE p.Descripcion LIKE '%nombre_producto%'
+    GROUP BY imd.Cve_Producto, p.Descripcion
     ORDER BY p.Descripcion
+  ⚠ Resultado esperado: UNA fila por presentación con su costo y fecha más recientes — nunca filas duplicadas.
 
 MARGEN BRUTO — PROTOCOLO OBLIGATORIO (cuando llegue a mixto):
   · fd.Costo = costo unitario al momento de la venta (fuente histórica real)
