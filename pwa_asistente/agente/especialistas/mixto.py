@@ -42,6 +42,9 @@ IT_Movimientos_C → Cve_Movimiento, Fecha_Documento, Cve_Sucursal, Cve_Almacen,
 IT_Movimientos_D → Cve_Movimiento, Cve_Folio, Cve_Almacen, Cve_Producto, Cantidad,
                    Costo_Unitario, Num_Lote, Fecha_Caducidad
                    JOIN con _C por: Cve_Folio + Cve_Movimiento + Cve_Almacen
+  ⚠ IT_Movimientos_D.Costo_Unitario = costo de COMPRA al proveedor — NUNCA usar para precio de venta al cliente
+  ⚠ NO existe columna Precio en IT_Movimientos_D ni IT_Movimientos_C
+  ⚠ Para precios de venta usar EXCLUSIVAMENTE: FT_Facturas_D (Precio, Precio_Publico, Precio_Minimo_Venta_Base)
 
 ── PROVEEDORES ──
 IM_Productos_Proveedor → Cve_Producto, Cve_Proveedor, Costo_Cotizado,
