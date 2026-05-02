@@ -74,6 +74,8 @@ def run(sql: str) -> list[dict]:
 
     limpio = sql.strip()
 
+    print(f"\n── SQL ejecutado ──────────────────────────────\n{limpio}\n──────────────────────────────────────────────\n", flush=True)
+
     if _PROHIBIDAS.search(limpio):
         raise ValueError(
             "La consulta contiene instrucciones no permitidas. "
@@ -116,7 +118,18 @@ def run(sql: str) -> list[dict]:
                     '1=1', sql_fix, flags=re.IGNORECASE,
                 )
             else:
-                # Columna en SELECT directo — solo eliminarla
+                col_pat = rf'\b(?:\w+\.)?{re.escape(col)}\b'
+                # BETWEEN col AND val → neutralizar
+                sql_fix = re.sub(
+                    col_pat + r'\s+BETWEEN\s+.+?\s+AND\s+[\w\(\)\'\-:\.]+',
+                    '1=1', sql_fix, flags=re.IGNORECASE,
+                )
+                # col >= / <= / <> / > / < val → neutralizar
+                sql_fix = re.sub(
+                    col_pat + r'\s*(?:>=|<=|<>|>|<)\s*(?:\'[^\']*\'|[\w\(\)\-\.]+)',
+                    '1=1', sql_fix, flags=re.IGNORECASE,
+                )
+                # Columna en SELECT directo — eliminarla
                 sql_fix = re.sub(
                     rf'(?:,\s*)?\b\w+\.{re.escape(col)}\b(?:\s+AS\s+\w+)?'
                     rf'|(?:,\s*)?\b{re.escape(col)}\b(?:\s+AS\s+\w+)?',
@@ -124,5 +137,6 @@ def run(sql: str) -> list[dict]:
                 )
 
             if sql_fix.strip() != limpio.strip():
+                print(f"\n── SQL corregido (retry) ──────────────────────\n{sql_fix.strip()}\n──────────────────────────────────────────────\n", flush=True)
                 return _query_erp(sql_fix)
         raise

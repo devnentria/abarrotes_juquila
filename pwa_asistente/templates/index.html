@@ -200,7 +200,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=40"></script>
+  <script src="/static/app.js?v=46"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">
@@ -240,6 +240,8 @@
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
           Cerrar sesión
         </button>
+        <!-- Versión -->
+        <p style="text-align:center;margin:12px 0 2px;font-size:10.5px;letter-spacing:.06em;opacity:.35;color:var(--text);user-select:none">v1.0.3</p>
       </div>
     </div>
 
@@ -286,7 +288,10 @@
         <span class="ia-panel-icono">✦</span>
         <span id="ia-panel-titulo" class="ia-panel-titulo">Resumen IA</span>
       </div>
-      <button id="ia-panel-close" class="ia-panel-close" aria-label="Cerrar">✕</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button id="ia-panel-tts" class="ia-panel-close" aria-label="Leer en voz alta" title="Leer en voz alta" style="font-size:18px;color:var(--blue-mid)">🔊</button>
+        <button id="ia-panel-close" class="ia-panel-close" aria-label="Cerrar">✕</button>
+      </div>
     </div>
     <div id="ia-panel-body" class="ia-panel-body">
       <div id="ia-panel-loading" class="ia-panel-loading">

@@ -22,7 +22,8 @@ from datetime import date
 
 from openai import OpenAI
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 
 from shared.auth import get_current_user
 from shared.config import IA_FLASH_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, OPENAI_API_KEY
@@ -147,7 +148,7 @@ def ia_sucursal(
         (cve_sucursal,),
     )
 
-    # Pedido activo más antiguo — dato no visible en la tarjeta
+    # Pedido activo más antiguo
     pedido_viejo = query(f"""
         SELECT TOP 1
             DATEDIFF(DAY, Fecha_Documento, {hoy()}) AS dias_antiguo
@@ -156,24 +157,25 @@ def ia_sucursal(
         ORDER BY Fecha_Documento ASC
     """, (cve_sucursal,))
 
-    # Productos en stock crítico (1–5 unidades) — dato no visible en la tarjeta
-    stock_critico = query("""
-        SELECT COUNT(*) AS total
-        FROM IN_Existencias_Alm
-        WHERE Cve_Sucursal = ? AND Status = 'AC'
-          AND Existencia > 0 AND Existencia <= 5
-    """, (cve_sucursal,))
+    # Usar los mismos datos que las tarjetas de inventario (stock_detalle cache)
+    stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}")
+    if stock_cache is None:
+        stock_detalle(cve_sucursal)
+        stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
+    sin_stock_list = stock_cache.get("sin_stock",   [])
+    caducidades    = stock_cache.get("caducidades", [])
 
-    v             = ventas[0]       if ventas       else {}
-    ped           = pedidos[0]      if pedidos      else {}
-    viejo         = pedido_viejo[0] if pedido_viejo else {}
-    critico       = stock_critico[0] if stock_critico else {}
-    importe       = v.get("importe",      0)
-    facturas      = v.get("facturas",     0)
-    n_ped         = ped.get("total",      0)
-    dias_viejo    = viejo.get("dias_antiguo", 0) or 0
-    n_critico     = critico.get("total",  0)
-    top_txt       = ", ".join(f"{r['producto']} (${r['importe']:,.0f})" for r in top3) or "sin registros"
+    v          = ventas[0]       if ventas       else {}
+    ped        = pedidos[0]      if pedidos      else {}
+    viejo      = pedido_viejo[0] if pedido_viejo else {}
+    importe    = v.get("importe",      0)
+    facturas   = v.get("facturas",     0)
+    n_ped      = ped.get("total",      0)
+    dias_viejo = viejo.get("dias_antiguo", 0) or 0
+    n_sin      = len(sin_stock_list)
+    n_cad      = len(caducidades)
+    top_sin    = ", ".join(r["producto"] for r in sin_stock_list[:3]) or "ninguno"
+    top_txt    = ", ".join(f"{r['producto']} (${r['importe']:,.0f})" for r in top3) or "sin registros"
 
     prompt = (
         f"Eres el asistente analítico personal de {nombre}. "
@@ -181,11 +183,11 @@ def ia_sucursal(
         f"dirigidas a {nombre}. "
         f"Ventas de ayer: ${importe:,.0f} en {facturas} facturas. "
         f"Pedidos activos: {n_ped} (el más antiguo lleva {dias_viejo} días sin surtir). "
-        f"Productos con stock crítico (menos de 5 piezas): {n_critico}. "
+        f"Productos con demanda reciente sin existencia: {n_sin} (los más críticos: {top_sin}). "
+        f"Productos próximos a caducar (90 días): {n_cad}. "
         f"Top productos del mes: {top_txt}. "
         f"Tono directo y profesional. Empieza con el nombre. "
-        f"Menciona el dato más alarmante si lo hay (pedido viejo o stock crítico alto). "
-        f"Sin títulos, sin viñetas, sin saludos extensos."
+        f"Menciona el dato más alarmante. Sin títulos, sin viñetas, sin saludos extensos."
     )
 
     texto, costo = _flash(prompt)
@@ -389,3 +391,27 @@ def ia_medicos(
     texto, costo = _flash(prompt)
     _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
     return JSONResponse({"texto": texto})
+
+
+# ── TTS — Texto a voz con OpenAI ─────────────────────────────────────────────
+
+class TTSRequest(BaseModel):
+    texto: str
+
+
+@router.post("/tts")
+def tts(datos: TTSRequest, usuario: dict = Depends(get_current_user)):
+    """
+    Convierte texto a audio usando OpenAI TTS (voz nova, español).
+    Retorna el audio como stream mp3 para reproducción directa en el navegador.
+    """
+    respuesta = _client.audio.speech.create(
+        model="tts-1",
+        voice="nova",
+        input=datos.texto[:4096],
+        response_format="mp3",
+    )
+    return Response(
+        content=respuesta.content,
+        media_type="audio/mpeg",
+    )

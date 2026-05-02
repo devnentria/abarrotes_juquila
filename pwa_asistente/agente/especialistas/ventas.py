@@ -23,7 +23,7 @@ FT_Facturas_C — encabezado de facturas
   Fecha_Documento (datetime), Importe_Total (decimal),
   Cve_Cliente (int), Cve_Vendedor (varchar), Status (char)
   ⚠ Filtrar: Status <> 'C'
-  ⚠ NO existe Cve_Medico en esta tabla — los médicos se relacionan solo como clientes (CM_Clientes)
+  ⚠ NO existe Cve_Medico en esta tabla
 
 FT_Facturas_D — detalle de facturas
   Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
@@ -31,6 +31,14 @@ FT_Facturas_D — detalle de facturas
   Precio (float), Precio_Publico (float), Precio_Minimo_Venta_Base (float),
   Importe_Neto (float), Costo (float)
   JOIN con FT_Facturas_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
+
+CM_Clientes — catálogo de clientes
+  Cve_Cliente (int), Razon_Social (varchar), Cve_Ruta (int)
+  Cve_Ruta → clave del médico prescriptor asignado al cliente (FK a GC_Medicos.Cve_Medico)
+  ⚠ Los clientes sin médico (Cve_Ruta = 0 o NULL) no generan pedidos
+
+GC_Medicos — catálogo de médicos
+  Cve_Medico (int), Nombre (varchar), Cedula (varchar), cve_vendedor (int)
 
 IM_Productos_Proveedor — costo cotizado por proveedor
   Cve_Producto (int), Cve_Proveedor (int), Costo_Cotizado (decimal),
@@ -80,11 +88,38 @@ BÚSQUEDA POR NOMBRE (protocolo obligatorio cuando busquen una persona):
       ⛔ PROHIBIDO: mostrar "ventas relacionadas" o "clientes similares" con sus importes.
       ⛔ PROHIBIDO: preguntar al usuario si desea revisar algo más en este punto.
 
-RANKING DE MÉDICOS POR VENTAS:
-  · Los médicos compran como clientes directos: JOIN CM_Clientes c ON c.Razon_Social = m.Nombre
-    o bien: CM_Clientes WHERE Razon_Social IN (SELECT Nombre FROM GC_Medicos)
-  · NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
-  · NUNCA sustituir por vendedores.
+VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
+  Cada cliente tiene asignado un médico prescriptor en CM_Clientes.Cve_Ruta (= GC_Medicos.Cve_Medico).
+  Las ventas a ese cliente "pertenecen" al médico que lo prescribe.
+  ⚠ Cve_Ruta = 1 es el registro "SIN MEDICO" (placeholder) — SIEMPRE excluirlo: AND c.Cve_Ruta <> 1
+  ⚠ Existen ~124 facturas de clientes con Cve_Ruta = 0/NULL (sin médico asignado) — son válidas pero no se atribuyen a ningún médico.
+
+  Consulta estándar (ranking o total por médico):
+    SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Ventas
+    FROM FT_Facturas_C fc
+    JOIN CM_Clientes c  ON c.Cve_Cliente = fc.Cve_Cliente
+    JOIN GC_Medicos m   ON m.Cve_Medico  = c.Cve_Ruta
+    WHERE fc.Status <> 'C'
+      AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
+    [AND fc.Fecha_Documento BETWEEN ... AND ...]
+    GROUP BY m.Cve_Medico, m.Nombre
+    ORDER BY Total_Ventas DESC
+
+  Consulta de un médico específico (detalle por mes):
+    SELECT DATENAME(MONTH, fc.Fecha_Documento) AS Mes, YEAR(fc.Fecha_Documento) AS Año,
+           SUM(fc.Importe_Total) AS Total
+    FROM FT_Facturas_C fc
+    JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
+    JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
+    WHERE fc.Status <> 'C'
+      AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
+      AND m.Nombre LIKE '%nombre_medico%'
+    GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
+    ORDER BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento)
+
+  ⚠ Esta es la forma CORRECTA de ventas por médico prescriptor.
+  ⚠ NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
+  ⚠ NUNCA sustituir por vendedores.
 
 TOTALES DE VENTA:
   · Por sucursal/período/ranking: SUM(fc.Importe_Total) FROM FT_Facturas_C

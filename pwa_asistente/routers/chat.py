@@ -34,8 +34,28 @@ from pwa_asistente.agente import director, loop_stream
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
 )
+from pwa_asistente.agente.funciones import matcher as _matcher, catalogo as _catalogo
 
 _pool = ThreadPoolExecutor(max_workers=4)
+
+
+def _intentar_funcion_fija(msg: str) -> tuple:
+    """
+    Intenta resolver la pregunta con una función predefinida (sin LLM para SQL).
+
+    Returns:
+        tuple[str | None, float]: (respuesta, costo_usd) — respuesta es None si no hay coincidencia.
+    """
+    match = _matcher.detectar(msg)
+    if not match:
+        return None, 0.0
+    func_id, params = match
+    try:
+        texto, costo = _catalogo.ejecutar(func_id, params)
+        return texto, costo
+    except Exception as e:
+        print(f"[funciones] Error en {func_id}: {e}", flush=True)
+        return None, 0.0
 
 router = APIRouter(prefix="/api/chat")
 
@@ -236,22 +256,26 @@ def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user))
         area = "capacidades"
         respuesta = _RESPUESTA_CAPACIDADES
     else:
-        # Director clasifica y especialista responde
-        area, costo_director = director.clasificar(body.mensaje, historial)
-        fn = _ESPECIALISTAS.get(area, mixto.responder)
-        try:
-            resultado  = fn(body.mensaje, historial)
-            respuesta  = resultado.texto
-            costo_usd  = costo_director + (
-                resultado.tokens_prompt     * IA_PRECIO_INPUT
-                + resultado.tokens_completion * IA_PRECIO_OUTPUT
-            )
-        except Exception:
-            respuesta = (
-                "Ocurrió un error al procesar tu consulta. "
-                "Intenta de nuevo o reformula la pregunta."
-            )
-            costo_usd = costo_director
+        respuesta, costo_usd = _intentar_funcion_fija(msg)
+        if respuesta:
+            area = "funcion_fija"
+        else:
+            # Director clasifica y especialista responde
+            area, costo_director = director.clasificar(body.mensaje, historial)
+            fn = _ESPECIALISTAS.get(area, mixto.responder)
+            try:
+                resultado  = fn(body.mensaje, historial)
+                respuesta  = resultado.texto
+                costo_usd  = costo_director + (
+                    resultado.tokens_prompt     * IA_PRECIO_INPUT
+                    + resultado.tokens_completion * IA_PRECIO_OUTPUT
+                )
+            except Exception:
+                respuesta = (
+                    "Ocurrió un error al procesar tu consulta. "
+                    "Intenta de nuevo o reformula la pregunta."
+                )
+                costo_usd = costo_director
 
     # 5. Guardar mensajes y actualizar contadores
     _guardar_y_contar(
@@ -324,8 +348,6 @@ def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current
         return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
 
     def _generador():
-        import json as _json
-
         # Respuestas instantáneas sin IA
         if _SALUDO.match(msg):
             yield _sse({"type": "token",  "text": _RESPUESTA_SALUDO})
@@ -338,10 +360,18 @@ def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current
             yield _sse({"type": "done", "conversacion_id": conv_id, "area": "capacidades"})
             return
 
+        # Función predefinida — sin LLM para generación de SQL
+        respuesta_fija, costo_fija = _intentar_funcion_fija(msg)
+        if respuesta_fija:
+            yield _sse({"type": "token", "text": respuesta_fija})
+            _guardar_y_contar(conv_id, msg, respuesta_fija, usuario_id,
+                              costo_usd=costo_fija, es_ia=True)
+            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "funcion_fija"})
+            return
+
         yield _sse({"type": "status", "text": "Consultando el sistema..."})
 
         area, costo_director = director.clasificar(msg, historial)
-        especialista = _ESPECIALISTAS.get(area, None)
 
         # Obtener el system prompt del especialista correspondiente
         _sistemas = {
@@ -390,15 +420,20 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     """
     costo_usd = 0.0
     try:
-        area, costo_director = director.clasificar(msg, historial)
-        fn                   = _ESPECIALISTAS.get(area, mixto.responder)
-        resultado            = fn(msg, historial)
-        respuesta            = resultado.texto
-        costo_usd            = costo_director + (
-            resultado.tokens_prompt     * IA_PRECIO_INPUT
-            + resultado.tokens_completion * IA_PRECIO_OUTPUT
-        )
-        estado = "done"
+        respuesta, costo_usd = _intentar_funcion_fija(msg)
+        if respuesta:
+            area   = "funcion_fija"
+            estado = "done"
+        else:
+            area, costo_director = director.clasificar(msg, historial)
+            fn                   = _ESPECIALISTAS.get(area, mixto.responder)
+            resultado            = fn(msg, historial)
+            respuesta            = resultado.texto
+            costo_usd            = costo_director + (
+                resultado.tokens_prompt     * IA_PRECIO_INPUT
+                + resultado.tokens_completion * IA_PRECIO_OUTPUT
+            )
+            estado = "done"
     except Exception:
         respuesta = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
         area      = "error"
