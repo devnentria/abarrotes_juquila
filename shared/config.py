@@ -80,3 +80,7 @@ JWT_EXPIRY_HOURS: int = int(os.getenv("JWT_EXPIRY_HOURS", "720"))  # 30 días
 ADMIN_NOMBRE:   str = os.getenv("ADMIN_NOMBRE",   "")
 ADMIN_EMAIL:    str = os.getenv("ADMIN_EMAIL",    "")
 ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "")
+
+# ── Permisos y módulos válidos ────────────────────────────────────────────────
+MODULOS_VALIDOS:  frozenset = frozenset({"pwa", "studio"})
+PERMISOS_VALIDOS: frozenset = frozenset({"ventas", "inventario", "medicos", "clientes", "finanzas"})

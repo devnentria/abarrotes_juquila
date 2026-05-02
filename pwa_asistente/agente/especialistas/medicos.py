@@ -3,13 +3,13 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/medicos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.1.0
 # ============================================================
 """
 Agente Especialista — Médicos.
 
 Responde preguntas sobre el directorio de médicos prescriptores,
-duplicados, cédulas y asignación a vendedores.
+duplicados, cédulas, asignación a vendedores y ventas por prescripción.
 """
 from pwa_asistente.agente import base_agente
 from pwa_asistente.agente.base_agente import RespuestaIA
@@ -18,14 +18,20 @@ from pwa_asistente.agente.especialistas.base_prompt import build
 _SCHEMA = """
 TABLAS DE MÉDICOS:
 
-GC_Medicos — catálogo principal de médicos (ya en tablas maestras, ampliado aquí)
+GC_Medicos — catálogo principal de médicos
+  Cve_Medico (int), Nombre (varchar), Cedula (varchar), cve_vendedor (int)
   ⚠ Usar LTRIM(RTRIM()) al comparar nombres y cédulas (hay espacios extra en el ERP)
   ⚠ ISNULL(cedula, '') para manejar cédulas nulas
 
-FT_Facturas_C — para calcular ventas de médicos como clientes directos
+CM_Clientes — cada cliente tiene un médico prescriptor asignado
+  Cve_Cliente (int), Razon_Social (varchar), Cve_Ruta (int)
+  Cve_Ruta → FK a GC_Medicos.Cve_Medico (médico prescriptor del cliente)
+  ⚠ Los clientes sin médico (Cve_Ruta = 0 o NULL) no generan pedidos
+
+FT_Facturas_C — ventas (para ventas directas o por prescripción)
   Cve_Cliente (int), Importe_Total (decimal), Fecha_Documento (datetime), Status (char)
   ⚠ Filtrar: Status <> 'C'
-  ⚠ NO existe Cve_Medico en FT_Facturas_C — buscar médicos como clientes via CM_Clientes.Razon_Social
+  ⚠ NO existe Cve_Medico en FT_Facturas_C
 """
 
 _REGLAS = """
@@ -40,12 +46,43 @@ BÚSQUEDA DE MÉDICOS POR NOMBRE — OBLIGATORIO:
     Ejemplo: "Luz Stella Seamanduras" → LIKE '%Luz%' OR LIKE '%Stella%' OR LIKE '%Seamanduras%'
   · NUNCA buscar el nombre completo junto — dividir siempre en palabras individuales.
 
-VENTAS POR MÉDICO:
-  · Si el médico compra como cliente: buscar en CM_Clientes WHERE Razon_Social LIKE '%palabra1%' OR ...
-    luego: JOIN FT_Facturas_C fc ON fc.Cve_Cliente = c.Cve_Cliente
-  · NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe en esta base de datos.
+VENTAS POR MÉDICO — DOS TIPOS (aclarar cuál se pide):
+
+  1. Ventas directas (el médico compra como cliente registrado):
+     SELECT c.Razon_Social, SUM(fc.Importe_Total) AS Total
+     FROM CM_Clientes c
+     JOIN FT_Facturas_C fc ON fc.Cve_Cliente = c.Cve_Cliente
+     WHERE fc.Status <> 'C'
+       AND c.Razon_Social LIKE '%palabra1%' OR c.Razon_Social LIKE '%palabra2%'
+     GROUP BY c.Razon_Social
+
+  2. Ventas por prescripción (ventas a clientes asignados al médico vía Cve_Ruta):
+     SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Prescrito
+     FROM FT_Facturas_C fc
+     JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
+     JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
+     WHERE fc.Status <> 'C'
+       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
+       AND m.Nombre LIKE '%nombre_medico%'
+     GROUP BY m.Cve_Medico, m.Nombre
+
+  ⚠ Cve_Ruta = 1 es el registro "SIN MEDICO" (placeholder) — SIEMPRE excluirlo con AND c.Cve_Ruta <> 1
+  ⚠ Si no se especifica, reportar los DOS tipos en tablas separadas con su etiqueta.
+  ⚠ NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
+
+RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
+  SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Prescrito
+  FROM FT_Facturas_C fc
+  JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
+  JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
+  WHERE fc.Status <> 'C'
+    AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
+  [AND fc.Fecha_Documento BETWEEN ... AND ...]
+  GROUP BY m.Cve_Medico, m.Nombre
+  ORDER BY Total_Prescrito DESC
 
 FORMATO ADICIONAL MÉDICOS:
+  · ⚠ NUNCA mostrar Cve_Medico — es código interno. En resultados: SOLO m.Nombre, NUNCA m.Cve_Medico.
   · ⚠ para duplicados confirmados · Agrupar por vendedor cuando sea relevante
 """
 

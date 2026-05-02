@@ -41,7 +41,7 @@ function mostrarAvisoDispositivo() {
   const esStudio   = window.location.hostname.startsWith('studio');
   const clave      = `device_warning_${esStudio ? 'studio' : 'pwa'}_dismissed`;
 
-  if (sessionStorage.getItem(clave)) return;
+  if (localStorage.getItem(clave)) return;
 
   const debeAvisar = esStudio ? esMovil : !esMovil;
   if (!debeAvisar) return;
@@ -61,7 +61,7 @@ function mostrarAvisoDispositivo() {
     <button class="dw-close" aria-label="Cerrar">✕</button>
   `;
   banner.querySelector('.dw-close').addEventListener('click', () => {
-    sessionStorage.setItem(clave, '1');
+    localStorage.setItem(clave, '1');
     banner.remove();
   });
   document.body.appendChild(banner);
@@ -486,14 +486,122 @@ async function cargarStockSucursal(cve, detalle) {
 // ── IA Flash — panel compartido ──────────────────────────────────────────────
 (function _initIAPanel() {
   function cerrarIAPanel() {
+    if (_ttsAudio && !_ttsAudio.paused) { _ttsAudio.pause(); _ttsAudio.currentTime = 0; }
+    const btn = document.getElementById('ia-panel-tts');
+    if (btn) btn.textContent = '🔊';
     document.getElementById('ia-panel').classList.add('hidden');
     document.getElementById('ia-overlay').classList.add('hidden');
   }
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('ia-panel-close').addEventListener('click', cerrarIAPanel);
     document.getElementById('ia-overlay').addEventListener('click', cerrarIAPanel);
+    document.getElementById('ia-panel-tts').addEventListener('click', toggleTTS);
   });
 })();
+
+// ── TTS — leer reporte en voz alta (OpenAI) ──────────────────────────────────
+// Cache TTS: blob URLs en memoria + base64 en localStorage (persiste al recargar,
+// se limpia al cerrar la pestaña/app). Máximo 3 audios guardados.
+const _ttsCache  = new Map();   // texto → blob URL (sesión actual)
+const _TTS_SS    = 'tts_cache'; // clave en localStorage
+const _TTS_MAX   = 3;
+let   _ttsAudio  = null;
+
+function _ttsCargaSession() {
+  // Restaurar audios de localStorage como blob URLs al iniciar
+  try {
+    const guardado = JSON.parse(localStorage.getItem(_TTS_SS) || '{}');
+    for (const [texto, b64] of Object.entries(guardado)) {
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob  = new Blob([bytes], { type: 'audio/mpeg' });
+      _ttsCache.set(texto, URL.createObjectURL(blob));
+    }
+  } catch { /* localStorage vacío o corrupto — ignorar */ }
+}
+
+function _ttsGuardaSession() {
+  // Serializar los últimos _TTS_MAX audios a base64 en localStorage
+  try {
+    const entradas = [..._ttsCache.entries()].slice(-_TTS_MAX);
+    const promesas = entradas.map(async ([texto, url]) => {
+      const buf = await fetch(url).then(r => r.arrayBuffer());
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      return [texto, b64];
+    });
+    Promise.all(promesas).then(pares => {
+      localStorage.setItem(_TTS_SS, JSON.stringify(Object.fromEntries(pares)));
+    });
+  } catch { /* quota excedida — ignorar */ }
+}
+
+document.addEventListener('DOMContentLoaded', _ttsCargaSession);
+
+async function toggleTTS() {
+  const btn = document.getElementById('ia-panel-tts');
+
+  if (_ttsAudio && !_ttsAudio.paused) {
+    _ttsAudio.pause();
+    _ttsAudio.currentTime = 0;
+    btn.textContent = '🔊';
+    return;
+  }
+
+  const texto = document.getElementById('ia-panel-texto').textContent.trim();
+  if (!texto) return;
+
+  if (_ttsCache.has(texto)) {
+    _ttsAudio = new Audio(_ttsCache.get(texto));
+    _ttsAudio.onended = () => { btn.textContent = '🔊'; };
+    _ttsAudio.play();
+    btn.textContent = '⏹';
+    return;
+  }
+
+  btn.textContent = '⏳';
+  btn.disabled = true;
+
+  try {
+    const token = getToken();
+    const res = await fetch('/api/ia/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ texto }),
+    });
+    if (!res.ok) throw new Error('Error TTS');
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+
+    // Mantener máximo _TTS_MAX entradas — eliminar la más antigua si se pasa
+    if (_ttsCache.size >= _TTS_MAX) {
+      const [primerTexto, primerUrl] = _ttsCache.entries().next().value;
+      URL.revokeObjectURL(primerUrl);
+      _ttsCache.delete(primerTexto);
+    }
+    _ttsCache.set(texto, url);
+    _ttsGuardaSession();
+
+    _ttsAudio = new Audio(url);
+    _ttsAudio.onended = () => { btn.textContent = '🔊'; };
+    _ttsAudio.play();
+    btn.textContent = '⏹';
+  } catch {
+    btn.textContent = '🔊';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function _invalidarTTSCache(texto) {
+  if (_ttsCache.has(texto)) {
+    URL.revokeObjectURL(_ttsCache.get(texto));
+    _ttsCache.delete(texto);
+    try {
+      const guardado = JSON.parse(localStorage.getItem(_TTS_SS) || '{}');
+      delete guardado[texto];
+      localStorage.setItem(_TTS_SS, JSON.stringify(guardado));
+    } catch { /* ignorar */ }
+  }
+}
 
 function _abrirIAPanel(titulo) {
   document.getElementById('ia-panel-titulo').textContent = titulo;
@@ -522,7 +630,10 @@ function _mostrarIATexto(texto, opcionActualizar) {
     btn.id        = 'ia-panel-actualizar';
     btn.className = 'ia-panel-actualizar-btn';
     btn.textContent = '🔄 Actualizar (consume 1 consulta)';
-    btn.onclick   = opcionActualizar;
+    btn.onclick   = () => {
+      _invalidarTTSCache(texto);  // liberar audio anterior antes de regenerar
+      opcionActualizar();
+    };
     el.after(btn);
   }
 }
@@ -722,7 +833,7 @@ function expandirTabla(id) {
   });
 })();
 
-function appendBubble(text, role) {
+function appendBubble(text, role, jobId = null) {
   const messages = document.getElementById('chat-messages');
   const wrap     = document.createElement('div');
   wrap.className = `chat-bubble chat-bubble-${role === 'user' ? 'user' : 'bot'}`;
@@ -731,8 +842,31 @@ function appendBubble(text, role) {
   content.innerHTML = renderMarkdown(text);
   wrap.appendChild(content);
 
+  if (role === 'bot' && jobId) {
+    const fb = document.createElement('div');
+    fb.className = 'chat-feedback';
+    fb.innerHTML = `
+      <button title="Respuesta correcta" onclick="enviarFeedback(this, ${jobId}, 'positivo')">👍</button>
+      <button title="Respuesta incorrecta" onclick="enviarFeedback(this, ${jobId}, 'negativo')">👎</button>
+    `;
+    wrap.appendChild(fb);
+  }
+
   messages.appendChild(wrap);
   messages.scrollTop = messages.scrollHeight;
+}
+
+async function enviarFeedback(btn, jobId, tipo) {
+  const barra = btn.closest('.chat-feedback');
+  barra.querySelectorAll('button').forEach(b => b.classList.remove('activo', 'activo-positivo', 'activo-negativo'));
+  btn.classList.add('activo', tipo === 'positivo' ? 'activo-positivo' : 'activo-negativo');
+  try {
+    await authFetch('/api/chat/feedback', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ job_id: jobId, tipo }),
+    });
+  } catch { /* silencioso — el feedback es best-effort */ }
 }
 
 function showTyping() {
@@ -784,7 +918,7 @@ async function enviarMensaje() {
     // Respuesta instantánea (saludo / capacidades) — no hace falta polling
     if (data.estado === 'done') {
       hideTyping();
-      appendBubble(data.respuesta, 'bot');
+      appendBubble(data.respuesta, 'bot', data.job_id || null);
       return;
     }
 
@@ -815,7 +949,7 @@ async function _pollJob(jobId) {
       const data = await res.json();
       if (data.estado === 'done' || data.estado === 'error') {
         hideTyping();
-        appendBubble(data.respuesta || 'Error al procesar. Intenta de nuevo.', 'bot');
+        appendBubble(data.respuesta || 'Error al procesar. Intenta de nuevo.', 'bot', jobId);
         localStorage.removeItem('chat_pending_job');
         return;
       }

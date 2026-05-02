@@ -14,7 +14,7 @@ TTL: 24 horas.
 """
 import hashlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from shared.database_local import fetch_one, execute
@@ -76,7 +76,7 @@ def get(especialista: str, pregunta: str) -> Optional[str]:
     if not row:
         return None
     creado = datetime.fromisoformat(row["creado_en"])
-    if datetime.utcnow() - creado > _TTL:
+    if datetime.now(timezone.utc).replace(tzinfo=None) - creado > _TTL:
         execute("DELETE FROM cache_agente WHERE clave = ?", (clave,))
         return None
     return row["respuesta"]
@@ -95,5 +95,5 @@ def set(especialista: str, pregunta: str, respuesta: str) -> None:
     execute(
         "INSERT OR REPLACE INTO cache_agente (clave, respuesta, creado_en) "
         "VALUES (?, ?, ?)",
-        (clave, respuesta, datetime.utcnow().isoformat()),
+        (clave, respuesta, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
     )
