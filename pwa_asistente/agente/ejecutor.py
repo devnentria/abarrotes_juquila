@@ -15,6 +15,7 @@ lanza ValueError antes de llegar al ERP.
 import re
 from shared.database import query as _query_erp
 from pwa_asistente.agente import sql_blacklist
+from pwa_asistente.agente import nombres_cache
 
 # Palabras clave que NUNCA deben llegar al ERP
 _PROHIBIDAS = re.compile(
@@ -87,7 +88,9 @@ def run(sql: str) -> list[dict]:
         raise ValueError("La consulta debe comenzar con SELECT.")
 
     try:
-        return _query_erp(limpio)
+        filas = _query_erp(limpio)
+        nombres_cache.registrar_desde_sql(limpio, filas)
+        return filas
     except Exception as e:
         # Si falla por columna inexistente, reconstruir la consulta sin ella y reintentar
         col_match = re.search(r"Invalid column name '(\w+)'", str(e))

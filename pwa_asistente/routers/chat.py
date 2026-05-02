@@ -16,6 +16,7 @@ Endpoints:
   POST   /api/chat/mensaje                  → Envía mensaje (respuesta síncrona)
   POST   /api/chat/mensaje/async            → Envía mensaje (procesamiento en background)
   GET    /api/chat/job/{id}                 → Consulta estado de un job async
+  POST   /api/chat/feedback                 → Registra feedback 👍/👎 de una respuesta
 """
 import json
 import re
@@ -31,6 +32,8 @@ from shared.auth import get_current_user
 from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director, loop_stream
+from pwa_asistente.agente import feedback as _feedback
+from pwa_asistente.agente import candidatas as _candidatas
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
 )
@@ -584,3 +587,46 @@ def obtener_job(job_id: int, usuario: dict = Depends(get_current_user)):
             job["respuesta"] = msg_error
 
     return JSONResponse(job)
+
+
+# ── Feedback ──────────────────────────────────────────────────────────────────
+
+class FeedbackBody(BaseModel):
+    job_id: int
+    tipo:   str  # 'positivo' | 'negativo'
+
+
+@router.post("/feedback")
+def registrar_feedback(body: FeedbackBody, usuario: dict = Depends(get_current_user)):
+    """
+    Registra feedback 👍/👎 del usuario sobre una respuesta del agente.
+    Recupera pregunta y respuesta del job para guardarlos junto al feedback.
+    """
+    if body.tipo not in ("positivo", "negativo"):
+        raise HTTPException(400, "tipo debe ser 'positivo' o 'negativo'")
+
+    job = fetch_one(
+        "SELECT pregunta, respuesta FROM chat_jobs WHERE id = ? AND usuario_id = ?",
+        (body.job_id, usuario["id"]),
+    )
+    if not job:
+        raise HTTPException(404, "Job no encontrado")
+
+    _feedback.registrar(
+        job_id=body.job_id,
+        tipo=body.tipo,
+        pregunta=job["pregunta"] or "",
+        respuesta=job["respuesta"] or "",
+    )
+    return JSONResponse({"ok": True})
+
+
+@router.get("/candidatas")
+def listar_candidatas(usuario: dict = Depends(get_current_user)):
+    """
+    Devuelve los patrones de preguntas más frecuentes que aún no tienen
+    función predefinida. Solo accesible para administradores Nentria.
+    """
+    if usuario.get("username") not in ("admin_nentria",):
+        raise HTTPException(403, "Acceso restringido")
+    return JSONResponse({"candidatas": _candidatas.top(20)})

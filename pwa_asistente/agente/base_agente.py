@@ -20,6 +20,9 @@ from datetime import date
 from pwa_asistente.agente import ejecutor
 from pwa_asistente.agente import cache_agente
 from pwa_asistente.agente import sql_blacklist
+from pwa_asistente.agente import nombres_cache
+from pwa_asistente.agente import feedback as _feedback
+from pwa_asistente.agente import candidatas
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -48,6 +51,9 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
     Returns:
         RespuestaIA: texto + tokens_prompt + tokens_completion
     """
+    # Registrar pregunta como candidata a función predefinida
+    candidatas.registrar(pregunta)
+
     # Caché solo para consultas históricas
     if cache_agente.es_historico(pregunta):
         cached = cache_agente.get(area, pregunta)
@@ -56,7 +62,13 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
 
     _fecha = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
     mensajes = [
-        {"role": "system", "content": system + f"\n\nFECHA ACTUAL: {_fecha}." + sql_blacklist.como_bloque_prompt()}
+        {"role": "system", "content": (
+            system
+            + f"\n\nFECHA ACTUAL: {_fecha}."
+            + sql_blacklist.como_bloque_prompt()
+            + nombres_cache.como_bloque_prompt()
+            + _feedback.como_bloque_prompt()
+        )}
     ]
     # Limitar historial a los últimos 20 mensajes para no exceder el contexto del modelo
     for msg in historial[-20:]:

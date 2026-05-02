@@ -13,3 +13,6 @@ logo_trasparente.png
 
 # Estado de runtime — no va al repo
 sql_blacklist.json
+nombres_cache.json
+feedback_respuestas.json
+candidatas_funciones.json
