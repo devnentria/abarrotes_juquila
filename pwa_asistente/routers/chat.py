@@ -22,7 +22,7 @@ import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -593,17 +593,12 @@ def obtener_job(job_id: int, usuario: dict = Depends(get_current_user)):
 
 class FeedbackBody(BaseModel):
     job_id: int
-    tipo:   str  # 'positivo' | 'negativo'
+    tipo:   Literal["positivo", "negativo"]
 
 
 @router.post("/feedback")
 def registrar_feedback(body: FeedbackBody, usuario: dict = Depends(get_current_user)):
-    """
-    Registra feedback 👍/👎 del usuario sobre una respuesta del agente.
-    Recupera pregunta y respuesta del job para guardarlos junto al feedback.
-    """
-    if body.tipo not in ("positivo", "negativo"):
-        raise HTTPException(400, "tipo debe ser 'positivo' o 'negativo'")
+    """Registra feedback 👍/👎 del usuario sobre una respuesta del agente."""
 
     job = fetch_one(
         "SELECT pregunta, respuesta FROM chat_jobs WHERE id = ? AND usuario_id = ?",

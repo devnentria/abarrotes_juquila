@@ -3,81 +3,79 @@
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/candidatas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.0
 # ============================================================
 """
 Detector de preguntas frecuentes candidatas a función predefinida.
 
-Cada pregunta que pasa por el agente dinámico se normaliza:
-  "¿cuánto vendió Violeta este mes?"  →  "cuánto vendió [vendedor] este mes"
-  "¿existencias de Ozempic en CDMX?" →  "existencias de [producto] en [sucursal]"
+Cada pregunta que pasa por el agente dinámico se normaliza eliminando
+nombres propios y períodos, dejando solo la estructura:
+  "¿cuánto vendió Violeta este mes?"  →  "cuánto vendió [nombre] [periodo]"
 
-Cuando un patrón llega a UMBRAL_CANDIDATA consultas, se registra en el log
-como candidata a convertirse en función predefinida.
+Cuando un patrón supera UMBRAL_CANDIDATA, se alerta en el log.
 
 Archivo de datos: candidatas_funciones.json (gitignoreado).
 """
-import json
 import re
 from datetime import datetime
 from pathlib import Path
+from pwa_asistente.agente._persistent import PersistentStore
 
-_ARCHIVO   = Path(__file__).parent / "candidatas_funciones.json"
-_datos: dict = {"patrones": {}}
+_store = PersistentStore(
+    "candidatas_funciones.json",
+    {"patrones": {}},
+    Path(__file__).parent,
+)
 
-UMBRAL_CANDIDATA = 10  # veces que debe aparecer para ser candidata
-
-
-def _cargar() -> None:
-    global _datos
-    if _ARCHIVO.exists():
-        try:
-            _datos = json.loads(_ARCHIVO.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-
-
-def _guardar() -> None:
-    _ARCHIVO.write_text(
-        json.dumps(_datos, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-_cargar()
+UMBRAL_CANDIDATA = 10
+_MAX_PATRONES    = 500  # Evita crecimiento infinito del dict en memoria
 
 # ── Normalización ─────────────────────────────────────────────────────────────
 
-# Tokens que se reemplazan por su placeholder genérico
 _SUSTITUCIONES = [
-    # Meses en español → [periodo]
+    # Meses → [periodo]  (antes del .lower())
     (re.compile(
         r'\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto'
         r'|septiembre|octubre|noviembre|diciembre)\b', re.IGNORECASE),
      '[periodo]'),
-    # Número + días/semanas/meses/años → [periodo]
+    # Número + unidad temporal → [periodo]
     (re.compile(r'\b\d+\s*(días?|semanas?|meses?|años?)\b', re.IGNORECASE), '[periodo]'),
     # Referencias temporales comunes → [periodo]
     (re.compile(
-        r'\b(este mes|mes actual|mes pasado|mes anterior|último mes'
-        r'|este año|año pasado|año anterior|hoy|ayer)\b', re.IGNORECASE),
+        r'\b(este\s+mes|mes\s+actual|mes\s+pasado|mes\s+anterior|[úu]ltimo\s+mes'
+        r'|este\s+a[ñn]o|a[ñn]o\s+pasado|a[ñn]o\s+anterior|hoy|ayer)\b',
+        re.IGNORECASE),
      '[periodo]'),
-    # Nombre propio seguido de mayúscula (productos, clientes, médicos) → placeholder
-    # Detecta palabras con mayúscula inicial que no son inicio de pregunta
-    (re.compile(r'(?<=[a-záéíóúñ\s])\b([A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ]{2,})\b'), '[nombre]'),
-    # Números solos → [numero]
-    (re.compile(r'\b\d+\b'), '[numero]'),
 ]
 
 _RE_PUNTUACION = re.compile(r'[¿?¡!.,;:]')
+# Detectar nombre propio: palabra con mayúscula inicial de 3+ chars
+# Se aplica ANTES de .lower() para que funcione correctamente
+_RE_NOMBRE_PROPIO = re.compile(r'\b[A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ]{2,}\b')
+# Palabras comunes en mayúscula al inicio de oración que NO son nombres propios
+_PALABRAS_COMUNES = frozenset({
+    'cuánto', 'cuántos', 'cuántas', 'cuál', 'cuáles', 'qué', 'quién',
+    'quiénes', 'cómo', 'dónde', 'cuándo', 'hay', 'son', 'está', 'están',
+    'tiene', 'tienen', 'hay', 'dime', 'dame', 'muéstrame', 'lista',
+})
 
 
 def _normalizar(pregunta: str) -> str:
-    """Convierte una pregunta concreta en un patrón genérico."""
-    txt = _RE_PUNTUACION.sub('', pregunta.strip().lower())
+    txt = _RE_PUNTUACION.sub('', pregunta.strip())
+    # Sustituir períodos (antes de bajar a minúsculas)
     for patron, reemplazo in _SUSTITUCIONES:
         txt = patron.sub(reemplazo, txt)
-    # Colapsar espacios y placeholders repetidos
+    # Sustituir nombres propios (antes de bajar a minúsculas)
+    def _reemplazar_nombre(m: re.Match) -> str:
+        palabra = m.group(0)
+        if palabra.lower() in _PALABRAS_COMUNES:
+            return palabra
+        return '[nombre]'
+    txt = _RE_NOMBRE_PROPIO.sub(_reemplazar_nombre, txt)
+    txt = txt.lower()
+    # Colapsar placeholders repetidos y espacios
     txt = re.sub(r'\[nombre\](\s+\[nombre\])+', '[nombre]', txt)
+    txt = re.sub(r'\[periodo\](\s+\[periodo\])+', '[periodo]', txt)
     txt = re.sub(r'\s+', ' ', txt).strip()
     return txt
 
@@ -86,25 +84,27 @@ def _normalizar(pregunta: str) -> str:
 
 def registrar(pregunta: str) -> None:
     """
-    Registra una pregunta que llegó al agente dinámico (no predefinida).
-    Incrementa el contador del patrón normalizado y alerta si supera el umbral.
-
-    Args:
-        pregunta (str): Mensaje original del usuario.
+    Registra una pregunta que llegó al agente dinámico.
+    Debe llamarse DESPUÉS del cache check para no desperdiciar trabajo.
     """
     patron = _normalizar(pregunta)
     if len(patron) < 10:
-        return  # Ignorar preguntas muy cortas o saludos
+        return
 
-    ahora = datetime.now().strftime("%Y-%m-%d %H:%M")
+    patrones = _store.datos["patrones"]
+    ahora    = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    if patron not in _datos["patrones"]:
-        _datos["patrones"][patron] = {"count": 0, "ejemplo": pregunta, "ultima_vez": ahora}
+    if patron not in patrones:
+        # Si ya llegamos al límite, descartar el patrón menos frecuente
+        if len(patrones) >= _MAX_PATRONES:
+            min_key = min(patrones, key=lambda k: patrones[k]["count"])
+            del patrones[min_key]
+        patrones[patron] = {"count": 0, "ejemplo": pregunta, "ultima_vez": ahora}
 
-    entrada = _datos["patrones"][patron]
+    entrada = patrones[patron]
     entrada["count"]     += 1
     entrada["ultima_vez"] = ahora
-    _guardar()
+    _store.guardar()
 
     count = entrada["count"]
     if count == UMBRAL_CANDIDATA or (count > UMBRAL_CANDIDATA and count % 10 == 0):
@@ -116,21 +116,9 @@ def registrar(pregunta: str) -> None:
 
 
 def top(n: int = 10) -> list[dict]:
-    """
-    Devuelve los N patrones más frecuentes, ordenados por count desc.
-
-    Args:
-        n (int): Cantidad de patrones a devolver.
-
-    Returns:
-        list[dict]: Lista de {patron, count, ejemplo, ultima_vez}.
-    """
     ordenados = sorted(
-        _datos["patrones"].items(),
+        _store.datos["patrones"].items(),
         key=lambda x: x[1]["count"],
         reverse=True,
     )
-    return [
-        {"patron": k, **v}
-        for k, v in ordenados[:n]
-    ]
+    return [{"patron": k, **v} for k, v in ordenados[:n]]

@@ -3,76 +3,48 @@
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/feedback.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.0
 # ============================================================
 """
 Registro persistente de feedback del usuario (👍 / 👎).
 
-Cuando el usuario marca una respuesta como incorrecta se guarda
-la pregunta y la respuesta para inyectarlos en el system prompt
-como ejemplos negativos — el agente aprende qué evitar.
+Los negativos se inyectan en el system prompt como ejemplos a evitar.
+Se mantiene un máximo de MAX_REGISTROS entradas para evitar crecimiento infinito.
 
 Archivo de datos: feedback_respuestas.json (gitignoreado).
 """
-import json
 from datetime import datetime
 from pathlib import Path
+from pwa_asistente.agente._persistent import PersistentStore
 
-_ARCHIVO = Path(__file__).parent / "feedback_respuestas.json"
-_datos: list = []
+_store = PersistentStore(
+    "feedback_respuestas.json",
+    [],
+    Path(__file__).parent,
+)
 
-# Cuántos negativos recientes inyectar en el prompt (los más recientes)
 _MAX_NEGATIVOS_PROMPT = 5
+_MAX_REGISTROS        = 200  # Evita crecimiento infinito en memoria y disco
 
-
-def _cargar() -> None:
-    global _datos
-    if _ARCHIVO.exists():
-        try:
-            _datos = json.loads(_ARCHIVO.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-
-
-def _guardar() -> None:
-    _ARCHIVO.write_text(
-        json.dumps(_datos, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-_cargar()
-
-
-# ── API pública ───────────────────────────────────────────────────────────────
 
 def registrar(job_id: int, tipo: str, pregunta: str, respuesta: str) -> None:
-    """
-    Guarda el feedback del usuario.
-
-    Args:
-        job_id   (int): ID del job asociado a la respuesta.
-        tipo     (str): 'positivo' o 'negativo'.
-        pregunta (str): Pregunta original del usuario.
-        respuesta(str): Respuesta que generó el agente.
-    """
     entrada = {
         "job_id":    job_id,
         "tipo":      tipo,
         "pregunta":  pregunta,
-        "respuesta": respuesta[:500],  # Truncar para no inflar el prompt
+        "respuesta": respuesta[:500],
         "fecha":     datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-    _datos.append(entrada)
-    _guardar()
+    _store.datos.append(entrada)
+    # Mantener solo los últimos MAX_REGISTROS
+    if len(_store.datos) > _MAX_REGISTROS:
+        _store.datos[:] = _store.datos[-_MAX_REGISTROS:]
+    _store.guardar()
     print(f"[feedback] {tipo.upper()} registrado — job {job_id}", flush=True)
 
 
 def como_bloque_prompt() -> str:
-    """
-    Devuelve texto con los últimos negativos para inyectar en el system prompt.
-    Retorna cadena vacía si no hay negativos.
-    """
-    negativos = [e for e in _datos if e.get("tipo") == "negativo"]
+    negativos = [e for e in _store.datos if e.get("tipo") == "negativo"]
     if not negativos:
         return ""
 

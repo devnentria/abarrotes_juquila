@@ -51,14 +51,14 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
     Returns:
         RespuestaIA: texto + tokens_prompt + tokens_completion
     """
-    # Registrar pregunta como candidata a función predefinida
-    candidatas.registrar(pregunta)
-
     # Caché solo para consultas históricas
     if cache_agente.es_historico(pregunta):
         cached = cache_agente.get(area, pregunta)
         if cached:
             return RespuestaIA(texto=cached, tokens_prompt=0, tokens_completion=0)
+
+    # Registrar candidata solo si no fue cache hit
+    candidatas.registrar(pregunta)
 
     _fecha = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
     mensajes = [
