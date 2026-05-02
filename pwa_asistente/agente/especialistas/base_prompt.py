@@ -113,7 +113,9 @@ BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, ven
 
 REGLAS_SQL = """
 REGLAS SQL — SIEMPRE APLICAR:
-  - TOP 20 máximo por consulta — EXCEPCIÓN: para stock crítico/caducidades/existencias usar TOP 200
+  - TOP 20 máximo por consulta — EXCEPCIÓN: para caducidades/existencias por sucursal usar TOP 100
+  - Stock crítico (≤5 piezas): filtrar Existencia > 0 AND Existencia <= 5 (no incluir ceros en esta tabla)
+    Productos con Existencia = 0 reportarlos en sección separada con TOP 20 ORDER BY p.Descripcion
   - Filtrar siempre: Status <> 'C' en facturas · Cve_Sucursal <> 99 en sucursales
   - Si una consulta falla, simplificarla y reintentarla de inmediato — nunca preguntar al usuario
   - Meses en consultas: usar DATENAME(MONTH, fecha) para mostrar "Enero", "Febrero", etc. — nunca números
