@@ -115,9 +115,13 @@ REGLAS SQL — SIEMPRE APLICAR:
   - TOP 20 máximo por consulta — EXCEPCIÓN: para caducidades/existencias por sucursal usar TOP 100
   - Stock crítico (≤5 piezas): filtrar Existencia > 0 AND Existencia <= 5 (no incluir ceros en esta tabla)
     Productos con Existencia = 0 reportarlos en sección separada con TOP 20 ORDER BY p.Descripcion
-  - Filtrar siempre: Status <> 'C' en facturas · Cve_Sucursal <> 99 en sucursales
+  - Filtrar siempre: fc.Status <> 'C' en facturas · fc.Cve_Sucursal <> 99 en TODA query que toque FT_Facturas_C
   - Si una consulta falla, simplificarla y reintentarla de inmediato — nunca preguntar al usuario
   - Meses en consultas: usar DATENAME(MONTH, fecha) para mostrar "Enero", "Febrero", etc. — nunca números
+  - FILTRO DE MES — REGLA CRÍTICA: SIEMPRE combinar AÑO + MES. NUNCA filtrar solo por mes.
+      ✅ CORRECTO:   YEAR(fc.Fecha_Documento) = 2026 AND MONTH(fc.Fecha_Documento) = 1
+      ⛔ INCORRECTO: MONTH(fc.Fecha_Documento) = 1   ← suma todos los años, resultado INCORRECTO
+    El año siempre es el que indica FECHA ACTUAL del system prompt, salvo que el usuario especifique otro.
   - Fecha_Documento SOLO existe en FT_Facturas_C (fc) — NUNCA en FT_Facturas_D (fd).
     Para filtrar por fecha en queries con JOIN FT_Facturas_D: usar SIEMPRE fc.Fecha_Documento, nunca fd.Fecha_Documento.
   - NUNCA calcules totales ni porcentajes manualmente — obtener todo desde la BD:
