@@ -47,19 +47,23 @@ def sucursales():
             COALESCE(SUM(CASE
                 WHEN YEAR(fc.Fecha_Documento)  = YEAR({hoy()})
                  AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})
-                THEN fc.Importe_Total END), 0)                              AS ventas_mes,
-            COUNT(CASE
+                THEN fd.Importe_Neto END), 0)                              AS ventas_mes,
+            COUNT(DISTINCT CASE
                 WHEN YEAR(fc.Fecha_Documento)  = YEAR({hoy()})
                  AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})
-                THEN 1 END)                                                 AS facturas_mes,
+                THEN fc.Cve_Folio END)                                     AS facturas_mes,
             COALESCE(SUM(CASE
                 WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
                  AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
                  AND DAY(fc.Fecha_Documento)  <= DAY({hoy()})
-                THEN fc.Importe_Total END), 0)                              AS ventas_mes_anterior
+                THEN fd.Importe_Neto END), 0)                              AS ventas_mes_anterior
         FROM GN_Sucursales s
         LEFT JOIN FT_Facturas_C fc
                ON fc.Cve_Sucursal = s.Cve_Sucursal AND fc.Status <> 'C'
+        LEFT JOIN FT_Facturas_D fd
+               ON fd.Cve_Folio      = fc.Cve_Folio
+              AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+              AND fd.Cve_Movimiento = fc.Cve_Movimiento
         WHERE s.Cve_Sucursal <> 99
         GROUP BY s.Cve_Sucursal, s.Nombre
         ORDER BY ventas_mes DESC
@@ -285,12 +289,16 @@ def sucursal_resumen(cve_sucursal: int):
     """
     ventas_ayer = query(f"""
         SELECT
-            COUNT(*)                        AS total_facturas,
-            COALESCE(SUM(Importe_Total), 0) AS importe_total
-        FROM FT_Facturas_C
-        WHERE Cve_Sucursal = ?
-          AND Status      <> 'C'
-          AND CAST(Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+            COUNT(DISTINCT fc.Cve_Folio)    AS total_facturas,
+            COALESCE(SUM(fd.Importe_Neto), 0) AS importe_total
+        FROM FT_Facturas_C fc
+        JOIN FT_Facturas_D fd
+          ON fd.Cve_Folio      = fc.Cve_Folio
+         AND fd.Cve_Sucursal   = fc.Cve_Sucursal
+         AND fd.Cve_Movimiento = fc.Cve_Movimiento
+        WHERE fc.Cve_Sucursal = ?
+          AND fc.Status      <> 'C'
+          AND CAST(fc.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
     """, (cve_sucursal,))
 
     top_productos = query(f"""
