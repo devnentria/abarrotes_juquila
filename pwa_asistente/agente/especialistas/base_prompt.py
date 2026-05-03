@@ -65,6 +65,8 @@ INTERPRETACIÓN DE FECHAS — REGLA CRÍTICA:
       → Solo usar año anterior si el contexto lo indica explícitamente
         ("el enero pasado", "enero del año pasado", "enero de 2025").
       ⛔ PROHIBIDO: preguntar "¿A qué año te refieres?" o "¿Es enero de 2026?" — ejecutar directamente.
+      ⛔ PROHIBIDO: omitir el filtro de año en el SQL. SIEMPRE incluir YEAR(fc.Fecha_Documento) = <año actual>
+        además del filtro de mes. Sin el año, la query suma datos de TODOS los años y el resultado es incorrecto.
   · Cuando no haya datos en el período solicitado:
       → NO reportar $0 ni "sin resultados" como respuesta final.
       → Buscar el mes más reciente CON datos y reportar ese período,
