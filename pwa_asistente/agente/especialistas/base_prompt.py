@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/base_prompt.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.0
 # ============================================================
 """
 Bloques base compartidos por todos los agentes especialistas.

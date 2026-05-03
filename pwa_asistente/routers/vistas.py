@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente
 # Archivo  : routers/vistas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.0
 # ============================================================
 """
 Router de datos — PWA Asistente.
