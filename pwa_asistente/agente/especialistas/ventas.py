@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.2.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -118,11 +118,12 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
   ⚠ Existen ~124 facturas de clientes con Cve_Ruta = 0/NULL (sin médico asignado) — son válidas pero no se atribuyen a ningún médico.
 
   Consulta estándar (ranking o total por médico):
-    SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Ventas
+    SELECT m.Nombre AS Medico, SUM(fd.Importe_Neto) AS Total_Ventas
     FROM FT_Facturas_C fc
+    JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
     JOIN CM_Clientes c  ON c.Cve_Cliente = fc.Cve_Cliente
     JOIN GC_Medicos m   ON m.Cve_Medico  = c.Cve_Ruta
-    WHERE fc.Status <> 'C'
+    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
     [AND fc.Fecha_Documento BETWEEN ... AND ...]
     GROUP BY m.Cve_Medico, m.Nombre
@@ -130,11 +131,12 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
 
   Consulta de un médico específico (detalle por mes):
     SELECT DATENAME(MONTH, fc.Fecha_Documento) AS Mes, YEAR(fc.Fecha_Documento) AS Año,
-           SUM(fc.Importe_Total) AS Total
+           SUM(fd.Importe_Neto) AS Total
     FROM FT_Facturas_C fc
+    JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
     JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
     JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-    WHERE fc.Status <> 'C'
+    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
       AND m.Nombre LIKE '%nombre_medico%'
     GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
@@ -144,9 +146,12 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
   ⚠ NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
   ⚠ NUNCA sustituir por vendedores.
 
-TOTALES DE VENTA:
-  · Por sucursal/período/ranking: SUM(fc.Importe_Total) FROM FT_Facturas_C
-  · Por producto: SUM(fd.Importe_Neto) FROM FT_Facturas_D JOIN FT_Facturas_C
+TOTALES DE VENTA — REGLA CRÍTICA (para que los números coincidan con el dashboard, sin IVA):
+  ⚠ SIEMPRE usar SUM(fd.Importe_Neto) de FT_Facturas_D para cualquier total de ventas — período, sucursal, ranking o producto.
+  ⚠ NUNCA usar fc.Importe_Total de FT_Facturas_C — ese campo incluye IVA y no coincide con el reporte de ventas.
+  ⚠ SIEMPRE filtrar fc.Cve_Sucursal <> 99 en la query aunque no haya JOIN a GN_Sucursales.
+  · Para todo total de ventas: JOIN FT_Facturas_C fc + FT_Facturas_D fd, luego SUM(fd.Importe_Neto)
+    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
   · NO filtrar por Cve_Movimiento salvo que se pida explícitamente
 
 MARGEN BRUTO — CÁLCULO OBLIGATORIO:
@@ -173,10 +178,11 @@ CONSULTA DE VENDEDOR ESPECÍFICO — OBLIGATORIO cuando se mencione un nombre de
   1. Buscar en GC_Vendedores WHERE Nombre LIKE '%nombre%' para encontrar al vendedor
   2. Si se piden sus ventas por mes:
      SELECT DATENAME(MONTH, fc.Fecha_Documento) AS Mes, YEAR(fc.Fecha_Documento) AS Año,
-     SUM(fc.Importe_Total) AS Total
+     SUM(fd.Importe_Neto) AS Total
      FROM FT_Facturas_C fc
+     JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
      JOIN GC_Vendedores v ON v.Cve_Vendedor = fc.Cve_Vendedor
-     WHERE v.Nombre LIKE '%Violeta%' AND fc.Status <> 'C'
+     WHERE v.Nombre LIKE '%Violeta%' AND fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
      GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
      ORDER BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento)
   3. Si se piden médicos relacionados: usar EXACTAMENTE esta consulta (sin agregar ventas):
