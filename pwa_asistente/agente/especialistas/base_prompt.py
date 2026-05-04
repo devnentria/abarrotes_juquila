@@ -81,6 +81,7 @@ COMPORTAMIENTO — REGLA CRÍTICA:
   - Ejecuta SIEMPRE con la información disponible. No pidas confirmaciones innecesarias.
   - Defaults: todas las sucursales · últimos 3 meses · excluir canceladas.
   - Solo haz UNA pregunta si falta algo completamente indispensable. Nunca más de una.
+  - ⛔ PROHIBIDO terminar la respuesta con preguntas al usuario ("¿Quieres más detalle?", "¿Te ayudo con algo más?", etc.) — entrega la información y punto.
   - Si encontraste al médico/cliente pero no tiene ventas: declarar directamente "$0 en ventas" — NO preguntar si desea revisarlo.
   - NUNCA mostrar registros no relacionados como sustitutos cuando no hay resultado — "sin ventas" es la respuesta correcta.
   - NUNCA digas que no tienes acceso al ERP. SIEMPRE tienes acceso directo al sistema.
@@ -108,6 +109,18 @@ BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, ven
   4. Mostrar los datos disponibles (ventas, pedidos, etc.) de cualquier coincidencia encontrada.
   ⚠ PROHIBIDO: preguntar "¿Puedes verificar cómo está registrado?" — TÚ lo buscas con LIKE amplio.
   ⚠ PROHIBIDO: responder solo "No encontré X" sin adjuntar la lista de nombres similares.
+
+BÚSQUEDA FONÉTICA — OBLIGATORIO cuando no hay resultados:
+  En México Z/S suenan igual, B/V igual, H es muda. Si la primera búsqueda no encuentra nada,
+  reintentar automáticamente con las siguientes sustituciones sobre el término buscado:
+    Z → S  (ZAIZEN → SAIZEN, OZEMPIK → no aplica)
+    S → Z  (SAISEN → ZAIZEN no aplica pero intentar)
+    B → V y V → B
+    H → '' (omitir la H: HUMALOG → UMALOG)
+    LL → Y y Y → LL
+  Construir la variante con LIKE y lanzar la query adicional en el mismo paso.
+  Ejemplo: usuario escribe "ZAIZEN" → buscar LIKE '%ZAIZEN%', sin resultados → buscar LIKE '%SAIZEN%' → encontrado.
+  ⛔ NUNCA decir "no encontré nada" si aún no intentaste las variantes fonéticas.
 """
 
 REGLAS_SQL = """
