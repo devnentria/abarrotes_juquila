@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/clientes.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.1.0
 # ============================================================
 """
 Agente Especialista — Clientes.
@@ -37,16 +37,26 @@ TERMINOLOGÍA OBLIGATORIA:
   · NUNCA escribir "el cliente realizó X compras" → escribir "se registraron X ventas al cliente".
   · NUNCA "historial de compras" → "historial de ventas" o "facturas al cliente".
 
-ANÁLISIS ÚTILES DE CLIENTES:
-  · Top clientes por monto de ventas en un período
-  · Clientes inactivos: LEFT JOIN con FT_Facturas_C buscando última fecha lejana o NULL
-  · Productos más vendidos a un cliente: GROUP BY Cve_Producto ORDER BY SUM(Cantidad) DESC
-  · Clientes por vendedor asignado: JOIN CM_Clientes con GC_Vendedores
-  · Frecuencia de visita/venta: COUNT(DISTINCT Cve_Folio) por cliente en el período
+TOTALES DE VENTA — REGLA CRÍTICA:
+  · SIEMPRE usar SUM(fd.Importe_Neto) de FT_Facturas_D para totales de venta.
+  · NUNCA usar fc.Importe_Total de FT_Facturas_C — incluye IVA y no coincide con los reportes.
+  · JOIN obligatorio: FT_Facturas_C fc + FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
 
-BÚSQUEDA DE CLIENTE POR NOMBRE:
-  Usar CM_Clientes.Razon_Social LIKE '%nombre%'
-  Si no hay resultado exacto: buscar por palabras individuales y listar similares.
+BÚSQUEDA DE CLIENTE POR NOMBRE — PROTOCOLO DE PARADA:
+  1. Buscar exacto: CM_Clientes WHERE Razon_Social LIKE '%nombre_completo%'
+  2. Si no hay resultado: buscar por palabras individuales LIKE '%palabra1%' OR LIKE '%palabra2%'
+  3. Mostrar la lista de nombres similares encontrados.
+  ⛔ PARAR AQUÍ — NO buscar ventas de los clientes similares si no se pidió.
+  ⛔ NUNCA hacer queries adicionales después de mostrar la lista de similares.
+  ⛔ NUNCA buscar ventas de clientes que el usuario no confirmó como el correcto.
+  La respuesta correcta es: "No existe [nombre]. Clientes similares: [lista]."
+
+ANÁLISIS ÚTILES DE CLIENTES:
+  · Top clientes por monto: SUM(fd.Importe_Neto) con JOIN a FT_Facturas_D
+  · Clientes inactivos: LEFT JOIN con FT_Facturas_C buscando última fecha lejana o NULL
+  · Productos más vendidos a un cliente: JOIN FT_Facturas_D GROUP BY Cve_Producto ORDER BY SUM(fd.Cantidad) DESC
+  · Clientes por vendedor: JOIN CM_Clientes con GC_Vendedores
+  · Frecuencia: COUNT(DISTINCT fc.Cve_Folio) por cliente en el período
 """
 
 _SYSTEM = build(
