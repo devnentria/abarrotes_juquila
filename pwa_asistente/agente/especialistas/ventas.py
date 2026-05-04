@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.2.0
+# Versión  : 2.3.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -201,6 +201,25 @@ DETALLE DE VENTAS POR CLIENTE — OBLIGATORIO:
     Fecha | Importe | Vendedor
   · Incluir fila TOTAL al final con ROLLUP
   · NUNCA responder solo con un número total sin la tabla de detalle
+
+VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
+  Cuando la pregunta menciona un producto (ej: "ventas de Omnitrope 10 mg enero 2026",
+  "cuánto vendimos de Norditropin", "Saizen en marzo"):
+  ⛔ NUNCA devolver ventas totales del período sin filtrar por producto.
+  ⛔ NUNCA omitir el JOIN a IM_Productos_Gral ni el filtro AND p.Descripcion LIKE '%nombre%'.
+  ✅ SIEMPRE hacer JOIN a FT_Facturas_D fd → IM_Productos_Gral p y filtrar por p.Descripcion.
+
+  Consulta estándar para ventas de un producto en un período:
+    SELECT p.Descripcion, SUM(fd.Importe_Neto) AS Total, SUM(fd.Cantidad) AS Piezas,
+           COUNT(DISTINCT fc.Cve_Folio) AS Facturas
+    FROM FT_Facturas_C fc
+    JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=fd.Cve_Producto
+    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+      AND p.Descripcion LIKE '%Omnitrope 10%'
+      AND YEAR(fc.Fecha_Documento)=2026 AND MONTH(fc.Fecha_Documento)=1
+    GROUP BY p.Descripcion
+    ORDER BY Total DESC
 """
 
 _SYSTEM = build(
