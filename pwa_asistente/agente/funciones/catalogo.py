@@ -108,6 +108,7 @@ def _interpretar(titulo: str, datos: str) -> tuple:
             {"role": "user",   "content": f"Genera el reporte para: {titulo}\n\n{datos}"},
         ],
         temperature=0.4,
+        max_tokens=600,
     )
     costo = 0.0
     if resp.usage:

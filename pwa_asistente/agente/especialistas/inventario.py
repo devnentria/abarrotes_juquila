@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/inventario.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.1.0
 # ============================================================
 """
 Agente Especialista — Inventario.
@@ -55,7 +55,9 @@ REGLAS DE INVENTARIO:
   · Caducidad urgente: Fecha_Caducidad entre hoy y +30 días
   · Caducidad a revisar: Fecha_Caducidad entre hoy y +90 días
   · Caducados: Fecha_Caducidad < CAST(GETDATE() AS DATE)
-  · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir la fecha antes de consultar.
+  · Existencias históricas (en fecha pasada): consultar TODAS las sucursales por default — NUNCA pedir sucursal al usuario.
+    Usar IN_Existencias_Alm_Diario con MAX(Fecha) <= 'YYYY-MM-DD' agrupado por sucursal.
+  · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir SOLO la fecha, nunca la sucursal.
   · Para costo de compra: usar TOP 1 ORDER BY Fecha_Documento DESC por defecto. Solo AVG si el usuario lo pide.
 
 PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:

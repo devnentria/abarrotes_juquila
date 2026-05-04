@@ -20,14 +20,20 @@ TABLAS DE PEDIDOS:
 
 FT_Pedidos_C — encabezado de pedidos
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Fecha_Documento (datetime), Importe_Total (decimal),
-  Cve_Cliente (int), Cve_Vendedor (varchar), Estatus (varchar)
+  Fecha_Documento (datetime), Cve_Cliente (int), Cve_Vendedor (varchar), Estatus (varchar)
   Estatus: 'AC'=activo/pendiente · 'TR'=transferido · 'CN'=cancelado
+  ⚠ NO existe Importe_Total en esta tabla — para importe usar FT_Pedidos_CN_D.PrecioNeto
 
-FT_Pedidos_D — detalle de pedidos
+FT_Pedidos_CN_D — detalle de pedidos (única tabla de detalle disponible)
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Cve_Producto (int), Cantidad (decimal), Precio (decimal)
+  Cve_Producto (int), Cantidad_Ordenada (decimal), Cantidad_Surtida (decimal),
+  Cantidad_Pendiente (decimal), Precio (decimal), PrecioNeto (decimal)
   JOIN con FT_Pedidos_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
+  ⚠ NUNCA usar FT_Pedidos_D — esa tabla NO EXISTE en esta base de datos
+
+VW_Pedidos_Total — vista con importe total por pedido
+  Cve_Sucursal, Cve_Folio, Cve_Movimiento_Pedido, Neto (decimal), Status
+  JOIN: vt.Cve_Folio=pc.Cve_Folio AND vt.Cve_Sucursal=pc.Cve_Sucursal AND vt.Cve_Movimiento_Pedido=pc.Cve_Movimiento
 """
 
 _REGLAS = """
