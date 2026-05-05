@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/pedidos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.2.0
 # ============================================================
 """
 Agente Especialista — Pedidos.
@@ -43,6 +43,25 @@ REGLAS DE PEDIDOS:
   · Antigüedad media (15-30 días): entre DATEADD(DAY,-30,...) y DATEADD(DAY,-15,...)
   · Pedidos del día: CAST(Fecha_Documento AS DATE) = CAST(GETDATE() AS DATE)
   · Priorizar reportar pedidos de más de 30 días — son los más urgentes.
+
+PEDIDOS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
+  Cuando la pregunta menciona un producto (ej: "pedidos de Omnitrope", "cuánto hay pedido de Saizen"):
+  ⛔ NUNCA devolver el total de pedidos sin filtrar por producto.
+  ✅ SIEMPRE hacer JOIN a IM_Productos_Gral p y filtrar: AND p.Descripcion LIKE '%nombre_producto%'
+
+  Consulta estándar para pedidos de un producto específico:
+    SELECT p.Descripcion, s.Nombre AS Sucursal,
+           SUM(pd.Cantidad_Pendiente) AS Piezas_Pendientes,
+           SUM(pd.PrecioNeto * pd.Cantidad_Pendiente) AS Importe_Pendiente
+    FROM FT_Pedidos_C pc
+    JOIN FT_Pedidos_CN_D pd ON pd.Cve_Folio=pc.Cve_Folio AND pd.Cve_Sucursal=pc.Cve_Sucursal AND pd.Cve_Movimiento=pc.Cve_Movimiento
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=pd.Cve_Producto
+    JOIN GN_Sucursales s ON s.Cve_Sucursal=pc.Cve_Sucursal
+    WHERE pc.Estatus='AC' AND pc.Cve_Sucursal <> 99
+      AND pd.Cantidad_Pendiente > 0
+      AND p.Descripcion LIKE '%nombre_producto%'
+    GROUP BY p.Descripcion, s.Nombre
+    ORDER BY Importe_Pendiente DESC
 
 FORMATO ADICIONAL PEDIDOS:
   · 🔴 para pedidos con más de 30 días · ⚠ para pedidos entre 15 y 30 días
