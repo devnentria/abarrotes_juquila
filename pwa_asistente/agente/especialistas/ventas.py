@@ -235,10 +235,15 @@ VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
     JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
     JOIN GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal
     WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
-      AND s.Nombre LIKE '%Puebla%'
-      AND CAST(fc.Fecha_Documento AS DATE) >= '2026-04-06'
-      AND CAST(fc.Fecha_Documento AS DATE) <= '2026-05-06'
+      AND s.Nombre LIKE '%nombre_sucursal%'
+      AND [filtro de período sobre fc.Fecha_Documento]
     GROUP BY s.Nombre
+
+  PROTOCOLO SI NO ENCUENTRA LA SUCURSAL:
+    1. Buscar con LIKE '%nombre%' — si hay coincidencia, usar esa sucursal.
+    2. Si no hay coincidencia: consultar SELECT Nombre FROM GN_Sucursales WHERE Cve_Sucursal <> 99
+       y mostrar la lista al usuario para que elija la correcta.
+    ⛔ NUNCA responder "no hay ventas" si la sucursal no existe — primero mostrar la lista disponible.
 """
 
 _SYSTEM = build(
