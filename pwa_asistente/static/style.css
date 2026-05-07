@@ -199,6 +199,47 @@ html, body {
 
 .section-title.mt { margin-top: 22px; }
 
+.periodo-toggle {
+  position: relative;
+  display: flex;
+  background: var(--border);
+  border-radius: 20px;
+  padding: 2px;
+  margin-left: auto;
+  gap: 0;
+}
+.periodo-slider {
+  position: absolute;
+  top: 2px; left: 2px;
+  height: calc(100% - 4px);
+  width: calc(50% - 2px);
+  background: #1a56db;
+  border-radius: 18px;
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  z-index: 0;
+  box-shadow: 0 1px 4px rgba(26,86,219,.3);
+}
+.periodo-toggle[data-active="mes"] .periodo-slider {
+  transform: translateX(100%);
+}
+.periodo-btn {
+  position: relative;
+  z-index: 1;
+  border: none;
+  background: transparent;
+  border-radius: 18px;
+  padding: 4px 11px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  transition: color .25s;
+  letter-spacing: .03em;
+  text-transform: none;
+  white-space: nowrap;
+}
+.periodo-btn.active { color: #fff; }
+
 .badge-alert {
   background: var(--danger);
   color: #fff;
