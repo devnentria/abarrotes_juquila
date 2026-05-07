@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente
 # Archivo  : routers/vistas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.2.0
+# Versión  : 1.3.0
 # ============================================================
 """
 Router de datos — PWA Asistente.
@@ -41,9 +41,10 @@ def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
     modo=30d → últimos 30 días vs 30 días anteriores
     modo=mes → mes actual vs mismo período mes anterior
     """
+    hoy_fecha = f"CAST({hoy()} AS DATE)"
     if modo == "30d":
-        filtro_actual   = f"fc.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})"
-        filtro_anterior = f"fc.Fecha_Documento >= DATEADD(DAY,-60,{hoy()}) AND fc.Fecha_Documento < DATEADD(DAY,-30,{hoy()})"
+        filtro_actual   = f"CAST(fc.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
+        filtro_anterior = f"CAST(fc.Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{hoy_fecha}) AND CAST(fc.Fecha_Documento AS DATE) < DATEADD(DAY,-30,{hoy_fecha})"
         filtro_fact     = filtro_actual
     else:
         filtro_actual   = f"YEAR(fc.Fecha_Documento) = YEAR({hoy()}) AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})"

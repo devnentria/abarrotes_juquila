@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.3.0
+# Versión  : 2.4.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -220,6 +220,23 @@ VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
       AND YEAR(fc.Fecha_Documento)=2026 AND MONTH(fc.Fecha_Documento)=1
     GROUP BY p.Descripcion
     ORDER BY Total DESC
+
+VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
+  Cuando la pregunta menciona una sucursal (ej: "ventas en Puebla", "cómo va CDMX", "Monterrey abril"):
+  ⛔ NUNCA devolver ventas de todas las sucursales sin filtrar.
+  ⛔ NUNCA omitir el JOIN a GN_Sucursales ni el filtro AND s.Nombre LIKE '%nombre_sucursal%'.
+  ✅ SIEMPRE hacer JOIN a GN_Sucursales s y filtrar por s.Nombre.
+
+  Consulta estándar para ventas de una sucursal en un período:
+    SELECT s.Nombre AS Sucursal, SUM(fd.Importe_Neto) AS Total,
+           COUNT(DISTINCT fc.Cve_Folio) AS Facturas
+    FROM FT_Facturas_C fc
+    JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
+    JOIN GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal
+    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+      AND s.Nombre LIKE '%Puebla%'
+      AND fc.Fecha_Documento >= '2026-04-06' AND fc.Fecha_Documento < '2026-05-07'
+    GROUP BY s.Nombre
 """
 
 _SYSTEM = build(
