@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.4.0
+# Versión  : 2.5.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -223,9 +223,10 @@ VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
 
 VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
   Cuando la pregunta menciona una sucursal (ej: "ventas en Puebla", "cómo va CDMX", "Monterrey abril"):
-  ⛔ NUNCA devolver ventas de todas las sucursales sin filtrar.
-  ⛔ NUNCA omitir el JOIN a GN_Sucursales ni el filtro AND s.Nombre LIKE '%nombre_sucursal%'.
-  ✅ SIEMPRE hacer JOIN a GN_Sucursales s y filtrar por s.Nombre.
+  ⛔ NUNCA devolver ventas de todas las sucursales — el resultado sería incorrecto y confuso.
+  ⛔ NUNCA omitir AND s.Nombre LIKE '%nombre_sucursal%' en el WHERE.
+  ✅ SIEMPRE JOIN a GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal + filtrar por s.Nombre.
+  ✅ El número que reportes debe coincidir SOLO con esa sucursal, no con el total de la empresa.
 
   Consulta estándar para ventas de una sucursal en un período:
     SELECT s.Nombre AS Sucursal, SUM(fd.Importe_Neto) AS Total,
@@ -235,7 +236,8 @@ VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
     JOIN GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal
     WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
       AND s.Nombre LIKE '%Puebla%'
-      AND fc.Fecha_Documento >= '2026-04-06' AND fc.Fecha_Documento < '2026-05-07'
+      AND CAST(fc.Fecha_Documento AS DATE) >= '2026-04-06'
+      AND CAST(fc.Fecha_Documento AS DATE) <= '2026-05-06'
     GROUP BY s.Nombre
 """
 
