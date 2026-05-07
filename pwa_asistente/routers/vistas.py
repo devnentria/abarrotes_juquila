@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente
 # Archivo  : routers/vistas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.1.0
+# Versión  : 1.2.0
 # ============================================================
 """
 Router de datos — PWA Asistente.
@@ -20,8 +20,8 @@ Nota sobre fechas:
   En producción (TEST_DATE vacío) usa la fecha real del servidor.
 """
 from collections import defaultdict
-from datetime import date
-from fastapi import APIRouter, Depends
+from datetime import date, timedelta
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
 from shared.auth import get_current_user
@@ -32,31 +32,31 @@ from shared import cache_dashboard as _cache
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
 
-# ── Sucursales: ventas del mes (para Inicio) ─────────────────────────────────
+# ── Sucursales: ventas por período (para Inicio) ──────────────────────────────
 
 @router.get("/sucursales")
-def sucursales():
+def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
     """
-    Ventas del mes en curso vs mes anterior por sucursal.
-    Alimenta las cards del Inicio.
+    Ventas por sucursal para el Inicio.
+    modo=30d → últimos 30 días vs 30 días anteriores
+    modo=mes → mes actual vs mismo período mes anterior
     """
+    if modo == "30d":
+        filtro_actual   = f"fc.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})"
+        filtro_anterior = f"fc.Fecha_Documento >= DATEADD(DAY,-60,{hoy()}) AND fc.Fecha_Documento < DATEADD(DAY,-30,{hoy()})"
+        filtro_fact     = filtro_actual
+    else:
+        filtro_actual   = f"YEAR(fc.Fecha_Documento) = YEAR({hoy()}) AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})"
+        filtro_anterior = f"YEAR(fc.Fecha_Documento) = YEAR(DATEADD(MONTH,-1,{hoy()})) AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()})) AND DAY(fc.Fecha_Documento) <= DAY({hoy()})"
+        filtro_fact     = filtro_actual
+
     rows = query(f"""
         SELECT
             s.Cve_Sucursal                                                  AS cve_sucursal,
             s.Nombre                                                        AS sucursal,
-            COALESCE(SUM(CASE
-                WHEN YEAR(fc.Fecha_Documento)  = YEAR({hoy()})
-                 AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})
-                THEN fd.Importe_Neto END), 0)                              AS ventas_mes,
-            COUNT(DISTINCT CASE
-                WHEN YEAR(fc.Fecha_Documento)  = YEAR({hoy()})
-                 AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})
-                THEN fc.Cve_Folio END)                                     AS facturas_mes,
-            COALESCE(SUM(CASE
-                WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
-                 AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
-                 AND DAY(fc.Fecha_Documento)  <= DAY({hoy()})
-                THEN fd.Importe_Neto END), 0)                              AS ventas_mes_anterior
+            COALESCE(SUM(CASE WHEN {filtro_actual}   THEN fd.Importe_Neto END), 0) AS ventas_mes,
+            COUNT(DISTINCT CASE WHEN {filtro_fact}   THEN fc.Cve_Folio END)        AS facturas_mes,
+            COALESCE(SUM(CASE WHEN {filtro_anterior} THEN fd.Importe_Neto END), 0) AS ventas_mes_anterior
         FROM GN_Sucursales s
         LEFT JOIN FT_Facturas_C fc
                ON fc.Cve_Sucursal = s.Cve_Sucursal AND fc.Status <> 'C'
@@ -76,7 +76,7 @@ def sucursales():
             round((actual - anterior) / anterior * 100, 1) if anterior > 0 else None
         )
 
-    return JSONResponse({"sucursales": rows})
+    return JSONResponse({"sucursales": rows, "modo": modo})
 
 
 # ── Stock: resumen por sucursal ───────────────────────────────────────────────

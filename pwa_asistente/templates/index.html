@@ -61,7 +61,14 @@
 
     <!-- ── Inicio ──────────────────────────────────────────── -->
     <section class="view" id="view-inicio">
-      <div class="section-title">Sucursales</div>
+      <div class="section-title">
+        Sucursales
+        <div class="periodo-toggle" id="periodo-toggle" data-active="30d">
+          <div class="periodo-slider"></div>
+          <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
+          <button class="periodo-btn" data-modo="mes">Mes actual</button>
+        </div>
+      </div>
       <div class="card-list" id="lista-inicio-sucursales">
         <div class="empty-state">Cargando...</div>
       </div>
@@ -200,7 +207,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=47"></script>
+  <script src="/static/app.js?v=48"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">

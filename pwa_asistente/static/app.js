@@ -215,11 +215,11 @@ function renderInicio() {
         <div class="card-row card-row-wrap" style="margin-top:4px;align-items:flex-end;gap:6px">
           <span class="card-monto">${fmtMXN(s.ventas_mes)}</span>
           ${pct !== null
-            ? `<span class="kpi-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${pct}% vs mes ant.</span>`
+            ? `<span class="kpi-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${pct}% vs 30 días ant.</span>`
             : '<span class="card-sub">Sin comparativo</span>'
           }
         </div>
-        <span class="card-sub">${fmtNum(s.facturas_mes)} facturas este mes</span>
+        <span class="card-sub">${fmtNum(s.facturas_mes)} facturas · ${labelPeriodo()}</span>
         <div class="sucursal-detalle" id="detalle-inicio-${s.cve_sucursal}"></div>
       </div>
     `;
@@ -739,6 +739,39 @@ async function iaFlashMedicos(regenerar = false) {
 }
 
 // ── Carga inicial ─────────────────────────────────────────────────────────────
+// ── Período toggle ────────────────────────────────────────────────────────────
+let periodoModo = localStorage.getItem('periodoModo') || '30d';
+
+function initPeriodoToggle() {
+  const toggle = document.getElementById('periodo-toggle');
+  if (!toggle) return;
+  toggle.dataset.active = periodoModo;
+  toggle.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.modo === periodoModo);
+    btn.addEventListener('click', async () => {
+      if (btn.dataset.modo === periodoModo) return;
+      periodoModo = btn.dataset.modo;
+      localStorage.setItem('periodoModo', periodoModo);
+      toggle.dataset.active = periodoModo;
+      toggle.querySelectorAll('.periodo-btn').forEach(b => b.classList.toggle('active', b.dataset.modo === periodoModo));
+      const res = await authFetch(`/api/sucursales?modo=${periodoModo}`).then(r => r.json());
+      state.sucursales = res;
+      renderInicio();
+    });
+  });
+}
+
+function labelPeriodo() {
+  const hoy  = new Date();
+  const fmt  = d => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  if (periodoModo === '30d') {
+    const desde = new Date(hoy); desde.setDate(hoy.getDate() - 30);
+    return `${fmt(desde)} – ${fmt(hoy)}`;
+  } else {
+    return hoy.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  }
+}
+
 async function cargarDatos() {
   if (!getToken()) { mostrarLogin(); return; }
 
@@ -747,7 +780,7 @@ async function cargarDatos() {
 
   try {
     const [resSucursales, resStock, resMedicos] = await Promise.all([
-      authFetch('/api/sucursales').then(r => r.json()),
+      authFetch(`/api/sucursales?modo=${periodoModo}`).then(r => r.json()),
       authFetch('/api/stock').then(r => r.json()),
       authFetch('/api/medicos/duplicados').then(r => r.json()),
     ]);
@@ -756,6 +789,7 @@ async function cargarDatos() {
     state.stock      = resStock;
     state.medicos    = resMedicos;
 
+    initPeriodoToggle();
     renderInicio();
     renderInventario();
     renderMedicos();
