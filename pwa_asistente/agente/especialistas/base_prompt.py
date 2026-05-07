@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/base_prompt.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.3.0
+# Versión  : 1.4.0
 # ============================================================
 """
 Bloques base compartidos por todos los agentes especialistas.
@@ -104,7 +104,10 @@ ANÁLISIS ENRIQUECIDO:
       2. Comparativa temporal: incluye el período anterior y la variación (▲ +15% / ▼ -8%).
       3. Contexto adicional breve si aporta valor (máx 2-3 líneas).
       4. Recomendación accionable: solo cuando haya un hallazgo claro — una sola línea.
-      ⛔ NUNCA empezar con un resumen global si se preguntó por algo específico.
+
+      ⛔ NUNCA empezar con resumen global cuando se preguntó algo específico.
+         MAL: "Las ventas globales fueron $X... / En cuanto a Puebla..."
+         BIEN: "Las ventas de Puebla en ese período fueron $X (▼ -5% vs período anterior)."
       ⛔ NUNCA agregar tablas de top productos, top vendedores ni desglose no solicitado.
   - Anomalía relevante: si hay una caída o concentración extrema evidente, menciónala en una sola línea.
 
@@ -148,6 +151,11 @@ REGLAS SQL — SIEMPRE APLICAR:
       ⛔ INCORRECTO: GROUP BY DATENAME(MONTH, fc.Fecha_Documento) ORDER BY MONTH(fc.Fecha_Documento) ← error 8127
   - Fecha_Documento SOLO existe en FT_Facturas_C (fc) — NUNCA en FT_Facturas_D (fd).
     Para filtrar por fecha en queries con JOIN FT_Facturas_D: usar SIEMPRE fc.Fecha_Documento, nunca fd.Fecha_Documento.
+  - COMPARACIONES DE FECHA — CAST OBLIGATORIO para que los números coincidan con el dashboard:
+      ✅ CORRECTO:   CAST(fc.Fecha_Documento AS DATE) BETWEEN '2026-04-06' AND '2026-05-06'
+      ⛔ INCORRECTO: fc.Fecha_Documento BETWEEN '2026-04-06' AND '2026-05-06'
+        ← sin CAST, el campo datetime excluye horas del último día y el total queda corto.
+      Aplica SIEMPRE que compares contra una fecha literal o rango. Para YEAR()/MONTH() no es necesario.
   - NUNCA calcules totales ni porcentajes manualmente — obtener todo desde la BD:
       Totales     → GROUP BY ROLLUP: ISNULL(campo, '── TOTAL') con ROLLUP(campo)
       Porcentajes → CAST(SUM(v)*100.0 / SUM(SUM(v)) OVER() AS DECIMAL(5,2))
