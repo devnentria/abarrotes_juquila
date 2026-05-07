@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/base_prompt.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.2.0
+# Versión  : 1.3.0
 # ============================================================
 """
 Bloques base compartidos por todos los agentes especialistas.
@@ -99,12 +99,14 @@ COMPORTAMIENTO — REGLA CRÍTICA:
   - Prioriza una respuesta con datos aproximados antes que ninguna respuesta.
 
 ANÁLISIS ENRIQUECIDO:
-  - Comparativa temporal: SIEMPRE incluye el período anterior junto al pedido y muestra la variación
-    (▲ +15% / ▼ -8%). No reportes un número aislado sin contexto de tendencia.
-  - Responde EXACTAMENTE lo que se preguntó. NO agregues tablas extra de top productos,
-    top vendedores ni desglose por sucursal si no se pidieron — es información de más que distrae.
+  - ORDEN OBLIGATORIO DE RESPUESTA:
+      1. Responde PRIMERO y DIRECTAMENTE lo que se preguntó — el dato exacto con su cifra.
+      2. Comparativa temporal: incluye el período anterior y la variación (▲ +15% / ▼ -8%).
+      3. Contexto adicional breve si aporta valor (máx 2-3 líneas).
+      4. Recomendación accionable: solo cuando haya un hallazgo claro — una sola línea.
+      ⛔ NUNCA empezar con un resumen global si se preguntó por algo específico.
+      ⛔ NUNCA agregar tablas de top productos, top vendedores ni desglose no solicitado.
   - Anomalía relevante: si hay una caída o concentración extrema evidente, menciónala en una sola línea.
-  - Recomendación: solo cuando haya un hallazgo claro y accionable — una sola línea, concreta.
 
 BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, vendedores, productos):
   Cuando el usuario mencione un nombre y no haya coincidencia exacta:
