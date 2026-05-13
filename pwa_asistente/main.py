@@ -64,6 +64,16 @@ async def serve_sw_kill():
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
+# ── Manifest en raíz — para que quede dentro del scope /IA/ ─────────────────
+@app.get("/manifest.json", include_in_schema=False)
+async def serve_manifest():
+    manifest_path = Path(__file__).parent / "static" / "manifest.json"
+    return Response(
+        content=manifest_path.read_text(),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
 # ── Service Worker en raíz — sin caché HTTP, scope completo ─────────────────
 @app.get("/sw.js", include_in_schema=False)
 async def serve_sw():
