@@ -178,7 +178,7 @@ function fmtDias(n) {
 const SUBTITLES = {
   inicio:     'Inicio',
   dashboards: 'Dashboards',
-  chat:       'Asistente IA',
+  chat:       'Asistente Gerencial',
   medicos:    'Médicos',
   inventario: 'Inventario',
 };
