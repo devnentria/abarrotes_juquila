@@ -2,20 +2,20 @@
   "name": "Suite Analítica",
   "short_name": "Analítica",
   "description": "Asistente analítico empresarial",
-  "start_url": "/",
+  "start_url": "/IA/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1a56db",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/static/icons/icon-192.png",
+      "src": "/IA/static/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/static/icons/icon-512.png",
+      "src": "/IA/static/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
