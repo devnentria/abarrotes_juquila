@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=48">
+  <link rel="stylesheet" href="/static/style.css?v=49">
 </head>
 <body>
 
@@ -76,16 +76,21 @@
 
     <!-- ── Dashboards ─────────────────────────────────────── -->
     <section class="view hidden" id="view-dashboards">
-      <div class="placeholder-state">
+      <div id="dash-pwa-loading" class="loading-state" style="display:none">
+        <div class="spinner"></div>
+        <span>Cargando dashboards...</span>
+      </div>
+      <div id="dash-pwa-empty" class="placeholder-state hidden">
         <div class="placeholder-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
             <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
           </svg>
         </div>
-        <p class="placeholder-title">Dashboards</p>
-        <p class="placeholder-text">Los dashboards generados en el Studio aparecerán aquí.</p>
+        <p class="placeholder-title">Sin dashboards</p>
+        <p class="placeholder-text">Guarda dashboards desde el Studio y aparecerán aquí.</p>
       </div>
+      <div class="card-list" id="dash-pwa-list"></div>
     </section>
 
     <!-- ── Chat ───────────────────────────────────────────── -->
@@ -207,7 +212,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=48"></script>
+  <script src="/static/app.js?v=49"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">

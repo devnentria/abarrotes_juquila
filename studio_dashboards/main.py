@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from shared.config import STUDIO_PORT
 from shared.database_local import init_db
 from pwa_asistente.routers import auth
-from studio_dashboards.routers import admin, paginas
+from studio_dashboards.routers import admin, datos, paginas
 
 # ── Inicializar BD local al arrancar ─────────────────────────────────────────
 init_db()
@@ -46,6 +46,7 @@ app.mount("/static", StaticFiles(directory=_static_dir), name="static")
 # ── Routers ───────────────────────────────────────────────────────────────────
 app.include_router(auth.router)    # POST /auth/login, GET /auth/me, PATCH /auth/perfil
 app.include_router(admin.router)   # GET /admin, GET|POST|PATCH /api/admin/*
+app.include_router(datos.router)   # GET /api/datos/* → datos ERP para dashboards
 app.include_router(paginas.router) # GET / → shell Studio
 
 

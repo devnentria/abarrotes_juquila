@@ -79,7 +79,7 @@
     .menu-btn span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; transition: all .25s; }
 
     /* ── Contenido ── */
-    .page { padding: calc(var(--header-h) + 28px) 28px 28px; max-width: 1200px; margin: 0 auto; }
+    .page { padding: calc(var(--header-h) + 28px) 28px 28px; margin-right: 340px; }
 
     /* ── Bienvenida ── */
     .welcome-card {
@@ -97,18 +97,66 @@
       font-size: 20px; font-weight: 700;
     }
 
-    /* ── Dashboard placeholder ── */
+    /* ── Dashboard ── */
     .dashboard-section { }
     .section-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
 
-    .dashboard-placeholder {
-      background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
-      padding: 80px 24px; text-align: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    /* KPI Cards */
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;
     }
-    .placeholder-icon { color: var(--border); margin-bottom: 16px; }
-    .placeholder-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
-    .placeholder-text  { font-size: 13px; color: var(--text-dim); max-width: 380px; margin: 0 auto; line-height: 1.6; }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+    .kpi-card {
+      background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+      padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .kpi-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
+    .kpi-sub   { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+    .kpi-icon  { float: right; opacity: .15; margin-top: -4px; }
+
+    /* Period toggle */
+    .periodo-toggle {
+      display: inline-flex; background: var(--bg); border-radius: 8px;
+      padding: 3px; gap: 2px; border: 1px solid var(--border);
+    }
+    .periodo-btn {
+      background: none; border: none; cursor: pointer;
+      padding: 5px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      color: var(--text-dim); transition: all .15s;
+    }
+    .periodo-btn.active { background: var(--card); color: var(--blue-mid); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
+    /* Chart cards */
+    .charts-grid {
+      display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px;
+    }
+    @media (max-width: 900px) { .charts-grid { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--card); border-radius: var(--radius); border: 1px solid var(--border);
+      padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .chart-card-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px;
+    }
+    .chart-card-title { font-size: 14px; font-weight: 700; }
+    .chart-loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 220px; color: var(--text-dim); font-size: 13px; gap: 8px;
+    }
+
+    /* Variación badge */
+    .var-pos { color: var(--success); }
+    .var-neg { color: var(--danger); }
+
+    /* Tabla de comparativo */
+    .comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .comp-table th { text-align: left; padding: 6px 10px; font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .comp-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); }
+    .comp-table tr:last-child td { border-bottom: none; }
 
     /* ── Overlay y drawer de menú ── */
     .drawer-overlay {
@@ -238,6 +286,8 @@
     .install-banner strong { font-weight: 700; }
     .install-close { background: none; border: none; cursor: pointer; color: var(--text-dim); font-size: 18px; line-height: 1; }
 
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     /* ── Toggle modo oscuro ── */
     .theme-toggle {
       display: flex; align-items: center; justify-content: space-between;
@@ -279,6 +329,157 @@
       border: 2px solid var(--card); border-radius: 50%;
       width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
       font-size: 13px; cursor: pointer;
+    }
+
+    /* ── Panel IA lateral ── */
+    .ia-panel-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.35);
+      z-index: 100; opacity: 0; pointer-events: none; transition: opacity .25s;
+    }
+    .ia-panel-overlay.open { opacity: 1; pointer-events: all; }
+
+    .ia-lateral {
+      position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100vw;
+      background: var(--card); z-index: 101;
+      transform: translateX(100%); transition: transform .28s cubic-bezier(.4,0,.2,1);
+      display: flex; flex-direction: column;
+      box-shadow: -4px 0 24px rgba(0,0,0,.15);
+    }
+    .ia-lateral.open { transform: translateX(0); }
+
+    .ia-lateral-header {
+      padding: 0 20px; height: 56px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--blue); color: #fff; flex-shrink: 0;
+    }
+    .ia-lateral-header h3 { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .ia-lateral-close {
+      background: none; border: none; color: rgba(255,255,255,.8);
+      font-size: 22px; cursor: pointer; line-height: 1; padding: 4px;
+    }
+    .ia-lateral-close:hover { color: #fff; }
+
+    .ia-lateral-body {
+      flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 14px; overflow-y: auto;
+    }
+
+    .ia-lateral-desc {
+      font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 0;
+    }
+
+    .ia-lateral-textarea {
+      flex: 1; min-height: 120px; max-height: 220px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      padding: 12px 14px; font-size: 14px; font-family: inherit;
+      resize: vertical; outline: none; transition: border-color .15s;
+      background: var(--bg); color: var(--text);
+    }
+    .ia-lateral-textarea:focus { border-color: var(--blue-mid); }
+
+    .ia-lateral-footer {
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; flex-shrink: 0;
+    }
+
+    .ia-lateral-resultado {
+      border-top: 1px solid var(--border); padding-top: 14px;
+      font-size: 14px; line-height: 1.7; color: var(--text); white-space: pre-wrap;
+    }
+
+    /* Botón flotante IA en header */
+    .btn-ia-abrir {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--blue-mid); color: #fff;
+      border: none; border-radius: 8px; padding: 7px 14px;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity .15s;
+    }
+    .btn-ia-abrir:hover { opacity: .87; }
+
+    /* ── Studio Sidebar ── */
+    .studio-sidebar {
+      position: fixed; top: var(--header-h); right: 0; bottom: 0; width: 340px;
+      background: var(--card); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; z-index: 40;
+      box-shadow: -2px 0 10px rgba(0,0,0,.07);
+    }
+    [data-theme="dark"] .studio-sidebar { box-shadow: -2px 0 10px rgba(0,0,0,.25); }
+
+    .sb-header {
+      height: 44px; padding: 0 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--blue); color: #fff; flex-shrink: 0;
+    }
+    .sb-title { font-size: 13px; font-weight: 700; letter-spacing: .03em; opacity: .9; }
+
+    .sb-section-label {
+      font-size: 10px; font-weight: 700; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: .07em;
+      padding: 10px 14px 6px; flex-shrink: 0;
+    }
+    .sb-templates { display: flex; flex-direction: column; gap: 4px; padding: 0 10px 10px; flex-shrink: 0; }
+    .tpl-btn {
+      width: 100%; text-align: left; background: var(--bg);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 7px 12px; font-size: 12px; font-weight: 500; color: var(--text);
+      cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 8px;
+    }
+    .tpl-btn:hover { background: var(--blue-light); border-color: var(--blue-mid); color: var(--blue-mid); }
+    .tpl-btn.loading { opacity: .55; cursor: not-allowed; pointer-events: none; }
+
+    .sb-divider { height: 1px; background: var(--border); flex-shrink: 0; }
+
+    .sb-history { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .sb-history-list {
+      flex: 1; overflow-y: auto; padding: 8px 10px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .sb-empty { font-size: 12px; color: var(--text-dim); text-align: center; padding: 20px 0; line-height: 1.6; }
+
+    /* Dashboard history card */
+    .dash-hist-item {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; flex-shrink: 0;
+    }
+    .dash-hist-top {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px; gap: 6px;
+    }
+    .dash-hist-titulo { font-size: 12px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dash-hist-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .dash-hist-actions button {
+      background: none; border: none; cursor: pointer; border-radius: 5px;
+      font-size: 13px; padding: 2px 5px; transition: background .12s; color: var(--text-dim);
+    }
+    .dash-hist-actions button:hover { background: var(--border); color: var(--text); }
+    .dash-hist-preview { padding: 0 8px 4px; }
+    .dash-hist-meta { font-size: 10px; color: var(--text-dim); padding: 2px 10px 8px; }
+    .dash-saved-badge { color: var(--success); font-weight: 700; margin-right: 4px; }
+    .dash-hist-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .dash-hist-table th { color: var(--text-dim); font-size: 9px; font-weight: 700; text-transform: uppercase; padding: 3px 5px; text-align: left; border-bottom: 1px solid var(--border); }
+    .dash-hist-table td { padding: 4px 5px; border-bottom: 1px solid var(--border); }
+    .dash-hist-table tr:last-child td { border-bottom: none; }
+
+    /* Sidebar IA section */
+    .sb-ia { flex-shrink: 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
+    .sb-ia-label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .07em; padding: 8px 14px 4px; }
+    .sb-ia-textarea {
+      min-height: 72px; max-height: 110px;
+      border: none; border-top: 1px solid var(--border);
+      padding: 10px 14px; font-size: 13px; font-family: inherit;
+      resize: none; outline: none;
+      background: var(--bg); color: var(--text);
+    }
+    .sb-ia-textarea:focus { border-top-color: var(--blue-mid); }
+    .sb-ia-footer {
+      padding: 8px 10px; display: flex; align-items: center; gap: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .sb-ia-estado { flex: 1; font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    @media (max-width: 900px) {
+      .studio-sidebar { display: none; }
+      .page { margin-right: 0; }
     }
 
     /* ── Panel de chat ── */
@@ -411,11 +612,15 @@
   <!-- ── Header ── -->
   <header class="header">
     <div class="header-left">
-      <img src="/static/logo.jpeg" alt="LebenMedik" style="height:22px;width:auto;max-width:110px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:2px 7px">
+      <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:38px;width:auto;max-width:200px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 12px">
     </div>
     <div class="header-right">
       <span class="header-role" id="header-role"></span>
       <span class="header-user" id="header-user"></span>
+      <button class="btn-ia-abrir" onclick="focusSidebarIA()" title="Análisis IA en panel derecho">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+        Análisis IA
+      </button>
       <button class="menu-btn" id="menu-btn" aria-label="Abrir menú" onclick="abrirMenu()">
         <span></span><span></span><span></span>
       </button>
@@ -445,20 +650,221 @@
 
     <!-- Dashboards -->
     <div class="dashboard-section">
-      <div class="section-label">Dashboards</div>
-      <div class="dashboard-placeholder">
-        <div class="placeholder-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="56" height="56">
-            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-          </svg>
+
+      <!-- Header con toggle de período -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-label" style="margin-bottom:0">Resumen ejecutivo</div>
+        <div class="periodo-toggle" id="periodo-toggle">
+          <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
+          <button class="periodo-btn" data-modo="mes">Mes actual</button>
         </div>
-        <p class="placeholder-title">Los dashboards aparecerán aquí</p>
-        <p class="placeholder-text">Los análisis generados en el Studio estarán disponibles en esta sección para consultarlos desde cualquier dispositivo.</p>
       </div>
+
+      <!-- Ventas de HOY — tarjeta destacada -->
+      <div class="kpi-card" id="card-ventas-hoy" style="margin-bottom:16px;border-left:4px solid var(--blue-mid);padding:22px 28px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="kpi-label" style="font-size:12px">Ventas de hoy (pagadas)</div>
+            <div class="kpi-value" id="kpi-ventas-hoy" style="font-size:32px">—</div>
+            <div class="kpi-sub" id="kpi-ventas-hoy-sub">Cargando...</div>
+          </div>
+          <div style="opacity:.12">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="56" height="56"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          </div>
+          <div class="kpi-label">Ventas período</div>
+          <div class="kpi-value" id="kpi-ventas">—</div>
+          <div class="kpi-sub" id="kpi-ventas-sub">Cargando...</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+          </div>
+          <div class="kpi-label">Facturas</div>
+          <div class="kpi-value" id="kpi-facturas">—</div>
+          <div class="kpi-sub" id="kpi-facturas-sub">Cargando...</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
+          </div>
+          <div class="kpi-label">Pedidos activos</div>
+          <div class="kpi-value" id="kpi-pedidos">—</div>
+          <div class="kpi-sub">En todas las sucursales</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+          </div>
+          <div class="kpi-label">Sucursales</div>
+          <div class="kpi-value" id="kpi-sucursales">—</div>
+          <div class="kpi-sub">Activas en el sistema</div>
+        </div>
+      </div>
+
+      <!-- Gráficas -->
+      <div class="charts-grid">
+
+        <!-- Ventas por sucursal (bar) -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Ventas por sucursal</span>
+          </div>
+          <div id="chart-ventas-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
+              <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+            </svg>
+            Cargando...
+          </div>
+          <canvas id="chart-ventas" style="display:none"></canvas>
+        </div>
+
+        <!-- Pedidos activos (doughnut) -->
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Pedidos activos</span>
+          </div>
+          <div id="chart-pedidos-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
+              <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+            </svg>
+            Cargando...
+          </div>
+          <canvas id="chart-pedidos" style="display:none;max-height:220px"></canvas>
+        </div>
+
+      </div>
+
+      <!-- Tabla comparativo por sucursal -->
+      <div class="chart-card">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Comparativo por sucursal</span>
+          <span id="comp-periodo-label" style="font-size:12px;color:var(--text-dim)">Últ. 30 días</span>
+        </div>
+        <div id="comp-loading" class="chart-loading" style="height:80px">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
+            <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+          </svg>
+          Cargando...
+        </div>
+        <div style="overflow-x:auto;display:none" id="comp-tabla-wrap">
+          <table class="comp-table">
+            <thead>
+              <tr>
+                <th>Sucursal</th>
+                <th style="text-align:right">Ventas</th>
+                <th style="text-align:right">Facturas</th>
+                <th style="text-align:right">vs período anterior</th>
+              </tr>
+            </thead>
+            <tbody id="comp-tabla-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Ventas de hoy por sucursal -->
+      <div class="chart-card" style="margin-top:16px">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Ventas de hoy por sucursal</span>
+          <button onclick="cargarVentasHoy()" style="background:none;border:none;cursor:pointer;color:var(--blue-mid);font-size:12px;font-weight:600">↺ Actualizar</button>
+        </div>
+        <div id="ventas-hoy-loading" class="chart-loading" style="height:60px">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+          Cargando...
+        </div>
+        <div style="display:none" id="ventas-hoy-tabla-wrap">
+          <table class="comp-table">
+            <thead>
+              <tr>
+                <th>Sucursal</th>
+                <th style="text-align:right">Pedidos</th>
+                <th style="text-align:right">Ventas hoy</th>
+              </tr>
+            </thead>
+            <tbody id="ventas-hoy-tabla"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
     </div>
 
   </div>
+
+  <!-- ── Studio Sidebar ── -->
+  <aside class="studio-sidebar" id="studio-sidebar">
+
+    <!-- Header -->
+    <div class="sb-header">
+      <span class="sb-title">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="opacity:.7;margin-right:5px;vertical-align:middle"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Dashboard Studio
+      </span>
+    </div>
+
+    <!-- Plantillas rápidas -->
+    <div class="sb-section-label">Generar dashboard con IA</div>
+    <div class="sb-templates">
+      <button class="tpl-btn" id="tpl-ventas-hoy" onclick="cargarPlantilla('ventas_hoy')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+        Ventas de hoy
+      </button>
+      <button class="tpl-btn" id="tpl-ventas-sucursal" onclick="cargarPlantilla('ventas_sucursal')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+        Ventas por sucursal
+      </button>
+      <button class="tpl-btn" id="tpl-top-vendedores" onclick="cargarPlantilla('top_vendedores')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+        Top vendedores
+      </button>
+      <button class="tpl-btn" id="tpl-comparativo-meses" onclick="cargarPlantilla('comparativo_meses')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+        Comparativo de meses
+      </button>
+      <button class="tpl-btn" id="tpl-pedidos-activos" onclick="cargarPlantilla('pedidos_activos')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+        Pedidos activos
+      </button>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <!-- Historial -->
+    <div class="sb-history">
+      <div class="sb-section-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:14px">
+        <span>Dashboards creados</span>
+        <span id="sb-hist-count" style="font-size:10px;color:var(--text-dim)"></span>
+      </div>
+      <div class="sb-history-list" id="sb-history-list">
+        <p class="sb-empty">Sin dashboards aún.<br>Usa una plantilla o el análisis IA.</p>
+      </div>
+    </div>
+
+    <div class="sb-divider"></div>
+
+    <!-- Análisis IA -->
+    <div class="sb-ia">
+      <div class="sb-ia-label">Análisis IA</div>
+      <textarea id="sb-ia-input" class="sb-ia-textarea"
+        placeholder="Ej: Ventas por vendedor de mayo comparado con abril..."
+        maxlength="800"></textarea>
+      <div class="sb-ia-footer">
+        <span id="sb-ia-estado" class="sb-ia-estado"></span>
+        <button class="btn btn-ghost btn-sm" onclick="limpiarSidebarIA()">Limpiar</button>
+        <button class="btn btn-primary btn-sm" id="sb-ia-btn" onclick="enviarSolicitudIA()">Generar</button>
+      </div>
+    </div>
+
+  </aside>
 
   <!-- ── Drawer de menú ── -->
   <div class="drawer-overlay" id="drawer-overlay" onclick="cerrarMenu()"></div>
@@ -664,6 +1070,9 @@
   <!-- Toast -->
   <div class="toast hidden" id="toast"></div>
 
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
 <script>
 'use strict';
 
@@ -741,6 +1150,9 @@ let _resetEquipoId = null;
     actualizarAvatarHeader();
     renderDrawer();
     renderBannerInstalacion();
+    cargarDashboards('30d');
+    cargarVentasHoy();
+    cargarDashboardsGuardados();
   } catch {
     clearToken();
     mostrarLogin();
@@ -1137,6 +1549,675 @@ document.addEventListener('keydown', e => {
     cerrarModalPerfil();
     cerrarModalEquipo();
     cerrarModalResetEquipo();
+  }
+});
+
+// ── Dashboards ────────────────────────────────────────────────────────────────
+let _modoActivo = '30d';
+let _chartVentas  = null;
+let _chartPedidos = null;
+
+const COLORES = [
+  '#1A2B5A','#00897B','#EF6C3A','#5C6BC0','#26A69A',
+  '#AB47BC','#EC407A','#42A5F5','#66BB6A','#FFA726',
+];
+
+function _formatMXN(n) {
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+}
+
+async function cargarDashboards(modo) {
+  _modoActivo = modo;
+
+  // Actualizar toggle
+  document.querySelectorAll('.periodo-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.modo === modo);
+  });
+
+  const periodoLabel = modo === '30d' ? 'Últ. 30 días' : 'Mes actual';
+  const compLabel = document.getElementById('comp-periodo-label');
+  if (compLabel) compLabel.textContent = periodoLabel;
+
+  // Cargar KPIs + ventas + pedidos en paralelo
+  try {
+    const [kpisData, ventasData, pedidosData] = await Promise.all([
+      api(`/api/datos/kpis?modo=${modo}`),
+      api(`/api/datos/ventas?modo=${modo}`),
+      api(`/api/datos/pedidos`),
+    ]);
+
+    renderKPIs(kpisData, modo);
+    renderChartVentas(ventasData.sucursales);
+    renderChartPedidos(pedidosData.sucursales);
+    renderTablaComparativo(ventasData.sucursales, modo);
+  } catch (e) {
+    // Mostrar estado de error en lugar de quedar "Cargando..."
+    ['kpi-ventas', 'kpi-facturas', 'kpi-pedidos', 'kpi-sucursales'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = '—';
+    });
+    ['kpi-ventas-sub', 'kpi-facturas-sub'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = 'Sin conexión al ERP';
+    });
+    const errHtml = '<span style="font-size:12px;color:var(--danger)">Sin conexión al ERP</span>';
+    const vw = document.getElementById('chart-ventas-wrap');
+    if (vw) { vw.innerHTML = errHtml; vw.style.display = 'flex'; }
+    document.getElementById('chart-ventas').style.display = 'none';
+    const pw = document.getElementById('chart-pedidos-wrap');
+    if (pw) { pw.innerHTML = errHtml; pw.style.display = 'flex'; }
+    document.getElementById('chart-pedidos').style.display = 'none';
+    const cl = document.getElementById('comp-loading');
+    if (cl) { cl.innerHTML = errHtml; cl.style.display = 'flex'; }
+    const vhl = document.getElementById('ventas-hoy-loading');
+    if (vhl) { vhl.innerHTML = errHtml; vhl.style.display = 'flex'; }
+    mostrarToast('Sin conexión al ERP: ' + e.message, 'error');
+  }
+}
+
+function renderKPIs(data, modo) {
+  const periodoSub = modo === '30d' ? 'Últimos 30 días' : 'Mes actual';
+  document.getElementById('kpi-ventas').textContent       = _formatMXN(data.ventas_total);
+  document.getElementById('kpi-ventas-sub').textContent   = periodoSub;
+  document.getElementById('kpi-facturas').textContent     = data.facturas_total.toLocaleString('es-MX');
+  document.getElementById('kpi-facturas-sub').textContent = periodoSub;
+  document.getElementById('kpi-pedidos').textContent      = data.pedidos_activos.toLocaleString('es-MX');
+  document.getElementById('kpi-sucursales').textContent   = data.sucursales_activas;
+}
+
+function renderChartVentas(sucursales) {
+  const wrap = document.getElementById('chart-ventas-wrap');
+  const canvas = document.getElementById('chart-ventas');
+
+  wrap.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const labels  = sucursales.map(s => s.sucursal);
+  const valores  = sucursales.map(s => parseFloat(s.ventas_actual || 0));
+  const anterior = sucursales.map(s => parseFloat(s.ventas_anterior || 0));
+
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+
+  if (_chartVentas) _chartVentas.destroy();
+  _chartVentas = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Período actual',
+          data: valores,
+          backgroundColor: COLORES[0],
+          borderRadius: 6,
+          borderSkipped: false,
+        },
+        {
+          label: 'Período anterior',
+          data: anterior,
+          backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.08)',
+          borderRadius: 6,
+          borderSkipped: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.4,
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 12 }, boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function renderChartPedidos(sucursales) {
+  const wrap   = document.getElementById('chart-pedidos-wrap');
+  const canvas = document.getElementById('chart-pedidos');
+
+  const conPedidos = sucursales.filter(s => s.activos > 0);
+  if (!conPedidos.length) {
+    wrap.style.display = 'flex';
+    wrap.innerHTML = '<span style="color:var(--text-dim);font-size:13px">Sin pedidos activos</span>';
+    canvas.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display = 'none';
+  canvas.style.display = 'block';
+
+  const esDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+
+  if (_chartPedidos) _chartPedidos.destroy();
+  _chartPedidos = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: conPedidos.map(s => s.sucursal),
+      datasets: [{
+        data: conPedidos.map(s => s.activos),
+        backgroundColor: COLORES.slice(0, conPedidos.length),
+        borderWidth: 2,
+        borderColor: esDark ? '#1e293b' : '#fff',
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      cutout: '68%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: textColor, font: { size: 11 }, boxWidth: 10, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.label}: ${ctx.parsed} pedidos`,
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderTablaComparativo(sucursales, modo) {
+  const loading = document.getElementById('comp-loading');
+  const wrap    = document.getElementById('comp-tabla-wrap');
+  const tbody   = document.getElementById('comp-tabla-body');
+
+  loading.style.display = 'none';
+  wrap.style.display    = 'block';
+
+  tbody.innerHTML = sucursales.map(s => {
+    const ventas   = parseFloat(s.ventas_actual || 0);
+    const pct      = s.variacion_pct;
+    let pctHtml = '<span style="color:var(--text-dim)">—</span>';
+    if (pct !== null && pct !== undefined) {
+      const cls  = pct >= 0 ? 'var-pos' : 'var-neg';
+      const icon = pct >= 0 ? '▲' : '▼';
+      pctHtml = `<span class="${cls}">${icon} ${Math.abs(pct)}%</span>`;
+    }
+    return `
+      <tr>
+        <td><strong>${s.sucursal}</strong></td>
+        <td style="text-align:right">${_formatMXN(ventas)}</td>
+        <td style="text-align:right">${(s.facturas || 0).toLocaleString('es-MX')}</td>
+        <td style="text-align:right">${pctHtml}</td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Ventas de hoy ─────────────────────────────────────────────────────────────
+async function cargarVentasHoy() {
+  document.getElementById('ventas-hoy-loading').style.display = 'flex';
+  document.getElementById('ventas-hoy-tabla-wrap').style.display = 'none';
+
+  try {
+    const data = await api('/api/datos/ventas-hoy');
+    document.getElementById('kpi-ventas-hoy').textContent = _formatMXN(data.total_hoy);
+    const pedidosHoy = data.sucursales.reduce((s, r) => s + (r.pedidos_hoy || 0), 0);
+    document.getElementById('kpi-ventas-hoy-sub').textContent = `${pedidosHoy} pedidos pagados hoy`;
+
+    const tbody = document.getElementById('ventas-hoy-tabla');
+    const conVentas = data.sucursales.filter(s => s.ventas_hoy > 0);
+    if (!conVentas.length) {
+      tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-dim)">Sin ventas registradas hoy</td></tr>';
+    } else {
+      tbody.innerHTML = conVentas.map(s => `
+        <tr>
+          <td><strong>${s.sucursal}</strong></td>
+          <td style="text-align:right">${s.pedidos_hoy}</td>
+          <td style="text-align:right">${_formatMXN(parseFloat(s.ventas_hoy || 0))}</td>
+        </tr>`).join('');
+    }
+
+    document.getElementById('ventas-hoy-loading').style.display = 'none';
+    document.getElementById('ventas-hoy-tabla-wrap').style.display = 'block';
+  } catch (e) {
+    document.getElementById('ventas-hoy-loading').innerHTML =
+      `<span style="color:var(--danger);font-size:12px">Error: ${e.message}</span>`;
+  }
+}
+
+// ── Studio Sidebar — Dashboards con IA ───────────────────────────────────────
+let _historial = [];
+let _histCharts = {};
+
+// Prompts IA por tipo de dashboard — la IA consulta el ERP y genera el análisis
+const PLANTILLAS_IA = {
+  ventas_hoy: {
+    titulo: 'Ventas de hoy',
+    prompt: 'Genera un análisis ejecutivo de las ventas del día de hoy (pagadas). Incluye: total vendido, número de pedidos, qué sucursal vendió más, si hay diferencia notable respecto a ayer, y una conclusión breve. Sé conciso y usa datos reales del ERP.',
+  },
+  ventas_sucursal: {
+    titulo: 'Ventas por sucursal',
+    prompt: 'Genera un análisis de ventas por sucursal del último mes. Incluye: cuál sucursal lidera, cuál tiene crecimiento o caída respecto al período anterior, el total general y una conclusión ejecutiva. Usa datos reales del ERP.',
+  },
+  top_vendedores: {
+    titulo: 'Top vendedores',
+    prompt: 'Analiza el desempeño de los vendedores del período actual. Incluye: quién lidera, cuánto representa el top 3 del total, si hay alguno que bajó respecto al período anterior, y una recomendación. Usa datos reales del ERP.',
+  },
+  comparativo_meses: {
+    titulo: 'Comparativo de meses',
+    prompt: 'Analiza la tendencia de ventas mes a mes de los últimos 3 meses. Incluye: hay crecimiento o caída, cuál fue el mejor mes, qué porcentaje de variación hay entre el mes actual y el anterior, y tu conclusión. Usa datos reales del ERP.',
+  },
+  pedidos_activos: {
+    titulo: 'Pedidos activos',
+    prompt: 'Analiza los pedidos activos actuales en el sistema. Incluye: total de pedidos pendientes, en qué sucursal se concentran más, si el volumen es normal o alto comparado con el histórico, y qué acción recomiendas. Usa datos reales del ERP.',
+  },
+};
+
+function focusSidebarIA() {
+  const ta = document.getElementById('sb-ia-input');
+  if (ta) { ta.focus(); ta.scrollIntoView({ behavior: 'smooth' }); }
+}
+
+function limpiarSidebarIA() {
+  document.getElementById('sb-ia-input').value = '';
+  document.getElementById('sb-ia-estado').textContent = '';
+  document.getElementById('sb-ia-btn').disabled = false;
+}
+
+function _relTime(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60)   return 'hace un momento';
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  return `hace ${Math.floor(diff / 3600)}h`;
+}
+
+async function cargarPlantilla(tipo) {
+  const plantilla = PLANTILLAS_IA[tipo];
+  if (!plantilla) return;
+
+  document.querySelectorAll('.tpl-btn').forEach(b => b.classList.add('loading'));
+
+  // Agregar card al historial inmediatamente con estado "procesando"
+  const idx = _historial.length;
+  agregarAlHistorial({
+    titulo: plantilla.titulo,
+    tipo,
+    datos: null,
+    ia_texto: null,
+    cargando: true,
+    guardado: false,
+    db_id: null,
+    ts: Date.now(),
+  });
+
+  try {
+    // Fetch datos + lanzar job IA en paralelo
+    const [datos, job] = await Promise.all([
+      api(`/api/datos/plantilla/${tipo}`),
+      api('/api/chat/mensaje', {
+        method: 'POST',
+        body: JSON.stringify({ mensaje: plantilla.prompt }),
+      }),
+    ]);
+
+    _historial[idx].datos = datos;
+    renderMiniViz(idx);
+
+    // Escuchar resultado de IA
+    _pollIAJob(job.job_id, idx);
+
+  } catch (e) {
+    mostrarToast('Error: ' + e.message, 'error');
+    if (_historial[idx]) {
+      _historial[idx].ia_texto = 'Error al generar el análisis.';
+      _historial[idx].cargando = false;
+      _renderIASeccion(idx);
+    }
+  } finally {
+    document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('loading'));
+  }
+}
+
+async function _pollIAJob(jobId, idx) {
+  let intentos = 0;
+  const poll = async () => {
+    intentos++;
+    if (intentos > 60) {
+      if (_historial[idx]) {
+        _historial[idx].ia_texto = 'Tiempo de espera agotado.';
+        _renderIASeccion(idx);
+      }
+      return;
+    }
+    try {
+      const r = await api(`/api/chat/job/${jobId}`);
+      if (r.estado === 'ok') {
+        if (_historial[idx]) {
+          _historial[idx].ia_texto = r.respuesta;
+          _historial[idx].cargando = false;
+          _renderIASeccion(idx);
+        }
+      } else if (r.estado === 'error') {
+        if (_historial[idx]) {
+          _historial[idx].ia_texto = 'Error IA: ' + (r.respuesta || 'Intenta de nuevo');
+          _historial[idx].cargando = false;
+          _renderIASeccion(idx);
+        }
+      } else {
+        setTimeout(poll, 2000);
+      }
+    } catch { setTimeout(poll, 3000); }
+  };
+  setTimeout(poll, 2000);
+}
+
+function _renderIASeccion(idx) {
+  const item = _historial[idx];
+  if (!item) return;
+  const card = document.getElementById(`dash-item-${idx}`);
+  if (!card) return;
+
+  let iaEl = document.getElementById(`dash-ia-${idx}`);
+  if (!iaEl) {
+    iaEl = document.createElement('div');
+    iaEl.id = `dash-ia-${idx}`;
+    iaEl.style.cssText = 'margin:0 8px 8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:11px;line-height:1.65;color:var(--text);white-space:pre-wrap;max-height:130px;overflow-y:auto;';
+    const meta = document.getElementById(`dash-meta-${idx}`);
+    if (meta) card.insertBefore(iaEl, meta);
+    else card.appendChild(iaEl);
+  }
+
+  if (item.cargando && !item.ia_texto) {
+    iaEl.innerHTML = '<span style="color:var(--text-dim);font-style:italic">Generando análisis IA...</span>';
+  } else {
+    iaEl.textContent = item.ia_texto || '';
+  }
+}
+
+function agregarAlHistorial(item) {
+  const idx = _historial.length;
+  item._idx = idx;
+  _historial.push(item);
+  renderHistorialItem(item, idx);
+  _actualizarContadorHist();
+  document.getElementById('sb-history-list').scrollTop = 0;
+}
+
+function _actualizarContadorHist() {
+  const count = _historial.filter(x => x !== null).length;
+  const el = document.getElementById('sb-hist-count');
+  if (el) el.textContent = count ? `${count}` : '';
+}
+
+function renderHistorialItem(item, idx) {
+  const lista = document.getElementById('sb-history-list');
+  const vacio = lista.querySelector('.sb-empty');
+  if (vacio) vacio.remove();
+
+  const div = document.createElement('div');
+  div.className = 'dash-hist-item';
+  div.id = `dash-item-${idx}`;
+
+  const guardadoBadge = item.guardado
+    ? '<span class="dash-saved-badge">✓</span>'
+    : `<button onclick="guardarDashHistorial(${idx})" title="Guardar" style="font-size:15px">💾</button>`;
+
+  div.innerHTML = `
+    <div class="dash-hist-top">
+      <span class="dash-hist-titulo" title="${item.titulo}">${item.titulo}</span>
+      <div class="dash-hist-actions">
+        ${guardadoBadge}
+        <button onclick="eliminarDashHistorial(${idx})" title="Eliminar">✕</button>
+      </div>
+    </div>
+    <div class="dash-hist-preview" id="dash-preview-${idx}"></div>
+    <div class="dash-hist-meta" id="dash-meta-${idx}">${item.tipo} · ${_relTime(item.ts)}</div>
+  `;
+
+  lista.insertBefore(div, lista.firstChild);
+  setTimeout(() => {
+    renderMiniViz(idx);
+    if (item.cargando) _renderIASeccion(idx);
+  }, 60);
+}
+
+function renderMiniViz(idx) {
+  const item = _historial[idx];
+  const preview = document.getElementById(`dash-preview-${idx}`);
+  if (!preview || !item) return;
+
+  if (_histCharts[idx]) { _histCharts[idx].destroy(); delete _histCharts[idx]; }
+
+  const tipo  = item.tipo;
+  const datos = item.datos;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc = esDark ? '#94a3b8' : '#6E6E73';
+  const gc = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)';
+  const cid = `mini-canvas-${idx}`;
+
+  const mkBar = (labels, datasets) => {
+    preview.innerHTML = `<canvas id="${cid}" height="100"></canvas>`;
+    _histCharts[idx] = new Chart(document.getElementById(cid), {
+      type: 'bar', data: { labels, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: datasets.length > 1, labels: { color: tc, font: { size: 9 }, boxWidth: 8 } },
+          tooltip: { callbacks: { label: c => _formatMXN(c.parsed.y) } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 9 } }, grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 9 }, callback: v => _formatMXN(v) }, grid: { color: gc }, border: { display: false } },
+        },
+      },
+    });
+  };
+
+  // La respuesta de /api/datos/plantilla/{tipo} siempre usa la clave "datos" para el array
+  const lista = datos.datos || [];
+
+  if (tipo === 'ventas_hoy') {
+    const filas = lista.filter(s => (s.valor || 0) > 0);
+    if (!filas.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin ventas hoy</p>'; return; }
+    mkBar(filas.map(s => s.label), [{ data: filas.map(s => parseFloat(s.valor) || 0), backgroundColor: '#00897B', borderRadius: 4, borderSkipped: false }]);
+
+  } else if (tipo === 'ventas_sucursal') {
+    mkBar(lista.map(s => s.label), [
+      { label: 'Actual',   data: lista.map(s => parseFloat(s.actual)   || 0), backgroundColor: '#1A2B5A', borderRadius: 3 },
+      { label: 'Anterior', data: lista.map(s => parseFloat(s.anterior) || 0), backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.1)', borderRadius: 3 },
+    ]);
+
+  } else if (tipo === 'pedidos_activos') {
+    const suc = lista.filter(s => (s.valor || 0) > 0);
+    if (!suc.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin pedidos activos</p>'; return; }
+    preview.innerHTML = `<canvas id="${cid}" height="110"></canvas>`;
+    _histCharts[idx] = new Chart(document.getElementById(cid), {
+      type: 'doughnut',
+      data: { labels: suc.map(s => s.label), datasets: [{ data: suc.map(s => s.valor), backgroundColor: COLORES.slice(0, suc.length), borderWidth: 2, borderColor: esDark ? '#1e293b' : '#fff' }] },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '60%',
+        plugins: { legend: { position: 'bottom', labels: { color: tc, font: { size: 9 }, boxWidth: 8, padding: 6 } }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed}` } } },
+      },
+    });
+
+  } else if (tipo === 'top_vendedores') {
+    if (!lista.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin datos</p>'; return; }
+    preview.innerHTML = `<table class="dash-hist-table">
+      <thead><tr><th>#</th><th>Vendedor</th><th style="text-align:right">Ventas</th></tr></thead>
+      <tbody>${lista.slice(0, 6).map((v, i) => `<tr><td>${i + 1}</td><td>${v.label}</td><td style="text-align:right">${_formatMXN(v.valor)}</td></tr>`).join('')}</tbody>
+    </table>`;
+
+  } else if (tipo === 'comparativo_meses') {
+    preview.innerHTML = `<table class="dash-hist-table">
+      <thead><tr><th>Mes</th><th style="text-align:right">Ventas</th></tr></thead>
+      <tbody>${lista.map(m => `<tr><td>${m.mes_nombre || m.mes}</td><td style="text-align:right">${_formatMXN(m.valor)}</td></tr>`).join('')}</tbody>
+    </table>`;
+
+  } else if (tipo === 'texto_ia') {
+    preview.innerHTML = `<div style="font-size:11px;line-height:1.6;padding:4px 2px;white-space:pre-wrap;max-height:140px;overflow-y:auto;color:var(--text)">${(datos.texto || '').substring(0, 300)}${(datos.texto || '').length > 300 ? '…' : ''}</div>`;
+  }
+}
+
+async function guardarDashHistorial(idx) {
+  const item = _historial[idx];
+  if (!item || item.guardado) return;
+  try {
+    const res = await api('/api/datos/dashboards', {
+      method: 'POST',
+      body: JSON.stringify({
+        titulo: item.titulo,
+        pregunta: item.pregunta || '',
+        tipo: item.tipo,
+        datos_json: item.datos,
+      }),
+    });
+    item.guardado = true;
+    item.db_id = res.id;
+    const card = document.getElementById(`dash-item-${idx}`);
+    if (card) {
+      const actions = card.querySelector('.dash-hist-actions');
+      if (actions) {
+        const saveBtn = actions.querySelector('[title="Guardar"]');
+        if (saveBtn) saveBtn.outerHTML = '<span class="dash-saved-badge">✓</span>';
+      }
+      const meta = document.getElementById(`dash-meta-${idx}`);
+      if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
+    }
+    mostrarToast('Dashboard guardado', 'success');
+  } catch (e) {
+    mostrarToast('Error al guardar: ' + e.message, 'error');
+  }
+}
+
+function eliminarDashHistorial(idx) {
+  if (_histCharts[idx]) { _histCharts[idx].destroy(); delete _histCharts[idx]; }
+  const card = document.getElementById(`dash-item-${idx}`);
+  if (card) card.remove();
+  _historial[idx] = null;
+  _actualizarContadorHist();
+  const lista = document.getElementById('sb-history-list');
+  if (!lista.querySelector('.dash-hist-item')) {
+    lista.innerHTML = '<p class="sb-empty">Sin dashboards aún.<br>Usa una plantilla o el análisis IA.</p>';
+  }
+}
+
+async function cargarDashboardsGuardados() {
+  try {
+    const data = await api('/api/datos/dashboards');
+    const dashes = (data.dashboards || []).slice().reverse();
+    dashes.forEach(d => {
+      agregarAlHistorial({
+        titulo: d.titulo,
+        tipo: d.tipo,
+        datos: typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : (d.datos_json || {}),
+        guardado: true,
+        db_id: d.id,
+        ts: new Date(d.creado_en).getTime() || Date.now(),
+      });
+    });
+  } catch { /* ignore — BD vacía o error */ }
+}
+
+// ── Análisis IA personalizado desde sidebar ───────────────────────────────────
+async function enviarSolicitudIA() {
+  const input  = document.getElementById('sb-ia-input');
+  const estado = document.getElementById('sb-ia-estado');
+  const btn    = document.getElementById('sb-ia-btn');
+
+  const pregunta = input.value.trim();
+  if (!pregunta) { mostrarToast('Escribe tu solicitud primero', 'error'); return; }
+
+  btn.disabled = true;
+  estado.textContent = 'Procesando...';
+
+  // Card en historial con estado de carga
+  const idx = _historial.length;
+  agregarAlHistorial({
+    titulo: pregunta.substring(0, 42) + (pregunta.length > 42 ? '…' : ''),
+    tipo: 'texto_ia',
+    datos: null,
+    ia_texto: null,
+    cargando: true,
+    guardado: false,
+    db_id: null,
+    pregunta,
+    ts: Date.now(),
+  });
+
+  try {
+    const job = await api('/api/chat/mensaje', {
+      method: 'POST',
+      body: JSON.stringify({ mensaje: pregunta }),
+    });
+
+    // Escuchar resultado y actualizar la card
+    const origPoll = async () => {
+      let intentos = 0;
+      const poll = async () => {
+        intentos++;
+        if (intentos > 60) {
+          estado.textContent = 'Tiempo agotado';
+          btn.disabled = false;
+          return;
+        }
+        try {
+          const r = await api(`/api/chat/job/${job.job_id}`);
+          if (r.estado === 'ok') {
+            if (_historial[idx]) {
+              _historial[idx].ia_texto = r.respuesta;
+              _historial[idx].cargando = false;
+              _renderIASeccion(idx);
+            }
+            estado.textContent = '';
+            btn.disabled = false;
+            input.value = '';
+          } else if (r.estado === 'error') {
+            if (_historial[idx]) {
+              _historial[idx].ia_texto = 'Error: ' + (r.respuesta || 'Intenta de nuevo');
+              _historial[idx].cargando = false;
+              _renderIASeccion(idx);
+            }
+            estado.textContent = 'Error en IA';
+            btn.disabled = false;
+          } else {
+            setTimeout(poll, 2000);
+          }
+        } catch { setTimeout(poll, 3000); }
+      };
+      setTimeout(poll, 2000);
+    };
+    origPoll();
+
+  } catch (e) {
+    estado.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+    if (_historial[idx]) {
+      _historial[idx].ia_texto = 'Error al enviar la solicitud.';
+      _historial[idx].cargando = false;
+      _renderIASeccion(idx);
+    }
+  }
+}
+
+// Toggle de período + IA sidebar Enter (Ctrl+Enter)
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.periodo-btn').forEach(btn => {
+    btn.addEventListener('click', () => cargarDashboards(btn.dataset.modo));
+  });
+  const sbInput = document.getElementById('sb-ia-input');
+  if (sbInput) {
+    sbInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); enviarSolicitudIA(); }
+    });
   }
 });
 
