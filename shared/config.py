@@ -46,6 +46,10 @@ DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 PWA_PORT:    int = int(os.getenv("PWA_PORT",    "8001"))
 STUDIO_PORT: int = int(os.getenv("STUDIO_PORT", "8002"))
 
+# ── Prefijo de ruta (vacío en local, "/IA" en servidor con Apache) ───────────
+# En el servidor agregar al .env: PWA_BASE_PATH=/IA
+PWA_BASE_PATH: str = os.getenv("PWA_BASE_PATH", "")
+
 # ── Fecha de prueba ───────────────────────────────────────────────────────────
 # Para probar con datos históricos, pon una fecha en .env: TEST_DATE=2026-03-28
 # En producción dejar vacío — usará la fecha real del servidor.
