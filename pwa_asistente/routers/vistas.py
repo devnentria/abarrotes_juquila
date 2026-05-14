@@ -42,21 +42,22 @@ def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
     modo=mes → mes actual vs mismo período mes anterior
     """
     hoy_fecha = f"CAST({hoy()} AS DATE)"
+    # En la query exterior el subquery se expone como alias "t" → usar t.Fecha_Documento
     if modo == "30d":
-        filtro_actual   = f"CAST(c.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
+        filtro_actual   = f"CAST(t.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
         filtro_anterior = (
-            f"CAST(c.Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{hoy_fecha}) "
-            f"AND CAST(c.Fecha_Documento AS DATE) < DATEADD(DAY,-30,{hoy_fecha})"
+            f"CAST(t.Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{hoy_fecha}) "
+            f"AND CAST(t.Fecha_Documento AS DATE) < DATEADD(DAY,-30,{hoy_fecha})"
         )
     else:
         filtro_actual   = (
-            f"YEAR(c.Fecha_Documento) = YEAR({hoy()}) "
-            f"AND MONTH(c.Fecha_Documento) = MONTH({hoy()})"
+            f"YEAR(t.Fecha_Documento) = YEAR({hoy()}) "
+            f"AND MONTH(t.Fecha_Documento) = MONTH({hoy()})"
         )
         filtro_anterior = (
-            f"YEAR(c.Fecha_Documento) = YEAR(DATEADD(MONTH,-1,{hoy()})) "
-            f"AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()})) "
-            f"AND DAY(c.Fecha_Documento) <= DAY({hoy()})"
+            f"YEAR(t.Fecha_Documento) = YEAR(DATEADD(MONTH,-1,{hoy()})) "
+            f"AND MONTH(t.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()})) "
+            f"AND DAY(t.Fecha_Documento) <= DAY({hoy()})"
         )
 
     rows = query(f"""
