@@ -18,6 +18,44 @@ from pwa_asistente.agente.especialistas.base_prompt import build
 _SCHEMA = """
 TABLAS DE VENTAS:
 
+══════════════════════════════════════════════════════════════
+VENTAS REALIZADAS/PAGADAS DEL DÍA — FUENTE CORRECTA
+══════════════════════════════════════════════════════════════
+FT_Pedidos_C — encabezado de pedidos (también es el encabezado de ventas diarias)
+  Cve_Folio (int), Cve_Sucursal (int), Cve_Vendedor (varchar),
+  Fecha_Documento (datetime), Estatus (varchar), Referencia_Cliente (varchar)
+  ⚠ Para ventas realizadas: Estatus <> 'CN' AND Referencia_Cliente = 'PAGADO'
+
+FT_Pedidos_Dia — detalle de ventas diarias (tabla de venta real, no de cartera)
+  Cve_Folio (int), Cve_Sucursal (int),
+  Cantidad_Ordenada (decimal), Precio (decimal)
+  JOIN con FT_Pedidos_C por: d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+  ⚠ Importe de venta = Cantidad_Ordenada * Precio
+
+CONSULTA ESTÁNDAR para ventas del día/hoy/ayer/período específico (PAGADAS):
+  SELECT COUNT(cve_folio) AS Pedidos, ISNULL(SUM(Monto),0) AS Monto
+  FROM (
+      SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad_Ordenada * d.Precio),0) AS Monto
+      FROM FT_Pedidos_C c
+      INNER JOIN FT_Pedidos_Dia d
+        ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+      WHERE c.Estatus <> 'CN'
+        AND c.Referencia_Cliente = 'PAGADO'
+        AND [filtro de fecha sobre c.Fecha_Documento]
+        -- Opcional: AND c.Cve_Sucursal = ? / AND c.Cve_Vendedor = '?'
+      GROUP BY c.Cve_Folio
+  ) AS t
+
+  • Para HOY:  CAST(c.Fecha_Documento AS DATE) = CAST(GETDATE() AS DATE)
+  • Para AYER: CAST(c.Fecha_Documento AS DATE) = CAST(DATEADD(DAY,-1,GETDATE()) AS DATE)
+  • Para un MES: MONTH(c.Fecha_Documento) = ? AND YEAR(c.Fecha_Documento) = ?
+
+  ⚠ SIEMPRE usar esta consulta cuando se pregunte por ventas del día, hoy, ayer o una fecha puntual.
+  ⚠ NUNCA usar FT_Facturas_C/D para ventas diarias — las facturas pueden no reflejar el día real.
+  ⚠ Por sucursal: agregar AND c.Cve_Sucursal = [cve] dentro del WHERE interior.
+  ⚠ Por vendedor: agregar AND c.Cve_Vendedor = '[cve_vendedor]'.
+══════════════════════════════════════════════════════════════
+
 FT_Facturas_C — encabezado de facturas
   Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
   Fecha_Documento (datetime), Importe_Total (decimal),

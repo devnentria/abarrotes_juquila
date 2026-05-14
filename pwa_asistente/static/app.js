@@ -190,7 +190,130 @@ function showView(name) {
     btn.classList.toggle('active', btn.dataset.view === name);
   });
   document.getElementById('header-subtitle').textContent = SUBTITLES[name] || '';
-  if (name === 'chat') _recuperarJobPendiente();
+  if (name === 'chat')       _recuperarJobPendiente();
+  if (name === 'dashboards') cargarDashboardsPWA();
+}
+
+// ── Dashboards guardados (solo lectura) ───────────────────────────────────────
+let _dashPWACargados = false;
+
+async function cargarDashboardsPWA() {
+  const loading = document.getElementById('dash-pwa-loading');
+  const lista   = document.getElementById('dash-pwa-list');
+  const vacio   = document.getElementById('dash-pwa-empty');
+
+  // Solo recargar si la lista está vacía
+  if (_dashPWACargados && lista.children.length > 0) return;
+
+  loading.style.display = 'flex';
+  lista.innerHTML = '';
+  vacio.classList.add('hidden');
+
+  try {
+    const res  = await authFetch('/api/dashboards');
+    const data = await res.json();
+    const dashes = data.dashboards || [];
+
+    loading.style.display = 'none';
+
+    if (!dashes.length) {
+      vacio.classList.remove('hidden');
+      return;
+    }
+
+    lista.innerHTML = dashes.map(d => renderDashCardPWA(d)).join('');
+    _dashPWACargados = true;
+  } catch {
+    loading.style.display = 'none';
+    lista.innerHTML = '<div class="empty-state">Error al cargar dashboards</div>';
+  }
+}
+
+function renderDashCardPWA(dash) {
+  const datos = dash.datos_json || {};
+  const lista = datos.datos || [];
+  const tipo  = dash.tipo;
+
+  let vizHtml = '';
+
+  if (tipo === 'texto_ia') {
+    const texto = datos.texto || '';
+    vizHtml = `<div class="dash-pwa-texto">${texto}</div>`;
+
+  } else if (tipo === 'top_vendedores' || tipo === 'comparativo_meses') {
+    const maxVal = Math.max(...lista.map(r => parseFloat(r.valor) || 0), 1);
+    const filas  = lista.slice(0, 7);
+    vizHtml = `<div class="dash-pwa-bars">${filas.map(r => {
+      const val  = parseFloat(r.valor) || 0;
+      const pct  = Math.round(val / maxVal * 100);
+      const name = r.label || r.mes_nombre || '';
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${name}">${name}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'ventas_hoy') {
+    const total  = datos.total || 0;
+    const filas  = lista.filter(r => (r.valor || 0) > 0);
+    const maxVal = Math.max(...filas.map(r => parseFloat(r.valor) || 0), 1);
+    vizHtml = `<div class="dash-pwa-kpi">
+      <span class="dash-pwa-kpi-val">${fmtMXN(total)}</span>
+      <span class="dash-pwa-kpi-sub">ventas hoy</span>
+    </div>
+    <div class="dash-pwa-bars">${filas.slice(0, 6).map(r => {
+      const val = parseFloat(r.valor) || 0;
+      const pct = Math.round(val / maxVal * 100);
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${r.label}">${r.label}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'ventas_sucursal') {
+    const maxVal = Math.max(...lista.map(r => parseFloat(r.actual) || 0), 1);
+    vizHtml = `<div class="dash-pwa-bars">${lista.slice(0, 6).map(r => {
+      const val = parseFloat(r.actual) || 0;
+      const pct = Math.round(val / maxVal * 100);
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${r.label}">${r.label}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'pedidos_activos') {
+    const total = datos.total || 0;
+    vizHtml = `<div class="dash-pwa-kpi">
+      <span class="dash-pwa-kpi-val">${total}</span>
+      <span class="dash-pwa-kpi-sub">pedidos activos</span>
+    </div>
+    <table class="dash-pwa-tabla">
+      <thead><tr><th>Sucursal</th><th style="text-align:right">Pedidos</th></tr></thead>
+      <tbody>${lista.slice(0, 6).map(r => `<tr><td>${r.label}</td><td style="text-align:right">${r.valor}</td></tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  const fechaStr = dash.creado_en
+    ? new Date(dash.creado_en.replace(' ', 'T')).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })
+    : '';
+
+  const tipoLabel = {
+    ventas_hoy: 'Hoy', ventas_sucursal: 'Sucursales',
+    top_vendedores: 'Vendedores', comparativo_meses: 'Meses',
+    pedidos_activos: 'Pedidos', texto_ia: 'IA',
+  }[tipo] || tipo;
+
+  return `<div class="dash-pwa-card card-item">
+    <div class="dash-pwa-header">
+      <span class="dash-pwa-titulo">${dash.titulo}</span>
+      <span class="dash-pwa-tipo">${tipoLabel}</span>
+    </div>
+    ${vizHtml}
+    <div class="dash-pwa-fecha">${fechaStr}</div>
+  </div>`;
 }
 
 // ── Render: Inicio — ventas del mes por sucursal ──────────────────────────────

@@ -109,6 +109,18 @@ def init_db() -> None:
                 terminado_en    TEXT,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
             );
+
+            CREATE TABLE IF NOT EXISTS dashboards (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo      TEXT    NOT NULL,
+                pregunta    TEXT    NOT NULL DEFAULT '',
+                tipo        TEXT    NOT NULL DEFAULT 'texto',
+                datos_json  TEXT    NOT NULL DEFAULT '{}',
+                guardado    INTEGER NOT NULL DEFAULT 0,
+                creado_por  INTEGER NOT NULL,
+                creado_en   TEXT    NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (creado_por) REFERENCES usuarios(id)
+            );
         """)
         # Migraciones: agregar columnas si la tabla ya existía sin ellas
         migraciones = [
@@ -147,6 +159,17 @@ def init_db() -> None:
                 creado_en       TEXT    NOT NULL DEFAULT (datetime('now')),
                 terminado_en    TEXT,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS dashboards (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                titulo      TEXT    NOT NULL,
+                pregunta    TEXT    NOT NULL DEFAULT '',
+                tipo        TEXT    NOT NULL DEFAULT 'texto',
+                datos_json  TEXT    NOT NULL DEFAULT '{}',
+                guardado    INTEGER NOT NULL DEFAULT 0,
+                creado_por  INTEGER NOT NULL,
+                creado_en   TEXT    NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (creado_por) REFERENCES usuarios(id)
             )""",
         ]
         for sql in migraciones:
