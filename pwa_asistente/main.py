@@ -25,7 +25,7 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from shared.config import PWA_PORT, PWA_BASE_PATH
+from shared.config import PWA_PORT
 from shared.database_local import init_db
 from pwa_asistente.routers import auth, chat, ia_flash, paginas, vistas
 
@@ -60,23 +60,27 @@ self.addEventListener('activate', () => {
 
 @app.get("/static/manifest.json", include_in_schema=False)
 async def serve_manifest():
-    """Manifest dinámico: rutas correctas según si corre en local o detrás de Apache."""
-    b = PWA_BASE_PATH  # "" en local, "/IA" en servidor
+    """Manifest con rutas relativas — funciona en local y detrás de Apache sin config extra.
+
+    El spec de Web App Manifest resuelve URLs relativas desde la URL del manifest:
+      - Local:    /static/manifest.json → "../" = /         → iconos en /static/icons/
+      - Servidor: /IA/static/manifest.json → "../" = /IA/   → iconos en /IA/static/icons/
+    """
     manifest = {
         "name": "Suite Analítica",
         "short_name": "Analítica",
         "description": "Asistente analítico empresarial",
-        "start_url": f"{b}/",
-        "scope": f"{b}/",
+        "start_url": "../",
+        "scope": "../",
         "display": "standalone",
         "background_color": "#ffffff",
         "theme_color": "#1a56db",
         "orientation": "portrait",
         "icons": [
-            {"src": f"{b}/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": f"{b}/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-            {"src": f"{b}/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": f"{b}/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+            {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     }
     return Response(
