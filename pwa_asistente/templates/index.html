@@ -336,7 +336,7 @@
         });
       });
 
-      navigator.serviceWorker.register('/IA/sw.js', { scope: '/IA/' }).then(reg => {
+      navigator.serviceWorker.register('sw.js').then(reg => {
         // Revisar actualización cada vez que el usuario vuelve a la app
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') reg.update();
