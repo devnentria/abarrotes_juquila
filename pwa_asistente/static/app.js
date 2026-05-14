@@ -1307,7 +1307,7 @@ function toggleMicrofono() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 // ── Banner de instalación PWA ─────────────────────────────────────────────────
 (function () {
-  const DISMISSED_KEY = 'suite_install_dismissed_v3';
+  const DISMISSED_KEY = 'suite_install_dismissed_v4';
   let deferredPrompt = null;
 
   const esStandalone = () =>
