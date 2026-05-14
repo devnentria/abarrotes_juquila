@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=49">
+  <link rel="stylesheet" href="/static/style.css?v=50">
 </head>
 <body>
 
@@ -212,7 +212,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=49"></script>
+  <script src="/static/app.js?v=50"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">
@@ -327,7 +327,7 @@
 
   <script>
     if ('serviceWorker' in navigator) {
-      // Desregistrar cualquier SW viejo que no sea /sw.js
+      // Desregistrar cualquier SW viejo que no sea el actual
       navigator.serviceWorker.getRegistrations().then(regs => {
         regs.forEach(reg => {
           if (reg.active && !reg.active.scriptURL.endsWith('/sw.js')) {
@@ -336,7 +336,7 @@
         });
       });
 
-      navigator.serviceWorker.register('/sw.js').then(reg => {
+      navigator.serviceWorker.register('/IA/sw.js', { scope: '/IA/' }).then(reg => {
         // Revisar actualización cada vez que el usuario vuelve a la app
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') reg.update();
