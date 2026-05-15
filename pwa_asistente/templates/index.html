@@ -8,13 +8,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Analítica">
   <title>Suite Analítica</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/static/manifest.json">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=50">
+  <link rel="stylesheet" href="/static/style.css?v=51">
 </head>
 <body>
 
@@ -40,13 +40,13 @@
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header class="app-header">
     <div class="app-header-left">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:44px;width:auto;max-width:260px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 14px">
-      <div class="app-header-titles">
-        <span class="app-name" id="header-nombre">Bienvenido</span>
-        <span class="app-subtitle" id="header-subtitle">Inicio</span>
-      </div>
+      <img src="/static/logo_transparente.png" alt="LebenMedik" class="app-header-logo">
     </div>
     <div class="app-header-right">
+      <div class="app-header-user">
+        <span class="app-name" id="header-nombre">—</span>
+        <span class="app-subtitle" id="header-subtitle">Inicio</span>
+      </div>
       <div class="app-avatar" id="app-avatar">?</div>
     </div>
   </header>
@@ -212,7 +212,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=50"></script>
+  <script src="/static/app.js?v=51"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">

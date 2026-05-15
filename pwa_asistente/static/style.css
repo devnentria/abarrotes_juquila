@@ -76,8 +76,25 @@ html, body {
   z-index: 100;
 }
 
-.app-header-left  { display: flex; align-items: center; gap: 10px; }
-.app-header-right { display: flex; align-items: center; }
+.app-header-left  { display: flex; align-items: center; flex: 1; min-width: 0; }
+.app-header-right { display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end; min-width: 0; }
+
+.app-header-logo {
+  height: 38px; width: auto;
+  max-width: 100%;
+  display: block;
+  background: rgba(255,255,255,0.95);
+  border-radius: 5px;
+  padding: 3px 10px;
+  object-fit: contain;
+}
+
+.app-header-user {
+  display: flex; flex-direction: column; align-items: flex-end;
+  min-width: 0; overflow: hidden;
+}
+.app-name    { font-weight: 600; font-size: 14px; color: #fff; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+.app-subtitle { font-size: 11px; color: rgba(255,255,255,.6); display: block; }
 
 .app-logo {
   width: 36px; height: 36px;
