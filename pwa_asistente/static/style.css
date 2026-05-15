@@ -96,26 +96,6 @@ html, body {
 .app-name    { font-weight: 600; font-size: 14px; color: #fff; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
 .app-subtitle { font-size: 11px; color: rgba(255,255,255,.6); display: block; }
 
-.app-logo {
-  width: 36px; height: 36px;
-  background: rgba(255,255,255,.15);
-  border: 1.5px solid rgba(255,255,255,.3);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 12px; color: #fff;
-  letter-spacing: .04em;
-  flex-shrink: 0;
-}
-.app-logo-img {
-  height: 20px; width: auto;
-  display: block; flex-shrink: 0;
-  background: #fff;
-  border-radius: 4px;
-  padding: 2px 5px;
-}
-
-.app-name    { font-weight: 600; font-size: 15px; color: #fff; display: block; line-height: 1.1; }
-.app-subtitle { font-size: 11px; color: rgba(255,255,255,.6); display: block; }
 
 .app-avatar {
   width: 32px; height: 32px;
@@ -164,43 +144,7 @@ html, body {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── KPI Cards ───────────────────────────────────────────────── */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.kpi-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px 14px 12px;
-  display: flex; flex-direction: column; gap: 3px;
-  box-shadow: var(--shadow);
-}
-
-.kpi-card.kpi-primary {
-  grid-column: 1 / -1;
-  background: var(--blue);
-  border-color: var(--blue);
-}
-
-.kpi-card.kpi-primary .kpi-label { color: rgba(255,255,255,.65); }
-.kpi-card.kpi-primary .kpi-value { color: #fff; }
-.kpi-card.kpi-primary .kpi-detail { color: rgba(255,255,255,.5); }
-
-.kpi-card.kpi-alert  { border-color: var(--danger-border); background: var(--danger-soft); }
-.kpi-card.kpi-warn   { border-color: var(--warn-border);   background: var(--warn-soft); }
-
-.kpi-label  {
-  font-size: 11px; color: var(--text-dim);
-  text-transform: uppercase; letter-spacing: .05em; font-weight: 500;
-}
-.kpi-value  { font-size: 22px; font-weight: 700; color: var(--text); line-height: 1.2; }
-.kpi-detail { font-size: 11px; color: var(--text-dim); }
-
+/* ── KPI Delta (usado en cards de sucursales) ────────────────── */
 .kpi-delta { font-size: 12px; font-weight: 600; margin-top: 2px; }
 .kpi-delta.up   { color: var(--success); }
 .kpi-delta.down { color: var(--danger); }
@@ -257,13 +201,6 @@ html, body {
 }
 .periodo-btn.active { color: #fff; }
 
-.badge-alert {
-  background: var(--danger);
-  color: #fff;
-  font-size: 10px; font-weight: 700;
-  padding: 1px 7px;
-  border-radius: 10px;
-}
 
 /* ── Lista de cards ──────────────────────────────────────────── */
 .card-list { display: flex; flex-direction: column; gap: 8px; }
@@ -283,7 +220,6 @@ html, body {
 
 .card-title  { font-size: 14px; font-weight: 600; color: var(--text); }
 .card-sub    { font-size: 12px; color: var(--text-dim); }
-.card-amount { font-size: 15px; font-weight: 700; color: var(--blue-mid); }
 .card-row    { display: flex; justify-content: space-between; align-items: center; }
 
 /* ── Tags / Pills ────────────────────────────────────────────── */
@@ -602,12 +538,6 @@ html, body {
   color: #16a34a;
   font-weight: 600;
 }
-.chat-status-msg {
-  font-size: 0.78rem;
-  color: var(--text-muted, #888);
-  padding: 6px 12px;
-  font-style: italic;
-}
 .chat-send-btn {
   width: 40px; height: 40px;
   background: var(--blue);
@@ -815,8 +745,6 @@ html, body {
 }
 
 .bar-ok     { background: var(--success); }
-.bar-warn   { background: var(--warn); }
-.bar-danger { background: var(--danger); }
 
 /* ── Login screen ────────────────────────────────────────────── */
 .login-screen {
@@ -858,7 +786,6 @@ html, body {
   display: block;
 }
 
-.login-title { font-size: 20px; font-weight: 700; color: var(--blue); }
 .login-sub   { font-size: 13px; color: var(--text-dim); margin-top: -6px; }
 
 .login-error {
@@ -929,12 +856,6 @@ html, body {
 .login-btn:active  { opacity: .85; }
 .login-btn:disabled { opacity: .5; cursor: not-allowed; }
 
-.login-footer {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin-top: 4px;
-  letter-spacing: .03em;
-}
 
 /* ── Botón IA Flash (en cards de sucursal) ───────────────────── */
 .ia-flash-btn {
@@ -1468,8 +1389,6 @@ html.dark {
 @media (prefers-color-scheme: dark) { html:not(.light) .login-card { background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.3); }}
 html.dark .login-card { background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
 
-@media (prefers-color-scheme: dark) { html:not(.light) .login-title { color: #F2F2F7; }}
-html.dark .login-title { color: #F2F2F7; }
 
 @media (prefers-color-scheme: dark) { html:not(.light) .login-input { background: #2C2C2E; color: #F2F2F7; border-color: #48484A; }}
 html.dark .login-input { background: #2C2C2E; color: #F2F2F7; border-color: #48484A; }
