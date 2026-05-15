@@ -18,8 +18,6 @@ No contiene lógica de negocio ni acceso a BD.
 """
 from pathlib import Path
 
-import json
-
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import Response
@@ -58,10 +56,15 @@ self.addEventListener('activate', () => {
 });
 """
 
+
 @app.get("/static/manifest.json", include_in_schema=False)
 async def serve_manifest():
-    """Manifest dinámico: rutas correctas según si corre en local o detrás de Apache."""
-    b = PWA_BASE_PATH  # "" en local, "/IA" en servidor
+    """Manifest dinámico según entorno.
+    Local (.env sin PWA_BASE_PATH): scope '/', iconos en /static/icons/
+    Servidor (.env con PWA_BASE_PATH=/IA): scope '/IA/', iconos en /IA/static/icons/
+    """
+    import json
+    b = PWA_BASE_PATH  # "" local | "/IA" servidor
     manifest = {
         "name": "Suite Analítica",
         "short_name": "Analítica",

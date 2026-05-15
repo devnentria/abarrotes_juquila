@@ -1340,34 +1340,17 @@ function toggleMicrofono() {
         deferredPrompt = null;
         if (outcome === 'accepted') cerrarBanner(true);
       };
-    } else if (esIOS()) {
-      // iOS Safari — instrucción manual
-      sub.textContent = 'Toca Compartir → "Añadir a inicio"';
-      btn.textContent = 'Entendido';
-      btn.onclick = () => cerrarBanner(true);
-    } else {
-      // Android / otro — sin prompt nativo, instrucción manual
-      sub.textContent = 'Menú (⋮) → "Añadir a pantalla de inicio"';
-      btn.textContent = 'Entendido';
-      btn.onclick = () => cerrarBanner(true);
     }
 
     banner.classList.remove('hidden');
     document.getElementById('install-banner-close').onclick = () => cerrarBanner(true);
   }
 
-  // Android Chrome — mostrar banner EN CUANTO llega el prompt nativo
+  // Solo mostrar banner cuando Chrome dispara el prompt nativo
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     mostrarBanner();
-  });
-
-  // Fallback: si tras 4s no llegó el prompt nativo (iOS u otros), mostrar manual
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      if (!deferredPrompt) mostrarBanner();
-    }, 4000);
   });
 })();
 
