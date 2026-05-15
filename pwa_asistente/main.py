@@ -58,29 +58,29 @@ self.addEventListener('activate', () => {
 });
 """
 
-@app.get("/static/manifest.json", include_in_schema=False)
+@app.get("/manifest.json", include_in_schema=False)
 async def serve_manifest():
-    """Manifest con rutas relativas — funciona en local y detrás de Apache sin config extra.
+    """Manifest en la raíz del app con rutas relativas.
 
-    El spec de Web App Manifest resuelve URLs relativas desde la URL del manifest:
-      - Local:    /static/manifest.json → "../" = /         → iconos en /static/icons/
-      - Servidor: /IA/static/manifest.json → "../" = /IA/   → iconos en /IA/static/icons/
+    Manifest en '/' (local) o '/IA/' (servidor vía Apache).
+    '.' resuelve al directorio actual → scope correcto en ambos entornos.
+    Iconos: 'static/icons/...' relativo a la raíz del app.
     """
     manifest = {
         "name": "Suite Analítica",
         "short_name": "Analítica",
         "description": "Asistente analítico empresarial",
-        "start_url": "../",
-        "scope": "../",
+        "start_url": ".",
+        "scope": ".",
         "display": "standalone",
         "background_color": "#ffffff",
         "theme_color": "#1a56db",
         "orientation": "portrait",
         "icons": [
-            {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-            {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
-            {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-            {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+            {"src": "static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+            {"src": "static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
         ],
     }
     return Response(
