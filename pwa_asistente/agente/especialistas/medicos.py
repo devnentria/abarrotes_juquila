@@ -11,6 +11,7 @@ Agente Especialista — Médicos.
 Responde preguntas sobre el directorio de médicos prescriptores,
 duplicados, cédulas, asignación a vendedores y ventas por prescripción.
 """
+from typing import Optional
 from pwa_asistente.agente import base_agente
 from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
@@ -105,15 +106,17 @@ _SYSTEM = build(
 )
 
 
-def responder(pregunta: str, historial: list[dict]) -> RespuestaIA:
+def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
     Genera una respuesta sobre médicos.
 
     Args:
         pregunta  (str):        Pregunta del usuario.
         historial (list[dict]): Historial [{rol, contenido}].
+        model     (str|None):   Modelo OpenAI a usar (None = default del sistema).
 
     Returns:
         RespuestaIA: texto + tokens consumidos.
     """
-    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "medicos")
+    kwargs = {"model": model} if model else {}
+    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "medicos", **kwargs)

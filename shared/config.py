@@ -28,9 +28,13 @@ if _env_path.exists():
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4o-mini")
+OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4.1-mini")
 # Modelo para resúmenes flash (IA en cards) — no requiere razonamiento, prioriza velocidad
-IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4o-mini")
+IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4.1-mini")
+# Modelo para Studio Dashboards — clasificación + narrativa, barato y rápido
+STUDIO_IA_MODEL:   str = os.getenv("STUDIO_IA_MODEL",   "gpt-5-nano")
+# Modelo para Studio Chat — agente completo con SQL (configurable por .env)
+STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "gpt-5-nano")
 
 
 # ── Base de datos (SQL Server) ────────────────────────────────────────────────
@@ -62,9 +66,10 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 #
 # Precios por token según modelo (USD):
 #   Modelo          Input/1M     Output/1M
-#   gpt-4o-mini     $0.15        $0.60      ← modelo actual
-#   gpt-4.1-nano    $0.10        $0.40
-#   gpt-4.1-mini    $0.40        $1.60
+#   gpt-5-nano      $0.05        $0.20      ← Studio (chat + dashboards)
+#   gpt-4.1-mini    $0.40        $1.60      ← PWA chat  ← modelo actual
+#   gpt-4o-mini     $0.15        $0.60
+#   gpt-4.1         $2.00        $8.00
 #   gpt-4o          $2.50        $10.00
 IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.00000015"))  # por token input
 IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.00000060"))  # por token output

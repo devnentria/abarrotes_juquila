@@ -50,7 +50,7 @@ Si el mensaje es sobre tu funcionamiento, modelo, tecnología o arquitectura, re
 """
 
 
-def clasificar(pregunta: str, historial: list[dict]) -> tuple[str, float]:
+def clasificar(pregunta: str, historial: list[dict], model: str = OPENAI_MODEL) -> tuple[str, float]:
     """
     Clasifica la pregunta en un área de negocio.
 
@@ -72,7 +72,7 @@ def clasificar(pregunta: str, historial: list[dict]) -> tuple[str, float]:
 
     try:
         resp = _client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model,
             messages=mensajes,
             temperature=0,
         )

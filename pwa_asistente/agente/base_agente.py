@@ -35,7 +35,7 @@ class RespuestaIA(NamedTuple):
     tokens_completion: int
 
 
-def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> RespuestaIA:
+def ejecutar(system: str, pregunta: str, historial: list[dict], area: str, model: str = OPENAI_MODEL) -> RespuestaIA:
     """
     Ejecuta el loop agentico OpenAI para un especialista.
 
@@ -80,7 +80,7 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
 
     for _ in range(_MAX_ITER):
         resp = _client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model,
             messages=mensajes,
             tools=[ejecutor.TOOL],
             tool_choice="auto",
