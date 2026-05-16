@@ -100,8 +100,8 @@ def build_api_router() -> APIRouter:
             raise HTTPException(status_code=400, detail="El email ya está registrado")
 
         nuevo_id = execute(
-            "INSERT INTO usuarios (nombre, email, password_hash, rol, modulos, permisos, limite_ia) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO usuarios (nombre, email, password_hash, rol, modulos, permisos, limite_ia, debe_cambiar_password) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
             (
                 datos.nombre,
                 datos.email,
@@ -230,7 +230,7 @@ def build_api_router() -> APIRouter:
             )
 
         execute(
-            "UPDATE usuarios SET password_hash = ? WHERE id = ?",
+            "UPDATE usuarios SET password_hash = ?, debe_cambiar_password = 1 WHERE id = ?",
             (hash_password(datos.nueva_password), usuario_id),
         )
         return JSONResponse({"mensaje": "Contraseña restablecida exitosamente"})

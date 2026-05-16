@@ -4,7 +4,7 @@
      Módulo   : studio_dashboards
      Archivo  : templates/studio.html
      Autor    : Geovani Daniel Nolasco
-     Versión  : 1.0.0
+     Versión  : 2.0.0
      ============================================================ -->
 <html lang="es">
 <head>
@@ -460,22 +460,76 @@
     .dash-hist-table td { padding: 4px 5px; border-bottom: 1px solid var(--border); }
     .dash-hist-table tr:last-child td { border-bottom: none; }
 
-    /* Sidebar IA section */
-    .sb-ia { flex-shrink: 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; }
-    .sb-ia-label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .07em; padding: 8px 14px 4px; }
-    .sb-ia-textarea {
-      min-height: 72px; max-height: 110px;
-      border: none; border-top: 1px solid var(--border);
-      padding: 10px 14px; font-size: 13px; font-family: inherit;
-      resize: none; outline: none;
-      background: var(--bg); color: var(--text);
+    /* Sidebar IA section — legacy stubs (kept for compatibility) */
+    .sb-ia { display: none; }
+    .sb-ia-textarea { display: none; }
+
+    /* ── Studio Chat sidebar ── */
+    .sc-messages {
+      flex: 1; overflow-y: auto; padding: 10px 8px;
+      display: flex; flex-direction: column; gap: 8px;
     }
-    .sb-ia-textarea:focus { border-top-color: var(--blue-mid); }
-    .sb-ia-footer {
-      padding: 8px 10px; display: flex; align-items: center; gap: 8px;
-      border-top: 1px solid var(--border);
+    .sc-bubble { display: flex; }
+    .sc-bubble-user { justify-content: flex-end; }
+    .sc-bubble-bot  { justify-content: flex-start; }
+    .sc-bubble-content {
+      max-width: 88%; padding: 8px 11px; border-radius: 12px;
+      font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
     }
-    .sb-ia-estado { flex: 1; font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sc-bubble-user .sc-bubble-content {
+      background: var(--blue-mid); color: #fff; border-bottom-right-radius: 3px;
+    }
+    .sc-bubble-bot .sc-bubble-content {
+      background: var(--bg); color: var(--text); border-bottom-left-radius: 3px;
+      border: 1px solid var(--border);
+    }
+    .sc-bubble-bot .sc-bubble-content.sc-has-dash {
+      border-color: var(--blue-mid); border-width: 1.5px;
+    }
+    .sc-dash-badge {
+      display: inline-block; background: var(--blue-mid); color: #fff;
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+      margin-top: 6px; cursor: pointer; letter-spacing: .03em;
+    }
+    .sc-typing {
+      display: flex; gap: 4px; align-items: center;
+      padding: 8px 11px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 12px; border-bottom-left-radius: 3px; width: fit-content;
+    }
+    .sc-typing-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--text-dim);
+      animation: sc-bounce .9s infinite;
+    }
+    .sc-typing-dot:nth-child(2) { animation-delay: .15s; }
+    .sc-typing-dot:nth-child(3) { animation-delay: .30s; }
+    @keyframes sc-bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-5px)} }
+
+    .sc-conv-item {
+      padding: 6px 8px; border-radius: 7px; cursor: pointer; font-size: 12px;
+      color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: background .12s;
+    }
+    .sc-conv-item:hover { background: var(--bg); }
+    .sc-conv-item.active { background: var(--blue-light); color: var(--blue-mid); font-weight: 600; }
+
+    .sc-input-bar {
+      flex-shrink: 0; display: flex; align-items: flex-end; gap: 6px;
+      padding: 8px 8px; border-top: 1px solid var(--border);
+    }
+    .sc-textarea {
+      flex: 1; resize: none; border: 1px solid var(--border); border-radius: 10px;
+      padding: 8px 11px; font-size: 13px; font-family: inherit;
+      outline: none; background: var(--bg); color: var(--text);
+      max-height: 100px; overflow-y: auto; line-height: 1.4;
+    }
+    .sc-textarea:focus { border-color: var(--blue-mid); }
+    .sc-send-btn {
+      flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+      background: var(--blue-mid); border: none; cursor: pointer; color: #fff;
+      display: flex; align-items: center; justify-content: center; transition: opacity .15s;
+    }
+    .sc-send-btn:hover { opacity: .85; }
+    .sc-send-btn:disabled { opacity: .4; pointer-events: none; }
 
     @media (max-width: 900px) {
       .studio-sidebar { display: none; }
@@ -586,6 +640,114 @@
     }
     .login-error.hidden { display: none; }
     .login-footer { text-align: center; font-size: 12px; color: var(--text-dim); }
+
+    /* ── Dashboard IA generado ──────────────────────────────────────────────── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .dash-animate { animation: fadeInUp .35s ease both; }
+
+    #dashboard-ia-wrap { margin-bottom: 24px; }
+
+    .dash-ia-topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
+    }
+    .dash-ia-titulo { font-size: 18px; font-weight: 800; color: var(--text); flex: 1; }
+    .dash-ia-badge {
+      font-size: 11px; background: var(--blue-mid); color: #fff;
+      padding: 3px 10px; border-radius: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .dash-ia-close {
+      background: none; border: 1.5px solid var(--border); border-radius: 8px;
+      color: var(--text-dim); cursor: pointer; font-size: 14px; font-weight: 600;
+      padding: 4px 10px; transition: all .15s;
+    }
+    .dash-ia-close:hover { background: var(--bg); color: var(--text); }
+
+    .dash-ia-narrativa {
+      background: linear-gradient(135deg, var(--blue-light) 0%, var(--card) 100%);
+      border: 1px solid #bfdbfe; border-left: 4px solid var(--blue-mid);
+      border-radius: 10px; padding: 14px 18px;
+      font-size: 13px; line-height: 1.75; color: var(--text);
+      margin-top: 18px;
+    }
+    [data-theme="dark"] .dash-ia-narrativa { border-color: #334155; border-left-color: var(--blue-mid); }
+    .dash-ia-narrativa-label {
+      font-size: 10px; font-weight: 700; color: var(--blue-mid);
+      text-transform: uppercase; letter-spacing: .07em; display: block; margin-bottom: 6px;
+    }
+
+    /* ── Shared layout pieces ── */
+    .dash-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .dash-card-title {
+      font-size: 12px; font-weight: 700; color: var(--text-dim);
+      text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px;
+    }
+
+    /* Layout: kpi_bar — KPI strip + bar chart + table */
+    .layout-kpi-strip { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .layout-kpi-mini {
+      flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .layout-kpi-mini .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+    .layout-kpi-mini .kpi-value { font-size: 20px; font-weight: 800; color: var(--text); }
+    .layout-kpi-mini .kpi-sub   { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .layout-kpi-mini.accent     { border-left: 4px solid var(--blue-mid); }
+
+    /* Layout: ranking_hbar — horizontal bar ranking */
+    .ranking-list { display: flex; flex-direction: column; gap: 0; }
+    .ranking-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 0; border-bottom: 1px solid var(--border);
+    }
+    .ranking-row:last-child { border-bottom: none; }
+    .ranking-pos { width: 24px; font-size: 12px; font-weight: 800; color: var(--text-dim); text-align: center; flex-shrink: 0; }
+    .ranking-pos.gold   { color: #d97706; }
+    .ranking-pos.silver { color: #6b7280; }
+    .ranking-pos.bronze { color: #92400e; }
+    .ranking-name { flex: 1; font-size: 13px; font-weight: 500; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ranking-bar-wrap { width: 100px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
+    .ranking-bar { height: 100%; border-radius: 3px; background: var(--blue-mid); }
+    .ranking-valor { font-size: 13px; font-weight: 700; min-width: 80px; text-align: right; flex-shrink: 0; }
+    .ranking-sub { font-size: 11px; color: var(--text-dim); min-width: 50px; text-align: right; flex-shrink: 0; }
+
+    /* Layout: trend_area — area/line chart */
+    .trend-kpi-row { display: flex; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
+    .trend-kpi {
+      flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; text-align: center;
+    }
+    .trend-kpi-val { font-size: 22px; font-weight: 800; }
+    .trend-kpi-lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+    /* Layout: donut_split */
+    .donut-split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 650px) { .donut-split-grid { grid-template-columns: 1fr; } }
+
+    /* Layout: dual_compare */
+    .dual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 650px) { .dual-grid { grid-template-columns: 1fr; } }
+    .delta-positive { color: var(--success); font-weight: 700; }
+    .delta-negative { color: var(--danger);  font-weight: 700; }
+
+    /* Loading skeleton */
+    .dash-skeleton {
+      background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+      background-size: 400% 100%;
+      animation: shimmer 1.4s ease infinite;
+      border-radius: 8px; height: 180px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 100% 50%; }
+      100% { background-position:   0% 50%; }
+    }
   </style>
 </head>
 <body>
@@ -637,6 +799,23 @@
       </svg>
       <p id="install-text">Instala la app en tu celular para una mejor experiencia.</p>
       <button class="install-close" onclick="document.getElementById('install-banner').classList.add('hidden')">×</button>
+    </div>
+
+    <!-- ── Dashboard IA generado ── -->
+    <div id="dashboard-ia-wrap" class="hidden">
+      <div class="dash-ia-topbar">
+        <span class="dash-ia-titulo" id="dashboard-ia-titulo">Dashboard</span>
+        <span class="dash-ia-badge">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" style="margin-right:3px;vertical-align:middle"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
+          Generado con IA
+        </span>
+        <button class="dash-ia-close" onclick="cerrarDashboardIA()">Cerrar</button>
+      </div>
+      <div id="dashboard-ia-contenido"></div>
+      <div class="dash-ia-narrativa dash-animate hidden" id="dashboard-ia-narrativa">
+        <span class="dash-ia-narrativa-label">Análisis ejecutivo</span>
+        <span id="dashboard-ia-narrativa-texto"></span>
+      </div>
     </div>
 
     <!-- Bienvenida -->
@@ -800,68 +979,49 @@
 
   </div>
 
-  <!-- ── Studio Sidebar ── -->
+  <!-- ── Studio Sidebar — Chat IA ── -->
   <aside class="studio-sidebar" id="studio-sidebar">
 
-    <!-- Header -->
-    <div class="sb-header">
+    <!-- Header chat -->
+    <div class="sb-header" style="justify-content:space-between">
       <span class="sb-title">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="opacity:.7;margin-right:5px;vertical-align:middle"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-        Dashboard Studio
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="opacity:.7;margin-right:5px;vertical-align:middle"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        Asistente IA
       </span>
+      <button id="sc-nueva-btn" title="Nueva conversación"
+        style="background:rgba(255,255,255,.15);border:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:#fff;font-size:18px;line-height:1">+</button>
     </div>
 
-    <!-- Plantillas rápidas -->
-    <div class="sb-section-label">Generar dashboard con IA</div>
-    <div class="sb-templates">
-      <button class="tpl-btn" id="tpl-ventas-hoy" onclick="cargarPlantilla('ventas_hoy')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
-        Ventas de hoy
-      </button>
-      <button class="tpl-btn" id="tpl-ventas-sucursal" onclick="cargarPlantilla('ventas_sucursal')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-        Ventas por sucursal
-      </button>
-      <button class="tpl-btn" id="tpl-top-vendedores" onclick="cargarPlantilla('top_vendedores')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
-        Top vendedores
-      </button>
-      <button class="tpl-btn" id="tpl-comparativo-meses" onclick="cargarPlantilla('comparativo_meses')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
-        Comparativo de meses
-      </button>
-      <button class="tpl-btn" id="tpl-pedidos-activos" onclick="cargarPlantilla('pedidos_activos')">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-        Pedidos activos
-      </button>
+    <!-- Lista de conversaciones (colapsable, abierta por defecto) -->
+    <div id="sc-conv-toggle-bar" style="display:flex;align-items:center;padding:4px 12px 4px;cursor:pointer;border-bottom:1px solid var(--border);flex-shrink:0"
+         onclick="toggleConvList()">
+      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);flex:1">Historial</span>
+      <svg id="sc-conv-arrow" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" style="color:var(--text-dim);transition:transform .2s;transform:rotate(180deg)"><path d="M7 10l5 5 5-5z"/></svg>
     </div>
-
-    <div class="sb-divider"></div>
-
-    <!-- Historial -->
-    <div class="sb-history">
-      <div class="sb-section-label" style="display:flex;align-items:center;justify-content:space-between;padding-right:14px">
-        <span>Dashboards creados</span>
-        <span id="sb-hist-count" style="font-size:10px;color:var(--text-dim)"></span>
-      </div>
-      <div class="sb-history-list" id="sb-history-list">
-        <p class="sb-empty">Sin dashboards aún.<br>Usa una plantilla o el análisis IA.</p>
+    <div id="sc-conv-list" style="flex-shrink:0;max-height:160px;overflow-y:auto;border-bottom:1px solid var(--border);transition:max-height .3s ease">
+      <div id="sc-conv-items" style="display:flex;flex-direction:column;gap:2px;padding:6px 8px">
+        <div style="font-size:11px;color:var(--text-dim);padding:4px">Sin conversaciones aún</div>
       </div>
     </div>
 
-    <div class="sb-divider"></div>
-
-    <!-- Análisis IA -->
-    <div class="sb-ia">
-      <div class="sb-ia-label">Análisis IA</div>
-      <textarea id="sb-ia-input" class="sb-ia-textarea"
-        placeholder="Ej: Ventas por vendedor de mayo comparado con abril..."
-        maxlength="800"></textarea>
-      <div class="sb-ia-footer">
-        <span id="sb-ia-estado" class="sb-ia-estado"></span>
-        <button class="btn btn-ghost btn-sm" onclick="limpiarSidebarIA()">Limpiar</button>
-        <button class="btn btn-primary btn-sm" id="sb-ia-btn" onclick="enviarSolicitudIA()">Generar</button>
+    <!-- Mensajes -->
+    <div class="sc-messages" id="sc-messages">
+      <div class="sc-bubble sc-bubble-bot">
+        <div class="sc-bubble-content">
+          Hola, soy tu asistente analítico con IA superior.<br>
+          Pregúntame sobre ventas, inventario, pedidos, médicos o clientes.<br>
+          <span style="opacity:.7;font-size:11px">Puedo generar dashboards si me los pides.</span>
+        </div>
       </div>
+    </div>
+
+    <!-- Input -->
+    <div class="sc-input-bar">
+      <textarea id="sc-input" class="sc-textarea" rows="1"
+        placeholder="Pregunta algo o pide un dashboard..." maxlength="800"></textarea>
+      <button id="sc-send-btn" class="sc-send-btn" aria-label="Enviar">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
     </div>
 
   </aside>
@@ -885,7 +1045,10 @@
   <div class="modal-overlay hidden" id="modal-password">
     <div class="modal">
       <div class="modal-header">
-        <h3>Cambiar contraseña</h3>
+        <div>
+          <h3 id="modal-password-titulo">Cambiar contraseña</h3>
+          <p id="modal-password-subtitulo" class="hidden" style="font-size:12px;color:var(--text-dim);margin-top:2px">Por seguridad debes establecer una contraseña personal antes de continuar.</p>
+        </div>
         <button class="modal-close" onclick="cerrarModalPassword()">×</button>
       </div>
       <div class="modal-body">
@@ -1153,6 +1316,7 @@ let _resetEquipoId = null;
     cargarDashboards('30d');
     cargarVentasHoy();
     cargarDashboardsGuardados();
+    if (_usuario.debe_cambiar_password) _forzarModalPassword();
   } catch {
     clearToken();
     mostrarLogin();
@@ -1362,15 +1526,35 @@ function cerrarSesion() {
 }
 
 // ── Cambiar contraseña ────────────────────────────────────────────────────────
+let _passwordForzado = false;
+
+function _forzarModalPassword() {
+  _passwordForzado = true;
+  document.getElementById('pwd-actual').value    = '';
+  document.getElementById('pwd-nueva').value     = '';
+  document.getElementById('pwd-confirmar').value = '';
+  document.getElementById('modal-password-subtitulo').classList.remove('hidden');
+  // Ocultar botón de cerrar mientras sea forzado
+  const closeBtn = document.querySelector('#modal-password .modal-close');
+  if (closeBtn) closeBtn.style.display = 'none';
+  document.getElementById('modal-password').classList.remove('hidden');
+  document.getElementById('pwd-actual').focus();
+}
+
 function abrirModalPassword() {
+  _passwordForzado = false;
   cerrarMenu();
   document.getElementById('pwd-actual').value    = '';
   document.getElementById('pwd-nueva').value     = '';
   document.getElementById('pwd-confirmar').value = '';
+  document.getElementById('modal-password-subtitulo').classList.add('hidden');
+  const closeBtn = document.querySelector('#modal-password .modal-close');
+  if (closeBtn) closeBtn.style.display = '';
   document.getElementById('modal-password').classList.remove('hidden');
   document.getElementById('pwd-actual').focus();
 }
 function cerrarModalPassword() {
+  if (_passwordForzado) return; // No cerrar si es forzado
   document.getElementById('modal-password').classList.add('hidden');
 }
 
@@ -1391,7 +1575,11 @@ async function guardarPassword() {
       body: JSON.stringify({ password_actual: actual, nueva_password: nueva }),
     });
     mostrarToast(data.mensaje, 'success');
-    cerrarModalPassword();
+    _passwordForzado = false;
+    document.getElementById('modal-password-subtitulo').classList.add('hidden');
+    const closeBtn = document.querySelector('#modal-password .modal-close');
+    if (closeBtn) closeBtn.style.display = '';
+    document.getElementById('modal-password').classList.add('hidden');
   } catch (e) {
     mostrarToast(e.message, 'error');
   } finally {
@@ -1510,34 +1698,227 @@ function agregarBurbuja(texto, rol) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
-async function enviarMensajeStudio() {
-  const input = document.getElementById('chat-input-studio');
-  const texto = input.value.trim();
+// ── Studio Chat ───────────────────────────────────────────────────────────────
+let _scConvId    = null;
+let _scJobTimer  = null;
+let _scConvList  = [];
+let _scDashCache = {}; // job_id → dashboard spec
+
+function _scScrollBottom() {
+  const el = document.getElementById('sc-messages');
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function _scAddBubble(texto, rol, extra = {}) {
+  const msgs = document.getElementById('sc-messages');
+  const wrap = document.createElement('div');
+  wrap.className = `sc-bubble sc-bubble-${rol === 'user' ? 'user' : 'bot'}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = `sc-bubble-content${extra.hasDash ? ' sc-has-dash' : ''}`;
+  bubble.textContent = texto;
+
+  if (extra.hasDash && extra.jobId) {
+    const badge = document.createElement('span');
+    badge.className = 'sc-dash-badge';
+    badge.textContent = '📊 Ver dashboard';
+    badge.onclick = () => _scVerDashboard(extra.jobId);
+    bubble.appendChild(document.createElement('br'));
+    bubble.appendChild(badge);
+  }
+
+  wrap.appendChild(bubble);
+  msgs.appendChild(wrap);
+  _scScrollBottom();
+  return wrap;
+}
+
+function _scAddTyping() {
+  const msgs = document.getElementById('sc-messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'sc-bubble sc-bubble-bot';
+  wrap.id = 'sc-typing';
+  wrap.innerHTML = '<div class="sc-typing"><span class="sc-typing-dot"></span><span class="sc-typing-dot"></span><span class="sc-typing-dot"></span></div>';
+  msgs.appendChild(wrap);
+  _scScrollBottom();
+}
+
+function _scRemoveTyping() {
+  document.getElementById('sc-typing')?.remove();
+}
+
+function _scVerDashboard(jobId) {
+  const spec = _scDashCache[jobId];
+  if (!spec) { mostrarToast('Dashboard no disponible', 'error'); return; }
+  renderDashboard(spec);
+}
+
+function _scMostrarCargandoDashboard() {
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  if (!wrap) return;
+  wrap.classList.remove('hidden');
+  document.getElementById('dashboard-ia-contenido').innerHTML = `
+    <div class="dash-skeleton" style="height:80px;border-radius:10px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:10px;margin-bottom:10px">
+      <div class="dash-skeleton" style="flex:1;height:120px;border-radius:10px"></div>
+      <div class="dash-skeleton" style="flex:1;height:120px;border-radius:10px"></div>
+    </div>
+    <div style="text-align:center;padding:8px;font-size:12px;color:var(--text-dim)">
+      Generando dashboard con IA…
+    </div>`;
+  document.getElementById('dashboard-ia-narrativa').classList.add('hidden');
+  document.getElementById('dashboard-ia-titulo').textContent = 'Procesando…';
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function _scPollJob(jobId, hasDashHint) {
+  try {
+    const data = await api(`/api/studio/chat/job/${jobId}`);
+    if (data.estado === 'pending') {
+      _scJobTimer = setTimeout(() => _scPollJob(jobId, hasDashHint), 2000);
+      return;
+    }
+    _scRemoveTyping();
+    const hasDash = !!(data.dashboard);
+    if (hasDash) {
+      _scDashCache[jobId] = data.dashboard;
+      renderDashboard(data.dashboard);
+    } else if (hasDashHint) {
+      // Pidió dashboard pero no se generó — limpiar skeleton
+      const wrap = document.getElementById('dashboard-ia-wrap');
+      if (wrap) wrap.classList.add('hidden');
+    }
+    _scAddBubble(data.respuesta || 'Sin respuesta.', 'bot', { hasDash, jobId });
+  } catch (e) {
+    _scRemoveTyping();
+    _scAddBubble('Error al obtener respuesta. Intenta de nuevo.', 'bot');
+  }
+}
+
+async function _scEnviar() {
+  const input  = document.getElementById('sc-input');
+  const sendBtn = document.getElementById('sc-send-btn');
+  const texto  = input.value.trim();
   if (!texto) return;
+
   input.value = '';
-  agregarBurbuja(texto, 'user');
+  input.style.height = 'auto';
+  sendBtn.disabled = true;
 
-  // Indicador de escritura
-  const msgs  = document.getElementById('chat-panel-messages');
-  const typing = document.createElement('div');
-  typing.className = 'chat-typing';
-  typing.id = 'studio-typing';
-  typing.innerHTML = '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
-  msgs.appendChild(typing);
-  msgs.scrollTop = msgs.scrollHeight;
+  _scAddBubble(texto, 'user');
+  _scAddTyping();
 
-  // TODO: conectar al agente cuando esté listo
-  setTimeout(() => {
-    document.getElementById('studio-typing')?.remove();
-    agregarBurbuja('El agente de IA estará disponible próximamente.', 'bot');
-  }, 800);
+  try {
+    const body = { mensaje: texto };
+    if (_scConvId) body.conversacion_id = _scConvId;
+
+    const data = await api('/api/studio/chat/mensaje/async', {
+      method: 'POST', body: JSON.stringify(body),
+    });
+
+    _scConvId = data.conversacion_id;
+
+    const _dashHint = /dashboard|tablero|gr[aá]fic|chart|visualiza/i.test(texto);
+
+    if (data.estado === 'done') {
+      _scRemoveTyping();
+      const hasDash = !!(data.dashboard);
+      if (hasDash) {
+        _scDashCache[data.job_id] = data.dashboard;
+        renderDashboard(data.dashboard);
+      }
+      _scAddBubble(data.respuesta || '', 'bot', { hasDash, jobId: data.job_id });
+    } else {
+      // Pending — mostrar skeleton si es solicitud de dashboard y hacer polling
+      if (_dashHint) _scMostrarCargandoDashboard();
+      clearTimeout(_scJobTimer);
+      _scJobTimer = setTimeout(() => _scPollJob(data.job_id, _dashHint), 2000);
+    }
+
+    // Refrescar lista de conversaciones
+    _scCargarConversaciones();
+  } catch (e) {
+    _scRemoveTyping();
+    if (e.message && e.message.includes('límite')) {
+      _scAddBubble(e.message, 'bot');
+    } else {
+      _scAddBubble('Error de conexión. Intenta de nuevo.', 'bot');
+    }
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+async function _scCargarConversaciones() {
+  try {
+    const data = await api('/api/studio/chat/conversaciones');
+    _scConvList = data.conversaciones || [];
+    _scRenderConvList();
+  } catch { /* silencioso */ }
+}
+
+function _scRenderConvList() {
+  const container = document.getElementById('sc-conv-items');
+  if (!container) return;
+  if (_scConvList.length === 0) {
+    container.innerHTML = '<div style="font-size:11px;color:var(--text-dim);padding:6px 4px">Sin conversaciones</div>';
+    return;
+  }
+  container.innerHTML = _scConvList.map(c => `
+    <div class="sc-conv-item${c.id === _scConvId ? ' active' : ''}" onclick="_scAbrirConv(${c.id})">
+      ${c.titulo || 'Conversación'}
+    </div>
+  `).join('');
+}
+
+async function _scAbrirConv(convId) {
+  if (_scConvId === convId) return;
+  _scConvId = convId;
+  _scRenderConvList();
+
+  const data = await api(`/api/studio/chat/conversaciones/${convId}`);
+  const msgs = document.getElementById('sc-messages');
+  msgs.innerHTML = '';
+
+  for (const m of (data.mensajes || [])) {
+    _scAddBubble(m.contenido, m.rol === 'user' ? 'user' : 'bot');
+  }
+}
+
+function _scNuevaConv() {
+  if (_scJobTimer) clearTimeout(_scJobTimer);
+  _scConvId = null;
+  const msgs = document.getElementById('sc-messages');
+  msgs.innerHTML = '';
+  _scAddBubble('Nueva conversación iniciada. ¿En qué puedo ayudarte?', 'bot');
+  _scRenderConvList();
+  document.getElementById('sc-input')?.focus();
+}
+
+let _scConvOpen = true; // empieza abierto
+
+function toggleConvList() {
+  _scConvOpen = !_scConvOpen;
+  const list  = document.getElementById('sc-conv-list');
+  const arrow = document.getElementById('sc-conv-arrow');
+  list.style.maxHeight  = _scConvOpen ? '160px' : '0';
+  list.style.overflowY  = _scConvOpen ? 'auto'  : 'hidden';
+  arrow.style.transform = _scConvOpen ? 'rotate(180deg)' : '';
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('chat-send-studio')
-    .addEventListener('click', enviarMensajeStudio);
-  document.getElementById('chat-input-studio')
-    .addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarMensajeStudio(); } });
+  document.getElementById('sc-send-btn').addEventListener('click', _scEnviar);
+  document.getElementById('sc-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _scEnviar(); }
+  });
+  // Auto-resize textarea
+  document.getElementById('sc-input').addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  });
+  document.getElementById('sc-nueva-btn').addEventListener('click', _scNuevaConv);
+  _scCargarConversaciones();
 });
 
 // ── Cerrar modales con Escape ─────────────────────────────────────────────────
@@ -1833,91 +2214,552 @@ function limpiarSidebarIA() {
   document.getElementById('sb-ia-btn').disabled = false;
 }
 
-function _relTime(ts) {
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60)   return 'hace un momento';
-  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
-  return `hace ${Math.floor(diff / 3600)}h`;
+// ── Cerrar / mostrar dashboard IA ─────────────────────────────────────────────
+function cerrarDashboardIA() {
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  wrap.classList.add('hidden');
+  // Destruir charts del dashboard activo
+  Object.values(_dashCharts).forEach(c => { try { c.destroy(); } catch {} });
+  _dashCharts = {};
 }
 
+function _mostrarDashboardCargando() {
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  wrap.classList.remove('hidden');
+  document.getElementById('dashboard-ia-titulo').textContent = 'Generando dashboard…';
+  document.getElementById('dashboard-ia-contenido').innerHTML =
+    '<div class="dash-skeleton" style="animation-delay:0s"></div>';
+  document.getElementById('dashboard-ia-narrativa').classList.add('hidden');
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Cargar plantilla con IA (nuevo flujo) ─────────────────────────────────────
 async function cargarPlantilla(tipo) {
-  const plantilla = PLANTILLAS_IA[tipo];
-  if (!plantilla) return;
-
   document.querySelectorAll('.tpl-btn').forEach(b => b.classList.add('loading'));
-
-  // Agregar card al historial inmediatamente con estado "procesando"
-  const idx = _historial.length;
-  agregarAlHistorial({
-    titulo: plantilla.titulo,
-    tipo,
-    datos: null,
-    ia_texto: null,
-    cargando: true,
-    guardado: false,
-    db_id: null,
-    ts: Date.now(),
-  });
+  _mostrarDashboardCargando();
 
   try {
-    // Fetch datos + lanzar job IA en paralelo
-    const [datos, job] = await Promise.all([
-      api(`/api/datos/plantilla/${tipo}`),
-      api('/api/chat/mensaje', {
-        method: 'POST',
-        body: JSON.stringify({ mensaje: plantilla.prompt }),
-      }),
-    ]);
-
-    _historial[idx].datos = datos;
-    renderMiniViz(idx);
-
-    // Escuchar resultado de IA
-    _pollIAJob(job.job_id, idx);
-
+    const spec = await api('/api/datos/generar', {
+      method: 'POST',
+      body: JSON.stringify({ tipo }),
+    });
+    renderDashboard(spec);
+    agregarAlHistorial({
+      titulo:   spec.titulo,
+      tipo:     spec.tipo,
+      layout:   spec.layout,
+      datos:    spec.datos,
+      narrativa: spec.narrativa,
+      cargando: false,
+      guardado: false,
+      db_id:    null,
+      ts:       Date.now(),
+    });
   } catch (e) {
-    mostrarToast('Error: ' + e.message, 'error');
-    if (_historial[idx]) {
-      _historial[idx].ia_texto = 'Error al generar el análisis.';
-      _historial[idx].cargando = false;
-      _renderIASeccion(idx);
-    }
+    cerrarDashboardIA();
+    mostrarToast('Error al generar: ' + e.message, 'error');
   } finally {
     document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('loading'));
   }
 }
 
-async function _pollIAJob(jobId, idx) {
-  let intentos = 0;
-  const poll = async () => {
-    intentos++;
-    if (intentos > 60) {
-      if (_historial[idx]) {
-        _historial[idx].ia_texto = 'Tiempo de espera agotado.';
-        _renderIASeccion(idx);
-      }
-      return;
-    }
-    try {
-      const r = await api(`/api/chat/job/${jobId}`);
-      if (r.estado === 'ok') {
-        if (_historial[idx]) {
-          _historial[idx].ia_texto = r.respuesta;
-          _historial[idx].cargando = false;
-          _renderIASeccion(idx);
-        }
-      } else if (r.estado === 'error') {
-        if (_historial[idx]) {
-          _historial[idx].ia_texto = 'Error IA: ' + (r.respuesta || 'Intenta de nuevo');
-          _historial[idx].cargando = false;
-          _renderIASeccion(idx);
-        }
-      } else {
-        setTimeout(poll, 2000);
-      }
-    } catch { setTimeout(poll, 3000); }
+// ── Render dashboard principal ────────────────────────────────────────────────
+let _dashCharts = {};
+
+function renderDashboard(spec) {
+  // Destruir charts previos
+  Object.values(_dashCharts).forEach(c => { try { c.destroy(); } catch {} });
+  _dashCharts = {};
+
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  wrap.classList.remove('hidden');
+
+  document.getElementById('dashboard-ia-titulo').textContent = spec.titulo;
+
+  const contenido = document.getElementById('dashboard-ia-contenido');
+  contenido.innerHTML = '';
+
+  const renderers = {
+    kpi_bar:      renderLayoutKpiBar,
+    ranking_hbar: renderLayoutRankingHbar,
+    trend_area:   renderLayoutTrendArea,
+    donut_split:  renderLayoutDonutSplit,
+    dual_compare: renderLayoutDualCompare,
   };
-  setTimeout(poll, 2000);
+  (renderers[spec.layout] || renderLayoutKpiBar)(contenido, spec);
+
+  // Narrativa
+  const narWrap = document.getElementById('dashboard-ia-narrativa');
+  document.getElementById('dashboard-ia-narrativa-texto').textContent = spec.narrativa || '';
+  narWrap.classList.remove('hidden');
+
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Layout: kpi_bar ───────────────────────────────────────────────────────────
+function renderLayoutKpiBar(container, spec) {
+  const datos = spec.datos || {};
+  const lista = datos.datos || [];
+  const esDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc      = esDark ? '#94a3b8' : '#6E6E73';
+  const gc      = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+  const tipo    = spec.tipo;
+
+  // KPI strip
+  let kpis = [];
+  if (tipo === 'ventas_hoy') {
+    const total = parseFloat(datos.total || 0);
+    const ped   = lista.reduce((s, r) => s + (r.pedidos || 0), 0);
+    const sucActivas = lista.filter(r => parseFloat(r.valor || 0) > 0).length;
+    kpis = [
+      { label: 'Total vendido hoy',    valor: _formatMXN(total), accent: true },
+      { label: 'Pedidos pagados',       valor: ped.toLocaleString('es-MX') },
+      { label: 'Sucursales con ventas', valor: sucActivas },
+    ];
+  } else {
+    // ventas_sucursal
+    const totalActual   = lista.reduce((s, r) => s + parseFloat(r.actual || 0), 0);
+    const totalAnterior = lista.reduce((s, r) => s + parseFloat(r.anterior || 0), 0);
+    const var_pct = totalAnterior > 0
+      ? ((totalActual - totalAnterior) / totalAnterior * 100).toFixed(1) : null;
+    kpis = [
+      { label: 'Total período actual',    valor: _formatMXN(totalActual), accent: true },
+      { label: 'Total período anterior',  valor: _formatMXN(totalAnterior) },
+      { label: 'Variación global',        valor: var_pct !== null ? `${var_pct >= 0 ? '+' : ''}${var_pct}%` : '—' },
+    ];
+  }
+
+  // Render KPI strip
+  const kpiHtml = kpis.map((k, i) => `
+    <div class="layout-kpi-mini dash-animate ${k.accent ? 'accent' : ''}" style="animation-delay:${i * 0.06}s">
+      <div class="kpi-label">${k.label}</div>
+      <div class="kpi-value">${k.valor}</div>
+    </div>`).join('');
+
+  // Chart data
+  let labels, datasets;
+  if (tipo === 'ventas_hoy') {
+    const filas = lista.filter(r => parseFloat(r.valor || 0) > 0);
+    labels   = filas.map(r => r.label);
+    datasets = [{ label: 'Ventas hoy', data: filas.map(r => parseFloat(r.valor || 0)),
+      backgroundColor: COLORES[1], borderRadius: 6, borderSkipped: false }];
+  } else {
+    labels   = lista.map(r => r.label);
+    datasets = [
+      { label: 'Período actual',   data: lista.map(r => parseFloat(r.actual || 0)),
+        backgroundColor: COLORES[0], borderRadius: 6, borderSkipped: false },
+      { label: 'Período anterior', data: lista.map(r => parseFloat(r.anterior || 0)),
+        backgroundColor: esDark ? 'rgba(255,255,255,.13)' : 'rgba(0,0,0,.08)',
+        borderRadius: 6, borderSkipped: false },
+    ];
+  }
+
+  // Table rows
+  let tableHtml = '';
+  if (tipo === 'ventas_sucursal') {
+    tableHtml = lista.map(r => {
+      const pct = r.variacion_pct;
+      const pctHtml = pct !== null && pct !== undefined
+        ? `<span class="${pct >= 0 ? 'var-pos' : 'var-neg'}">${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}%</span>`
+        : '<span style="color:var(--text-dim)">—</span>';
+      return `<tr>
+        <td><strong>${r.label}</strong></td>
+        <td style="text-align:right">${_formatMXN(parseFloat(r.actual || 0))}</td>
+        <td style="text-align:right">${_formatMXN(parseFloat(r.anterior || 0))}</td>
+        <td style="text-align:right">${pctHtml}</td>
+      </tr>`;
+    }).join('');
+  } else {
+    tableHtml = lista.filter(r => parseFloat(r.valor || 0) > 0).map(r => `<tr>
+      <td><strong>${r.label}</strong></td>
+      <td style="text-align:right">${(r.pedidos || 0)}</td>
+      <td style="text-align:right">${_formatMXN(parseFloat(r.valor || 0))}</td>
+    </tr>`).join('');
+  }
+
+  const thRow = tipo === 'ventas_sucursal'
+    ? '<th>Sucursal</th><th style="text-align:right">Actual</th><th style="text-align:right">Anterior</th><th style="text-align:right">Var.</th>'
+    : '<th>Sucursal</th><th style="text-align:right">Pedidos</th><th style="text-align:right">Ventas</th>';
+
+  container.innerHTML = `
+    <div class="layout-kpi-strip">${kpiHtml}</div>
+    <div class="dash-card dash-animate" style="animation-delay:.18s;margin-bottom:16px">
+      <div class="dash-card-title">Distribución por sucursal</div>
+      <canvas id="dash-main-chart" style="max-height:240px"></canvas>
+    </div>
+    <div class="dash-card dash-animate" style="animation-delay:.28s;overflow-x:auto">
+      <table class="comp-table">
+        <thead><tr>${thRow}</tr></thead>
+        <tbody>${tableHtml}</tbody>
+      </table>
+    </div>`;
+
+  // Chart
+  const canvas = document.getElementById('dash-main-chart');
+  _dashCharts['main'] = new Chart(canvas, {
+    type: 'bar', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: tc, font: { size: 12 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: tc, font: { size: 11 }, callback: v => _formatMXN(v) },
+             grid: { color: gc }, border: { display: false } },
+      },
+    },
+  });
+}
+
+// ── Layout: ranking_hbar ──────────────────────────────────────────────────────
+function renderLayoutRankingHbar(container, spec) {
+  const datos = spec.datos || {};
+  const lista = datos.datos || [];
+  const tipo  = spec.tipo;
+  const esDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc      = esDark ? '#94a3b8' : '#6E6E73';
+  const gc      = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+  const maxVal = lista.length ? Math.max(...lista.map(r => parseFloat(r.valor || 0))) : 1;
+  const total  = lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0);
+  const top    = lista[0] || {};
+
+  // KPI strip
+  const subLabel = tipo === 'top_vendedores' ? 'vendedores' :
+                   tipo === 'top_productos'   ? 'productos'  : 'clientes';
+  const kpiHtml = `
+    <div class="layout-kpi-strip">
+      <div class="layout-kpi-mini accent dash-animate">
+        <div class="kpi-label">Líder</div>
+        <div class="kpi-value" style="font-size:15px">${top.label || '—'}</div>
+        <div class="kpi-sub">${_formatMXN(parseFloat(top.valor || 0))}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
+        <div class="kpi-label">Total ${subLabel}</div>
+        <div class="kpi-value">${lista.length}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.12s">
+        <div class="kpi-label">Monto total</div>
+        <div class="kpi-value" style="font-size:16px">${_formatMXN(total)}</div>
+      </div>
+    </div>`;
+
+  // Ranking list
+  const posClasses = ['gold', 'silver', 'bronze'];
+  const posSymbols = ['1°', '2°', '3°'];
+  const rowsHtml = lista.map((r, i) => {
+    const val = parseFloat(r.valor || 0);
+    const pct = maxVal > 0 ? Math.round(val / maxVal * 100) : 0;
+    const posClass = i < 3 ? posClasses[i] : '';
+    const posLabel = i < 3 ? posSymbols[i] : `${i + 1}`;
+    const subInfo  = r.pedidos !== undefined
+      ? `${r.pedidos} ${tipo === 'top_productos' ? 'uds' : 'ped.'}`
+      : (r.unidades !== undefined ? `${r.unidades} uds` : '');
+    return `
+      <div class="ranking-row dash-animate" style="animation-delay:${.18 + i * 0.04}s">
+        <span class="ranking-pos ${posClass}">${posLabel}</span>
+        <span class="ranking-name" title="${r.label}">${r.label}</span>
+        <div class="ranking-bar-wrap"><div class="ranking-bar" style="width:${pct}%"></div></div>
+        <span class="ranking-valor">${_formatMXN(val)}</span>
+        ${subInfo ? `<span class="ranking-sub">${subInfo}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  // Top 5 for hbar chart (labels might be long, use chart only for top 8)
+  const chartData = lista.slice(0, 8);
+
+  container.innerHTML = `
+    ${kpiHtml}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div class="dash-card dash-animate" style="animation-delay:.15s">
+        <div class="dash-card-title">Ranking detallado</div>
+        <div class="ranking-list">${rowsHtml}</div>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.22s">
+        <div class="dash-card-title">Comparativa visual</div>
+        <canvas id="dash-main-chart" style="max-height:300px"></canvas>
+      </div>
+    </div>`;
+
+  const canvas = document.getElementById('dash-main-chart');
+  _dashCharts['main'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: chartData.map(r => r.label),
+      datasets: [{
+        data: chartData.map(r => parseFloat(r.valor || 0)),
+        backgroundColor: COLORES.slice(0, chartData.length),
+        borderRadius: 5, borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+      },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+             grid: { color: gc }, border: { display: false } },
+        y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ── Layout: trend_area ────────────────────────────────────────────────────────
+function renderLayoutTrendArea(container, spec) {
+  const datos  = spec.datos || {};
+  const lista  = datos.datos || [];
+  const tipo   = spec.tipo;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc     = esDark ? '#94a3b8' : '#6E6E73';
+  const gc     = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+  const total  = parseFloat(datos.total || lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0));
+  const vals   = lista.map(r => parseFloat(r.valor || 0));
+  const maxVal = vals.length ? Math.max(...vals) : 0;
+  const minVal = vals.length ? Math.min(...vals) : 0;
+
+  // Growth vs first
+  const v0 = vals[0] || 0;
+  const vN = vals[vals.length - 1] || 0;
+  const crecimiento = v0 > 0 ? ((vN - v0) / v0 * 100).toFixed(1) : null;
+
+  // Labels
+  const labels = lista.map(r =>
+    r.mes_nombre || String(r.fecha || `${r.mes || ''}/${r.anio || ''}`).substring(0, 10)
+  );
+
+  // KPI strip
+  const kpiHtml = `
+    <div class="trend-kpi-row">
+      <div class="trend-kpi dash-animate" style="animation-delay:0s">
+        <div class="trend-kpi-val">${_formatMXN(total)}</div>
+        <div class="trend-kpi-lbl">Total período</div>
+      </div>
+      <div class="trend-kpi dash-animate" style="animation-delay:.06s">
+        <div class="trend-kpi-val">${_formatMXN(maxVal)}</div>
+        <div class="trend-kpi-lbl">Punto más alto</div>
+      </div>
+      <div class="trend-kpi dash-animate" style="animation-delay:.12s">
+        <div class="trend-kpi-val" style="color:${crecimiento >= 0 ? 'var(--success)' : 'var(--danger)'}">
+          ${crecimiento !== null ? `${crecimiento >= 0 ? '+' : ''}${crecimiento}%` : '—'}
+        </div>
+        <div class="trend-kpi-lbl">Crecimiento período</div>
+      </div>
+    </div>`;
+
+  container.innerHTML = `
+    ${kpiHtml}
+    <div class="dash-card dash-animate" style="animation-delay:.18s">
+      <div class="dash-card-title">Evolución en el tiempo</div>
+      <canvas id="dash-main-chart" style="max-height:260px"></canvas>
+    </div>`;
+
+  const canvas = document.getElementById('dash-main-chart');
+  const gradient = (() => {
+    const ctx2 = canvas.getContext('2d');
+    const g = ctx2.createLinearGradient(0, 0, 0, 260);
+    g.addColorStop(0,   esDark ? 'rgba(0,137,123,.35)' : 'rgba(0,137,123,.25)');
+    g.addColorStop(1,   esDark ? 'rgba(0,137,123,.03)' : 'rgba(0,137,123,.02)');
+    return g;
+  })();
+
+  _dashCharts['main'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Ventas',
+        data: vals,
+        borderColor: '#00897B',
+        backgroundColor: gradient,
+        fill: true,
+        tension: 0.4,
+        pointBackgroundColor: '#00897B',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2.5,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 11 } }, grid: { display: false } },
+        y: { ticks: { color: tc, font: { size: 11 }, callback: v => _formatMXN(v) },
+             grid: { color: gc }, border: { display: false } },
+      },
+    },
+  });
+}
+
+// ── Layout: donut_split ───────────────────────────────────────────────────────
+function renderLayoutDonutSplit(container, spec) {
+  const datos  = spec.datos || {};
+  const lista  = datos.datos || [];
+  const total  = int(datos.total || lista.reduce((s, r) => s + (r.valor || 0), 0));
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc     = esDark ? '#94a3b8' : '#6E6E73';
+
+  const tableHtml = lista.map((r, i) => {
+    const pct = total > 0 ? Math.round((r.valor || 0) / total * 100) : 0;
+    return `<tr>
+      <td><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${COLORES[i % COLORES.length]};margin-right:7px"></span><strong>${r.label}</strong></td>
+      <td style="text-align:right">${r.valor || 0}</td>
+      <td style="text-align:right">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div class="layout-kpi-strip">
+      <div class="layout-kpi-mini accent dash-animate">
+        <div class="kpi-label">Total pedidos activos</div>
+        <div class="kpi-value">${total}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
+        <div class="kpi-label">Sucursales con pedidos</div>
+        <div class="kpi-value">${lista.length}</div>
+      </div>
+    </div>
+    <div class="donut-split-grid">
+      <div class="dash-card dash-animate" style="animation-delay:.15s">
+        <div class="dash-card-title">Distribución</div>
+        <canvas id="dash-main-chart" style="max-height:260px"></canvas>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.22s;overflow-x:auto">
+        <div class="dash-card-title">Por sucursal</div>
+        <table class="comp-table">
+          <thead><tr><th>Sucursal</th><th style="text-align:right">Pedidos</th><th style="text-align:right">%</th></tr></thead>
+          <tbody>${tableHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const canvas = document.getElementById('dash-main-chart');
+  _dashCharts['main'] = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: lista.map(r => r.label),
+      datasets: [{
+        data: lista.map(r => r.valor || 0),
+        backgroundColor: COLORES.slice(0, lista.length),
+        borderWidth: 2,
+        borderColor: esDark ? '#1e293b' : '#fff',
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '65%',
+      plugins: {
+        legend: { position: 'bottom', labels: { color: tc, font: { size: 11 }, boxWidth: 10, padding: 10 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed} pedidos` } },
+      },
+    },
+  });
+}
+
+function int(v) { return parseInt(v) || 0; }
+
+// ── Layout: dual_compare ──────────────────────────────────────────────────────
+function renderLayoutDualCompare(container, spec) {
+  const datos  = spec.datos || {};
+  const lista  = datos.datos || [];
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc     = esDark ? '#94a3b8' : '#6E6E73';
+  const gc     = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+  const totalActual   = lista.reduce((s, r) => s + parseFloat(r.actual || 0), 0);
+  const totalAnterior = lista.reduce((s, r) => s + parseFloat(r.anterior || 0), 0);
+  const varGlobal     = totalAnterior > 0
+    ? ((totalActual - totalAnterior) / totalAnterior * 100).toFixed(1) : null;
+
+  const kpiHtml = `
+    <div class="layout-kpi-strip">
+      <div class="layout-kpi-mini accent dash-animate">
+        <div class="kpi-label">Período actual</div>
+        <div class="kpi-value">${_formatMXN(totalActual)}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
+        <div class="kpi-label">Período anterior</div>
+        <div class="kpi-value">${_formatMXN(totalAnterior)}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.12s">
+        <div class="kpi-label">Variación global</div>
+        <div class="kpi-value" style="color:${varGlobal >= 0 ? 'var(--success)' : 'var(--danger)'}">
+          ${varGlobal !== null ? `${varGlobal >= 0 ? '+' : ''}${varGlobal}%` : '—'}
+        </div>
+      </div>
+    </div>`;
+
+  const tableHtml = lista.map(r => {
+    const pct = r.variacion_pct;
+    const pctHtml = pct !== null && pct !== undefined
+      ? `<span class="${pct >= 0 ? 'delta-positive' : 'delta-negative'}">${pct >= 0 ? '+' : ''}${pct}%</span>`
+      : '<span style="color:var(--text-dim)">—</span>';
+    return `<tr>
+      <td><strong>${r.label}</strong></td>
+      <td style="text-align:right">${_formatMXN(parseFloat(r.actual || 0))}</td>
+      <td style="text-align:right">${_formatMXN(parseFloat(r.anterior || 0))}</td>
+      <td style="text-align:right">${pctHtml}</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    ${kpiHtml}
+    <div class="dual-grid">
+      <div class="dash-card dash-animate" style="animation-delay:.18s">
+        <div class="dash-card-title">Comparativa visual</div>
+        <canvas id="dash-main-chart" style="max-height:280px"></canvas>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.25s;overflow-x:auto">
+        <div class="dash-card-title">Detalle por vendedor</div>
+        <table class="comp-table">
+          <thead><tr><th>Vendedor</th><th style="text-align:right">Actual</th><th style="text-align:right">Anterior</th><th style="text-align:right">Var.</th></tr></thead>
+          <tbody>${tableHtml}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const canvas = document.getElementById('dash-main-chart');
+  _dashCharts['main'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: lista.map(r => r.label),
+      datasets: [
+        { label: 'Actual',   data: lista.map(r => parseFloat(r.actual || 0)),
+          backgroundColor: COLORES[0], borderRadius: 5, borderSkipped: false },
+        { label: 'Anterior', data: lista.map(r => parseFloat(r.anterior || 0)),
+          backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.09)',
+          borderRadius: 5, borderSkipped: false },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: tc, font: { size: 11 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        y: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+             grid: { color: gc }, border: { display: false } },
+      },
+    },
+  });
+}
+
+function _relTime(ts) {
+  const diff = Math.floor((Date.now() - ts) / 1000);
+  if (diff < 60)   return 'hace un momento';
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  return `hace ${Math.floor(diff / 3600)}h`;
 }
 
 function _renderIASeccion(idx) {
@@ -1936,10 +2778,12 @@ function _renderIASeccion(idx) {
     else card.appendChild(iaEl);
   }
 
-  if (item.cargando && !item.ia_texto) {
+  // Mostrar narrativa del nuevo sistema (spec.narrativa) o texto IA legado
+  const texto = item.narrativa || item.ia_texto || '';
+  if (item.cargando && !texto) {
     iaEl.innerHTML = '<span style="color:var(--text-dim);font-style:italic">Generando análisis IA...</span>';
   } else {
-    iaEl.textContent = item.ia_texto || '';
+    iaEl.textContent = texto;
   }
 }
 
@@ -1976,17 +2820,19 @@ function renderHistorialItem(item, idx) {
       <span class="dash-hist-titulo" title="${item.titulo}">${item.titulo}</span>
       <div class="dash-hist-actions">
         ${guardadoBadge}
+        <button onclick="verDashHistorial(${idx})" title="Ver dashboard" style="font-size:13px">↗</button>
         <button onclick="eliminarDashHistorial(${idx})" title="Eliminar">✕</button>
       </div>
     </div>
     <div class="dash-hist-preview" id="dash-preview-${idx}"></div>
+    <div id="dash-ia-${idx}" style="display:none"></div>
     <div class="dash-hist-meta" id="dash-meta-${idx}">${item.tipo} · ${_relTime(item.ts)}</div>
   `;
 
   lista.insertBefore(div, lista.firstChild);
   setTimeout(() => {
     renderMiniViz(idx);
-    if (item.cargando) _renderIASeccion(idx);
+    if (item.narrativa || item.cargando) _renderIASeccion(idx);
   }, 60);
 }
 
@@ -2062,8 +2908,38 @@ function renderMiniViz(idx) {
       <tbody>${lista.map(m => `<tr><td>${m.mes_nombre || m.mes}</td><td style="text-align:right">${_formatMXN(m.valor)}</td></tr>`).join('')}</tbody>
     </table>`;
 
+  } else if (tipo === 'ventas_diario' || tipo === 'tendencia_anual') {
+    if (!lista.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin datos</p>'; return; }
+    preview.innerHTML = `<canvas id="${cid}" height="80"></canvas>`;
+    _histCharts[idx] = new Chart(document.getElementById(cid), {
+      type: 'line',
+      data: {
+        labels: lista.map(r => r.mes_nombre || String(r.fecha || '').substring(5)),
+        datasets: [{ data: lista.map(r => parseFloat(r.valor || 0)), borderColor: '#00897B',
+          backgroundColor: 'rgba(0,137,123,.12)', fill: true, tension: 0.4,
+          pointRadius: 2, borderWidth: 2 }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { x: { display: false }, y: { display: false } } },
+    });
+
+  } else if (tipo === 'top_productos' || tipo === 'clientes_frecuentes') {
+    if (!lista.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin datos</p>'; return; }
+    preview.innerHTML = `<table class="dash-hist-table">
+      <thead><tr><th>#</th><th>${tipo === 'top_productos' ? 'Producto' : 'Cliente'}</th><th style="text-align:right">Ventas</th></tr></thead>
+      <tbody>${lista.slice(0, 5).map((r, i) => `<tr><td>${i + 1}</td><td>${r.label}</td><td style="text-align:right">${_formatMXN(parseFloat(r.valor || 0))}</td></tr>`).join('')}</tbody>
+    </table>`;
+
+  } else if (tipo === 'variacion_vendedores') {
+    if (!lista.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin datos</p>'; return; }
+    mkBar(lista.map(r => r.label), [
+      { label: 'Actual',   data: lista.map(r => parseFloat(r.actual || 0)), backgroundColor: COLORES[0], borderRadius: 3 },
+      { label: 'Anterior', data: lista.map(r => parseFloat(r.anterior || 0)), backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.1)', borderRadius: 3 },
+    ]);
+
   } else if (tipo === 'texto_ia') {
-    preview.innerHTML = `<div style="font-size:11px;line-height:1.6;padding:4px 2px;white-space:pre-wrap;max-height:140px;overflow-y:auto;color:var(--text)">${(datos.texto || '').substring(0, 300)}${(datos.texto || '').length > 300 ? '…' : ''}</div>`;
+    const _texto = (datos && datos.texto) ? datos.texto : (item.narrativa || '');
+    preview.innerHTML = `<div style="font-size:11px;line-height:1.6;padding:4px 2px;white-space:pre-wrap;max-height:120px;overflow-y:auto;color:var(--text)">${_texto.substring(0, 280)}${_texto.length > 280 ? '…' : ''}</div>`;
   }
 }
 
@@ -2096,6 +2972,29 @@ async function guardarDashHistorial(idx) {
   } catch (e) {
     mostrarToast('Error al guardar: ' + e.message, 'error');
   }
+}
+
+function verDashHistorial(idx) {
+  const item = _historial[idx];
+  if (!item || !item.datos) return;
+  renderDashboard({
+    tipo:      item.tipo,
+    layout:    item.layout || _layoutPorTipo(item.tipo),
+    titulo:    item.titulo,
+    narrativa: item.narrativa || item.ia_texto || '',
+    datos:     item.datos,
+  });
+}
+
+function _layoutPorTipo(tipo) {
+  const map = {
+    ventas_hoy: 'kpi_bar', ventas_sucursal: 'kpi_bar',
+    top_vendedores: 'ranking_hbar', top_productos: 'ranking_hbar', clientes_frecuentes: 'ranking_hbar',
+    comparativo_meses: 'trend_area', ventas_diario: 'trend_area', tendencia_anual: 'trend_area',
+    pedidos_activos: 'donut_split',
+    variacion_vendedores: 'dual_compare',
+  };
+  return map[tipo] || 'kpi_bar';
 }
 
 function eliminarDashHistorial(idx) {
@@ -2137,74 +3036,37 @@ async function enviarSolicitudIA() {
   if (!pregunta) { mostrarToast('Escribe tu solicitud primero', 'error'); return; }
 
   btn.disabled = true;
-  estado.textContent = 'Procesando...';
-
-  // Card en historial con estado de carga
-  const idx = _historial.length;
-  agregarAlHistorial({
-    titulo: pregunta.substring(0, 42) + (pregunta.length > 42 ? '…' : ''),
-    tipo: 'texto_ia',
-    datos: null,
-    ia_texto: null,
-    cargando: true,
-    guardado: false,
-    db_id: null,
-    pregunta,
-    ts: Date.now(),
-  });
+  estado.textContent = 'Analizando con IA…';
+  _mostrarDashboardCargando();
 
   try {
-    const job = await api('/api/chat/mensaje', {
+    const spec = await api('/api/datos/generar', {
       method: 'POST',
-      body: JSON.stringify({ mensaje: pregunta }),
+      body: JSON.stringify({ pregunta }),
     });
 
-    // Escuchar resultado y actualizar la card
-    const origPoll = async () => {
-      let intentos = 0;
-      const poll = async () => {
-        intentos++;
-        if (intentos > 60) {
-          estado.textContent = 'Tiempo agotado';
-          btn.disabled = false;
-          return;
-        }
-        try {
-          const r = await api(`/api/chat/job/${job.job_id}`);
-          if (r.estado === 'ok') {
-            if (_historial[idx]) {
-              _historial[idx].ia_texto = r.respuesta;
-              _historial[idx].cargando = false;
-              _renderIASeccion(idx);
-            }
-            estado.textContent = '';
-            btn.disabled = false;
-            input.value = '';
-          } else if (r.estado === 'error') {
-            if (_historial[idx]) {
-              _historial[idx].ia_texto = 'Error: ' + (r.respuesta || 'Intenta de nuevo');
-              _historial[idx].cargando = false;
-              _renderIASeccion(idx);
-            }
-            estado.textContent = 'Error en IA';
-            btn.disabled = false;
-          } else {
-            setTimeout(poll, 2000);
-          }
-        } catch { setTimeout(poll, 3000); }
-      };
-      setTimeout(poll, 2000);
-    };
-    origPoll();
+    renderDashboard(spec);
+    agregarAlHistorial({
+      titulo:    spec.titulo,
+      tipo:      spec.tipo,
+      layout:    spec.layout,
+      datos:     spec.datos,
+      narrativa: spec.narrativa,
+      cargando:  false,
+      guardado:  false,
+      db_id:     null,
+      pregunta,
+      ts: Date.now(),
+    });
 
+    input.value = '';
+    estado.textContent = '';
   } catch (e) {
-    estado.textContent = 'Error: ' + e.message;
+    cerrarDashboardIA();
+    estado.textContent = 'Error';
+    mostrarToast('Error: ' + e.message, 'error');
+  } finally {
     btn.disabled = false;
-    if (_historial[idx]) {
-      _historial[idx].ia_texto = 'Error al enviar la solicitud.';
-      _historial[idx].cargando = false;
-      _renderIASeccion(idx);
-    }
   }
 }
 

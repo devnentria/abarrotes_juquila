@@ -171,6 +171,9 @@ def init_db() -> None:
                 creado_en   TEXT    NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (creado_por) REFERENCES usuarios(id)
             )""",
+            "ALTER TABLE usuarios ADD COLUMN debe_cambiar_password INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE chat_conversaciones ADD COLUMN modulo TEXT NOT NULL DEFAULT 'pwa'",
+            "ALTER TABLE chat_jobs ADD COLUMN meta_json TEXT",
         ]
         for sql in migraciones:
             try:

@@ -103,14 +103,18 @@ def me(usuario: dict = Depends(get_current_user)):
     Returns:
         JSONResponse: { id, nombre, email, rol, modulos }
     """
-    perfil = fetch_one("SELECT foto_perfil FROM usuarios WHERE id = ?", (usuario["id"],))
+    perfil = fetch_one(
+        "SELECT foto_perfil, debe_cambiar_password FROM usuarios WHERE id = ?",
+        (usuario["id"],),
+    )
     return JSONResponse({
-        "id":          usuario["id"],
-        "nombre":      usuario["nombre"],
-        "email":       usuario["email"],
-        "rol":         usuario["rol"],
-        "modulos":     usuario["modulos"],
-        "foto_perfil": perfil["foto_perfil"] if perfil else None,
+        "id":                    usuario["id"],
+        "nombre":                usuario["nombre"],
+        "email":                 usuario["email"],
+        "rol":                   usuario["rol"],
+        "modulos":               usuario["modulos"],
+        "foto_perfil":           perfil["foto_perfil"] if perfil else None,
+        "debe_cambiar_password": bool(perfil["debe_cambiar_password"]) if perfil else False,
     })
 
 
@@ -137,7 +141,7 @@ def cambiar_password(datos: CambiarPassword, usuario: dict = Depends(get_current
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
     execute(
-        "UPDATE usuarios SET password_hash = ? WHERE id = ?",
+        "UPDATE usuarios SET password_hash = ?, debe_cambiar_password = 0 WHERE id = ?",
         (hash_password(datos.nueva_password), usuario["id"]),
     )
     return JSONResponse({"mensaje": "Contraseña actualizada exitosamente"})

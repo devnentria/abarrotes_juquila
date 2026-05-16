@@ -131,11 +131,16 @@ async function iniciarSesion() {
     _intentosFallidos = 0;
     saveToken(data.access_token);
 
+    // Fetch full profile to get debe_cambiar_password flag
+    const meRes  = await fetch('/auth/me', { headers: { Authorization: `Bearer ${data.access_token}` } });
+    const meData = meRes.ok ? await meRes.json() : {};
 
-    state.usuario = { nombre: data.nombre, rol: data.rol, foto_perfil: data.foto_perfil || null };
-    renderAvatarHeader(data.nombre, data.foto_perfil);
+    state.usuario = { nombre: meData.nombre || data.nombre, rol: meData.rol || data.rol, foto_perfil: meData.foto_perfil || null };
+    renderAvatarHeader(state.usuario.nombre, state.usuario.foto_perfil);
     ocultarLogin();
     await cargarDatos();
+
+    if (meData.debe_cambiar_password) mostrarModalForzarPassword();
 
   } catch {
     mostrarErrorLogin('Error de conexión. Intenta de nuevo.');
@@ -1419,6 +1424,7 @@ function abrirPerfil() {
   // Mostrar vista principal
   document.getElementById('perfil-vista-main').classList.remove('hidden');
   document.getElementById('perfil-vista-editar').classList.add('hidden');
+  document.getElementById('perfil-vista-password').classList.add('hidden');
   document.getElementById('perfil-sheet').classList.remove('hidden');
   document.getElementById('perfil-overlay').classList.remove('hidden');
 }
@@ -1459,6 +1465,83 @@ async function guardarNombre() {
   } finally {
     btn.disabled = false; btn.textContent = 'Guardar';
   }
+}
+
+async function guardarPassword() {
+  const actual     = document.getElementById('perfil-pwd-actual').value;
+  const nueva      = document.getElementById('perfil-pwd-nueva').value;
+  const confirmar  = document.getElementById('perfil-pwd-confirmar').value;
+  const errorEl    = document.getElementById('perfil-password-error');
+  const okEl       = document.getElementById('perfil-password-ok');
+  const btn        = document.getElementById('perfil-password-guardar-btn');
+
+  errorEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+
+  if (!actual || !nueva || !confirmar) {
+    errorEl.textContent = 'Completa todos los campos.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva.length < 6) {
+    errorEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva !== confirmar) {
+    errorEl.textContent = 'Las contraseñas no coinciden.'; errorEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const res  = await authFetch('/auth/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password_actual: actual, nueva_password: nueva }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al actualizar');
+    okEl.classList.remove('hidden');
+    document.getElementById('perfil-pwd-actual').value = '';
+    document.getElementById('perfil-pwd-nueva').value = '';
+    document.getElementById('perfil-pwd-confirmar').value = '';
+    setTimeout(() => {
+      okEl.classList.add('hidden');
+      document.getElementById('perfil-vista-password').classList.add('hidden');
+      document.getElementById('perfil-vista-main').classList.remove('hidden');
+    }, 1500);
+  } catch (e) {
+    errorEl.textContent = e.message; errorEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Actualizar contraseña';
+  }
+}
+
+async function guardarPasswordForzado() {
+  const actual    = document.getElementById('forzar-pwd-actual').value;
+  const nueva     = document.getElementById('forzar-pwd-nueva').value;
+  const confirmar = document.getElementById('forzar-pwd-confirmar').value;
+  const errorEl   = document.getElementById('forzar-password-error');
+  const btn       = document.getElementById('forzar-password-btn');
+
+  errorEl.classList.add('hidden');
+
+  if (!actual || !nueva || !confirmar) {
+    errorEl.textContent = 'Completa todos los campos.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva.length < 6) {
+    errorEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva !== confirmar) {
+    errorEl.textContent = 'Las contraseñas no coinciden.'; errorEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const res  = await authFetch('/auth/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password_actual: actual, nueva_password: nueva }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al actualizar');
+    document.getElementById('modal-forzar-password').classList.add('hidden');
+  } catch (e) {
+    errorEl.textContent = e.message; errorEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Guardar y continuar';
+  }
+}
+
+function mostrarModalForzarPassword() {
+  document.getElementById('modal-forzar-password').classList.remove('hidden');
 }
 
 async function subirFoto(file) {
@@ -1529,6 +1612,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter') guardarNombre();
   });
 
+  // Perfil — cambiar contraseña
+  document.getElementById('perfil-password-btn').addEventListener('click', () => {
+    document.getElementById('perfil-pwd-actual').value = '';
+    document.getElementById('perfil-pwd-nueva').value = '';
+    document.getElementById('perfil-pwd-confirmar').value = '';
+    document.getElementById('perfil-password-error').classList.add('hidden');
+    document.getElementById('perfil-password-ok').classList.add('hidden');
+    document.getElementById('perfil-vista-main').classList.add('hidden');
+    document.getElementById('perfil-vista-password').classList.remove('hidden');
+  });
+  document.getElementById('perfil-password-back').addEventListener('click', () => {
+    document.getElementById('perfil-vista-password').classList.add('hidden');
+    document.getElementById('perfil-vista-main').classList.remove('hidden');
+  });
+  document.getElementById('perfil-password-guardar-btn').addEventListener('click', guardarPassword);
+
+  // Modal forzado
+  document.getElementById('forzar-password-btn').addEventListener('click', guardarPasswordForzado);
+
   // Perfil — toggle tema
   document.getElementById('perfil-tema-toggle').addEventListener('change', (e) => {
     const tema = e.target.checked ? 'dark' : 'light';
@@ -1568,6 +1670,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderAvatarHeader(data.nombre, data.foto_perfil);
         ocultarLogin();
         cargarDatos();
+        if (data.debe_cambiar_password) mostrarModalForzarPassword();
       } else {
         clearToken();
       }
