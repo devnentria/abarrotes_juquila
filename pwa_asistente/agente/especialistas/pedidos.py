@@ -11,6 +11,7 @@ Agente Especialista — Pedidos.
 Responde preguntas sobre pedidos activos, su antigüedad
 y distribución por sucursal o vendedor.
 """
+from typing import Optional
 from pwa_asistente.agente import base_agente
 from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
@@ -75,15 +76,17 @@ _SYSTEM = build(
 )
 
 
-def responder(pregunta: str, historial: list[dict]) -> RespuestaIA:
+def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
     Genera una respuesta sobre pedidos.
 
     Args:
         pregunta  (str):        Pregunta del usuario.
         historial (list[dict]): Historial [{rol, contenido}].
+        model     (str|None):   Modelo OpenAI a usar (None = default del sistema).
 
     Returns:
         RespuestaIA: texto + tokens consumidos.
     """
-    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "pedidos")
+    kwargs = {"model": model} if model else {}
+    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "pedidos", **kwargs)

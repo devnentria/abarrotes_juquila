@@ -11,6 +11,7 @@ Agente Analítico General — Mixto.
 Maneja preguntas que cruzan múltiples áreas de negocio
 o que no encajan claramente en un solo especialista.
 """
+from typing import Optional
 from pwa_asistente.agente import base_agente
 from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
@@ -122,15 +123,17 @@ _SYSTEM = build(
 )
 
 
-def responder(pregunta: str, historial: list[dict]) -> RespuestaIA:
+def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
     Genera una respuesta para preguntas mixtas o multi-área.
 
     Args:
         pregunta  (str):        Pregunta del usuario.
         historial (list[dict]): Historial [{rol, contenido}].
+        model     (str|None):   Modelo OpenAI a usar (None = default del sistema).
 
     Returns:
         RespuestaIA: texto + tokens consumidos.
     """
-    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "mixto")
+    kwargs = {"model": model} if model else {}
+    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "mixto", **kwargs)
