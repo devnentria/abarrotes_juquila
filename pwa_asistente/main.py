@@ -57,7 +57,7 @@ self.addEventListener('activate', () => {
 """
 
 
-@app.get("/static/manifest.json", include_in_schema=False)
+@app.get("/manifest.json", include_in_schema=False)
 async def serve_manifest():
     """Manifest dinámico según entorno.
     Local (.env sin PWA_BASE_PATH): scope '/', iconos en /static/icons/
