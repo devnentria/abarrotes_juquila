@@ -1166,22 +1166,10 @@
         style="flex:1;min-width:0;font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;appearance:auto"
         onchange="if(this.value){cargarPlantilla(this.value);this.value=''}">
         <option value="">📊 Dashboard</option>
-        <optgroup label="Ventas">
-          <option value="reporte_ventas">Ventas completo</option>
-          <option value="ventas_hoy">Ventas de hoy</option>
-          <option value="top_vendedores">Top vendedores</option>
-          <option value="top_productos">Top productos</option>
-          <option value="comparativo_meses">Comparativo meses</option>
-        </optgroup>
-        <optgroup label="Inventario">
-          <option value="inventario_stock">Stock por sucursal</option>
-          <option value="caducidades">Caducidades próximas</option>
-          <option value="stockouts">Productos sin existencia</option>
-        </optgroup>
-        <optgroup label="Otros">
-          <option value="clientes_frecuentes">Clientes frecuentes</option>
-          <option value="pedidos_activos">Pedidos activos</option>
-        </optgroup>
+        <option value="reporte_ventas">Reporte de ventas</option>
+        <option value="ventas_hoy">Ventas de hoy</option>
+        <option value="reporte_inventario">Reporte de inventario</option>
+        <option value="pedidos_activos">Pedidos activos</option>
       </select>
     </div>
 
@@ -2910,12 +2898,13 @@ function renderDashboard(spec) {
   contenido.innerHTML = '';
 
   const renderers = {
-    kpi_bar:      renderLayoutKpiBar,
-    ranking_hbar: renderLayoutRankingHbar,
-    trend_area:   renderLayoutTrendArea,
-    donut_split:  renderLayoutDonutSplit,
-    dual_compare: renderLayoutDualCompare,
-    full_report:  renderLayoutFullReport,
+    kpi_bar:          renderLayoutKpiBar,
+    ranking_hbar:     renderLayoutRankingHbar,
+    trend_area:       renderLayoutTrendArea,
+    donut_split:      renderLayoutDonutSplit,
+    dual_compare:     renderLayoutDualCompare,
+    full_report:      renderLayoutFullReport,
+    inventory_report: renderLayoutInventoryReport,
   };
   (renderers[spec.layout] || renderLayoutKpiBar)(contenido, spec);
 
@@ -3628,6 +3617,167 @@ function renderLayoutDualCompare(container, spec) {
       },
     },
   });
+}
+
+// ── Layout: inventory_report ──────────────────────────────────────────────────
+function renderLayoutInventoryReport(container, spec) {
+  const datos    = spec.datos || {};
+  const stockSpec = datos.inventario_stock || {};
+  const cadSpec   = datos.caducidades      || {};
+  const outSpec   = datos.stockouts        || {};
+  const stockRows = stockSpec.datos || [];
+  const cadRows   = cadSpec.datos  || [];
+  const outRows   = outSpec.datos  || [];
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc        = esDark ? '#94a3b8' : '#6E6E73';
+  const gc        = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+  const totalValor    = parseFloat(stockSpec.total_valor    || stockRows.reduce((s, r) => s + parseFloat(r.actual    || 0), 0));
+  const totalUnidades = parseFloat(stockSpec.total_unidades || stockRows.reduce((s, r) => s + parseFloat(r.unidades  || 0), 0));
+  const totalCriticos = stockRows.reduce((s, r) => s + parseInt(r.criticos || 0), 0);
+  const urgentes      = cadRows.filter(r => parseInt(r.dias || 999) <= 30).length;
+  const totalOut      = parseInt(outSpec.total || outRows.reduce((s, r) => s + parseFloat(r.valor || 0), 0));
+
+  // Tabla de caducidades (top 10)
+  const cadHtml = cadRows.slice(0, 10).map(r => {
+    const dias  = parseInt(r.dias ?? 999);
+    const color = dias <= 30 ? 'var(--danger)' : dias <= 60 ? 'var(--warn)' : 'var(--text-dim)';
+    const icon  = dias <= 30 ? '🔴' : dias <= 60 ? '⚠️' : '';
+    return `<tr>
+      <td style="font-size:11px">${icon} ${r.label || '—'}</td>
+      <td style="text-align:right;font-size:11px;color:${color};font-weight:600">${dias}d</td>
+      <td style="text-align:right;font-size:11px">${Math.round(parseFloat(r.unidades || 0)).toLocaleString('es-MX')}</td>
+      <td style="text-align:right;font-size:11px;color:var(--text-dim)">${r.sucursal || ''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-dim);font-size:11px">Sin lotes próximos a caducar</td></tr>';
+
+  container.innerHTML = `
+    <!-- KPIs -->
+    <div class="layout-kpi-strip dash-animate">
+      <div class="layout-kpi-mini accent">
+        <div class="kpi-label">Valor en stock</div>
+        <div class="kpi-value">${_formatMXN(totalValor)}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
+        <div class="kpi-label">Unidades totales</div>
+        <div class="kpi-value">${Math.round(totalUnidades).toLocaleString('es-MX')}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.10s">
+        <div class="kpi-label">Críticos (≤5 uds)</div>
+        <div class="kpi-value" style="color:var(--warn)">${totalCriticos.toLocaleString('es-MX')}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.14s">
+        <div class="kpi-label">Caducan ≤30 días</div>
+        <div class="kpi-value" style="color:var(--danger)">${urgentes}</div>
+      </div>
+      <div class="layout-kpi-mini dash-animate" style="animation-delay:.18s">
+        <div class="kpi-label">Sin existencia</div>
+        <div class="kpi-value" style="color:var(--text-dim)">${totalOut.toLocaleString('es-MX')}</div>
+      </div>
+    </div>
+
+    <!-- Fila 2: Stock por sucursal (2/3) + donut (1/3) -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="dash-card dash-animate" style="animation-delay:.12s">
+        <div class="dash-card-title">Valor de stock por sucursal</div>
+        <canvas id="ir-suc" style="max-height:260px"></canvas>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.18s">
+        <div class="dash-card-title">Distribución</div>
+        <canvas id="ir-donut" style="max-height:260px"></canvas>
+      </div>
+    </div>
+
+    <!-- Fila 3: Caducidades (1/2) + Stockouts (1/2) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:0">
+      <div class="dash-card dash-animate" style="animation-delay:.24s">
+        <div class="dash-card-title">⚠ Próximos a caducar (90 días)</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="border-bottom:1px solid var(--border)">
+            <th style="text-align:left;font-size:10px;color:var(--text-dim);padding:4px 0;font-weight:600">Producto · Lote</th>
+            <th style="text-align:right;font-size:10px;color:var(--text-dim);padding:4px 0;font-weight:600">Días</th>
+            <th style="text-align:right;font-size:10px;color:var(--text-dim);padding:4px 0;font-weight:600">Uds</th>
+            <th style="text-align:right;font-size:10px;color:var(--text-dim);padding:4px 0;font-weight:600">Suc.</th>
+          </tr></thead>
+          <tbody>${cadHtml}</tbody>
+        </table>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.30s">
+        <div class="dash-card-title">🔴 Productos sin existencia por sucursal</div>
+        <canvas id="ir-out" style="max-height:260px"></canvas>
+      </div>
+    </div>
+  `;
+
+  // Chart: stock por sucursal
+  const topSuc = stockRows.slice(0, 8);
+  if (topSuc.length) {
+    _dashCharts['ir-suc'] = new Chart(document.getElementById('ir-suc'), {
+      type: 'bar',
+      data: {
+        labels: topSuc.map(r => r.label),
+        datasets: [{ data: topSuc.map(r => parseFloat(r.actual || 0)),
+          backgroundColor: COLORES[0], borderRadius: 5, borderSkipped: false }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+               grid: { color: gc }, border: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Chart: donut distribución stock
+  const topDonut = stockRows.filter(r => parseFloat(r.actual || 0) > 0).slice(0, 6);
+  if (topDonut.length) {
+    _dashCharts['ir-donut'] = new Chart(document.getElementById('ir-donut'), {
+      type: 'doughnut',
+      data: {
+        labels: topDonut.map(r => r.label),
+        datasets: [{ data: topDonut.map(r => parseFloat(r.actual || 0)),
+          backgroundColor: COLORES.slice(0, topDonut.length),
+          borderWidth: 2, borderColor: esDark ? '#1e293b' : '#fff' }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: tc, font: { size: 10 }, boxWidth: 8, padding: 6 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${_formatMXN(ctx.parsed)}` } },
+        },
+      },
+    });
+  }
+
+  // Chart: stockouts por sucursal
+  if (outRows.length) {
+    _dashCharts['ir-out'] = new Chart(document.getElementById('ir-out'), {
+      type: 'bar',
+      data: {
+        labels: outRows.map(r => r.label),
+        datasets: [{ data: outRows.map(r => parseFloat(r.valor || 0)),
+          backgroundColor: '#EF6C3A', borderRadius: 5, borderSkipped: false }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${Math.round(ctx.parsed.x)} productos` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { color: gc }, border: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+  }
 }
 
 function _relTime(ts) {

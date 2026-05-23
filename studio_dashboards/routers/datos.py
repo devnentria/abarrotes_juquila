@@ -53,6 +53,7 @@ _SPECS_TIPO: dict = {
     "variacion_vendedores": {"titulo": "Variación de vendedores",           "layout": "dual_compare"},
     "reporte_ventas":       {"titulo": "Dashboard de Ventas",               "layout": "full_report"},
     # Inventario
+    "reporte_inventario":   {"titulo": "Dashboard de Inventario",           "layout": "inventory_report"},
     "inventario_stock":     {"titulo": "Stock actual por sucursal",         "layout": "kpi_bar"},
     "caducidades":          {"titulo": "Productos por caducar (90 días)",   "layout": "ranking_hbar"},
     "stockouts":            {"titulo": "Productos sin existencia",          "layout": "ranking_hbar"},
@@ -80,6 +81,7 @@ Funciones disponibles:
   top_productos        → Top 10 productos más vendidos. modo: 30d|mes. layout: ranking_hbar
   clientes_frecuentes  → Top 15 clientes por importe comprado. modo: 30d|mes. layout: ranking_hbar
   variacion_vendedores → Vendedores: período actual vs anterior. modo: 30d|mes. layout: dual_compare
+  reporte_inventario   → Dashboard COMPLETO de inventario: stock + caducidades + stockouts. layout: inventory_report
   inventario_stock     → Stock actual por sucursal: valor en MXN y unidades. layout: kpi_bar
   caducidades          → Productos con lotes próximos a caducar (90 días). layout: ranking_hbar
   stockouts            → Sucursales con más productos sin existencia (stock = 0). layout: ranking_hbar
@@ -686,6 +688,19 @@ def _resumir_datos(tipo: str, datos: dict) -> str:
             resumen += "Mejoran: " + ", ".join(r.get("label", "?") for r in mejores) + ". "
         if caidas:
             resumen += "Bajan: " + ", ".join(r.get("label", "?") for r in caidas) + "."
+    elif tipo == "reporte_inventario":
+        stock_data = datos.get("inventario_stock", {})
+        cad_data   = datos.get("caducidades", {})
+        out_data   = datos.get("stockouts", {})
+        total_v    = float(stock_data.get("total_valor", 0) or 0)
+        total_u    = float(stock_data.get("total_unidades", 0) or 0)
+        criticos   = sum(int(r.get("criticos", 0) or 0) for r in stock_data.get("datos", []))
+        n_cad      = len(cad_data.get("datos", []))
+        n_out      = int(out_data.get("total", 0) or 0)
+        resumen = (f"Inventario total: {_fmt_mxn(total_v)} · {int(total_u):,} unidades. "
+                   f"Productos críticos: {criticos}. "
+                   f"Lotes por caducar (90d): {n_cad}. "
+                   f"Productos sin stock: {n_out:,}.")
     elif tipo == "inventario_stock":
         total_v = float(datos.get("total_valor", 0) or 0)
         total_u = float(datos.get("total_unidades", 0) or 0)
@@ -1130,6 +1145,20 @@ def _fetch_tipo(tipo: str, modo: str) -> dict:
                 "top_vendedores":  vend,
                 "ventas_diario":   dia,
                 "pedidos_activos": pedid,
+            },
+        }
+
+    elif tipo == "reporte_inventario":
+        stock = _fetch_tipo("inventario_stock", modo)
+        cad   = _fetch_tipo("caducidades",      modo)
+        out   = _fetch_tipo("stockouts",        modo)
+        return {
+            "tipo":   tipo,
+            "titulo": "Dashboard de Inventario",
+            "datos": {
+                "inventario_stock": stock,
+                "caducidades":      cad,
+                "stockouts":        out,
             },
         }
 
