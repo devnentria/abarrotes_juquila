@@ -53,11 +53,8 @@ except Exception as _e:
 _pool = ThreadPoolExecutor(max_workers=4)
 
 # Regex para detectar solicitudes de dashboard en el texto del usuario
-_DASHBOARD_RE = re.compile(
-    r"\b(dashboard|tablero|gr[aá]fico|gr[aá]fic[ao]|chart|reporte\s+visual|visualiza|genera\s+(un|el|una)|"
-    r"muestra\s+(un|el|una)\s*(gr[aá]|chart|dash)|genera.*gr[aá]f|hazme\s+un\s+(dash|tabla|gr[aá]))\b",
-    re.IGNORECASE,
-)
+# — tolerante a typos comunes: dashboad, dasboard, tablero, gráfica, chart, etc.
+
 
 _SALUDO = re.compile(
     r"^[\s¡!]*(hola|buenas?|buenos?\s+días?|buenas?\s+tardes?|buenas?\s+noches?|"
@@ -196,23 +193,26 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     except Exception as e:
         print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 
-    # ── 2. Generar dashboard si se detecta en el mensaje ─────────────────────
-    if estado == "done" and _DASHBOARD_FN_OK and _DASHBOARD_RE.search(msg):
+    # ── 2. La IA decide si se requiere dashboard (sin regex) ─────────────────
+    if estado == "done" and _DASHBOARD_FN_OK:
         try:
-            spec      = _clasificar(msg)
-            tipo      = spec.get("funcion", "ventas_hoy")
-            modo      = spec.get("modo", "hoy")
-            datos     = _fetch_tipo(tipo, modo)
-            narrativa = _narrar(msg, tipo, modo, datos)
-            dashboard = {
-                "tipo":      tipo,
-                "layout":    spec.get("layout", "kpi_bar"),
-                "titulo":    spec.get("titulo", "Dashboard"),
-                "modo":      modo,
-                "narrativa": narrativa,
-                "datos":     datos,
-            }
-            print(f"[studio-chat] Dashboard generado tipo={tipo} job={job_id}", flush=True)
+            spec = _clasificar(msg)
+            tipo = spec.get("funcion", "ninguno")
+            if tipo != "ninguno":
+                modo      = spec.get("modo", "30d")
+                datos     = _fetch_tipo(tipo, modo)
+                narrativa = _narrar(msg, tipo, modo, datos)
+                dashboard = {
+                    "tipo":      tipo,
+                    "layout":    spec.get("layout", "kpi_bar"),
+                    "titulo":    spec.get("titulo", "Dashboard"),
+                    "modo":      modo,
+                    "narrativa": narrativa,
+                    "datos":     datos,
+                }
+                print(f"[studio-chat] Dashboard generado tipo={tipo} job={job_id}", flush=True)
+            else:
+                print(f"[studio-chat] Sin dashboard (IA decidió ninguno) job={job_id}", flush=True)
         except Exception as e:
             print(f"[studio-chat] Dashboard error job={job_id}: {e}", flush=True)
 

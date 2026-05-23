@@ -51,28 +51,37 @@ _SPECS_TIPO: dict = {
     "top_productos":        {"titulo": "Top productos más vendidos",        "layout": "ranking_hbar"},
     "clientes_frecuentes":  {"titulo": "Clientes más frecuentes",           "layout": "ranking_hbar"},
     "variacion_vendedores": {"titulo": "Variación de vendedores",           "layout": "dual_compare"},
+    "reporte_ventas":       {"titulo": "Dashboard de Ventas",               "layout": "full_report"},
 }
 
 _SISTEMA_CLASIFICADOR = """
 Eres el clasificador de dashboards del Studio Analítico de una empresa distribuidora farmacéutica.
-Tu trabajo: leer la solicitud del usuario y elegir la función de datos más adecuada.
+Tu trabajo: leer la solicitud del usuario y decidir si corresponde mostrar un dashboard visual o no.
+
+REGLA PRINCIPAL:
+- Si el usuario pide explícitamente un dashboard, tablero, gráfica, gráfico, reporte visual, chart o cualquier
+  visualización (aunque haya errores de ortografía: dashboad, dasboard, tablero, grafica, etc.) → elige una función.
+- Si el usuario solo hace una pregunta o pide datos en texto (¿cuánto vendimos?, dame las ventas, etc.) → usa "ninguno".
 
 Funciones disponibles:
-  ventas_hoy           → ventas pagadas del día actual. layout: kpi_bar
-  ventas_sucursal      → ventas por sucursal vs período anterior. modo: 30d|mes. layout: kpi_bar
-  top_vendedores       → top 10 vendedores por importe. modo: 30d|mes. layout: ranking_hbar
-  comparativo_meses    → ventas mes a mes (últimos 6 meses). layout: trend_area
-  ventas_diario        → ventas por día (últimos 30 días). layout: trend_area
-  tendencia_anual      → ventas por mes (últimos 12 meses). layout: trend_area
-  pedidos_activos      → pedidos activos por sucursal. layout: donut_split
-  top_productos        → top 10 productos más vendidos. modo: 30d|mes. layout: ranking_hbar
-  clientes_frecuentes  → top 15 clientes por importe comprado. modo: 30d|mes. layout: ranking_hbar
-  variacion_vendedores → vendedores: período actual vs anterior. modo: 30d|mes. layout: dual_compare
+  ninguno              → No se requiere dashboard. Solo texto.
+  reporte_ventas       → Dashboard COMPLETO: sucursales + productos + vendedores + tendencia. layout: full_report
+  ventas_hoy           → Ventas pagadas del día actual. layout: kpi_bar
+  ventas_sucursal      → Ventas por sucursal vs período anterior. modo: 30d|mes. layout: kpi_bar
+  top_vendedores       → Top 10 vendedores por importe. modo: 30d|mes. layout: ranking_hbar
+  comparativo_meses    → Ventas mes a mes (últimos 6 meses). layout: trend_area
+  ventas_diario        → Ventas por día (últimos 30 días). layout: trend_area
+  tendencia_anual      → Ventas por mes (últimos 12 meses). layout: trend_area
+  pedidos_activos      → Pedidos activos por sucursal. layout: donut_split
+  top_productos        → Top 10 productos más vendidos. modo: 30d|mes. layout: ranking_hbar
+  clientes_frecuentes  → Top 15 clientes por importe comprado. modo: 30d|mes. layout: ranking_hbar
+  variacion_vendedores → Vendedores: período actual vs anterior. modo: 30d|mes. layout: dual_compare
 
 Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicación:
 {"funcion":"<nombre>","modo":"30d","titulo":"<título conciso en español>","layout":"<layout>"}
 
-Si no puedes clasificar con certeza, usa ventas_sucursal.
+Si no aplica dashboard, responde: {"funcion":"ninguno","modo":"","titulo":"","layout":""}
+Si pide dashboard general sin especificar tipo, usa reporte_ventas.
 """
 
 _SISTEMA_NARRADOR = """
@@ -234,11 +243,30 @@ def kpis_globales(modo: str = Query("30d", regex="^(30d|mes)$")):
     """)
 
     v = ventas_row[0] if ventas_row else {}
+    ventas_total   = float(v.get("ventas_total") or 0)
+    facturas_total = int(v.get("facturas_total") or 0)
+    ticket_promedio = round(ventas_total / facturas_total, 2) if facturas_total > 0 else 0
+
+    # Top sucursal del período
+    top_suc_row = query(f"""
+        SELECT TOP 1 s.Nombre AS nombre,
+               ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS total
+        FROM FT_Pedidos_C c
+        INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+        INNER JOIN GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal
+        WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
+          AND c.Cve_Sucursal<>99 AND {filtro}
+        GROUP BY c.Cve_Sucursal, s.Nombre ORDER BY total DESC
+    """)
+    top_sucursal = (top_suc_row[0].get("nombre") or "—") if top_suc_row else "—"
+
     return JSONResponse({
-        "ventas_total":       float(v.get("ventas_total") or 0),
-        "facturas_total":     int(v.get("facturas_total") or 0),
+        "ventas_total":       ventas_total,
+        "facturas_total":     facturas_total,
         "pedidos_activos":    int((pedidos_row[0] or {}).get("pedidos_activos") or 0),
         "sucursales_activas": int((sucursales_row[0] or {}).get("total") or 0),
+        "ticket_promedio":    ticket_promedio,
+        "top_sucursal":       top_sucursal,
         "modo":               modo,
     })
 
@@ -465,7 +493,7 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(30d|mes)$")):
                       f"AND MONTH(c.Fecha_Documento)=MONTH({hoy()})")
         rows = query(f"""
             SELECT TOP 10
-                ISNULL(p.Nombre_Producto, t.Cve_Producto) AS label,
+                ISNULL(p.Descripcion, t.Cve_Producto) AS label,
                 t.valor AS valor,
                 t.unidades AS unidades
             FROM (
@@ -668,15 +696,15 @@ def _clasificar(pregunta: str) -> dict:
         )
         texto = resp.choices[0].message.content.strip()
         parsed = json.loads(texto)
-        # Validar que la función exista
-        if parsed.get("funcion") not in _SPECS_TIPO:
-            raise ValueError(f"Función desconocida: {parsed.get('funcion')}")
+        funcion = parsed.get("funcion")
+        # "ninguno" es válido — significa que no se requiere dashboard
+        if funcion == "ninguno":
+            return {"funcion": "ninguno"}
+        if funcion not in _SPECS_TIPO:
+            raise ValueError(f"Función desconocida: {funcion}")
         return parsed
     except Exception:
-        return {
-            "funcion": "ventas_sucursal", "modo": "30d",
-            "titulo": "Ventas por sucursal", "layout": "kpi_bar",
-        }
+        return {"funcion": "ninguno"}
 
 
 def _narrar(pregunta: str, tipo: str, modo: str, datos: dict) -> tuple[str, float]:
@@ -951,7 +979,7 @@ def _fetch_tipo(tipo: str, modo: str) -> dict:
         else:
             filtro = f"YEAR(c.Fecha_Documento)=YEAR({hoy()}) AND MONTH(c.Fecha_Documento)=MONTH({hoy()})"
         rows = query(f"""
-            SELECT TOP 10 ISNULL(p.Nombre_Producto, t.Cve_Producto) AS label,
+            SELECT TOP 10 ISNULL(p.Descripcion, t.Cve_Producto) AS label,
                    t.valor AS valor, t.unidades AS unidades
             FROM (
                 SELECT d.Cve_Producto,
@@ -1029,6 +1057,45 @@ def _fetch_tipo(tipo: str, modo: str) -> dict:
         return {"tipo": tipo, "modo": modo,
                 "titulo": f"Variación de vendedores ({'últ. 30 días' if modo=='30d' else 'mes actual'})",
                 "series": ["Período actual", "Período anterior"], "datos": rows}
+
+    elif tipo == "reporte_ventas":
+        # ── Dashboard multi-panel: todos los datos en un solo dict ────────────
+        # Cada clave es un "slot" del template full_report en el frontend.
+        suc   = _fetch_tipo("ventas_sucursal", modo)
+        prod  = _fetch_tipo("top_productos",   modo)
+        vend  = _fetch_tipo("top_vendedores",  modo)
+        dia   = _fetch_tipo("ventas_diario",   modo)
+        pedid = _fetch_tipo("pedidos_activos", modo)
+
+        # KPIs globales calculados a partir de ventas_sucursal
+        suc_datos      = suc.get("datos", [])
+        total_actual   = sum(float(r.get("actual")   or 0) for r in suc_datos)
+        total_anterior = sum(float(r.get("anterior") or 0) for r in suc_datos)
+        variacion      = (
+            round((total_actual - total_anterior) / total_anterior * 100, 1)
+            if total_anterior > 0 else None
+        )
+        n_sucursales = len([r for r in suc_datos if float(r.get("actual") or 0) > 0])
+
+        return {
+            "tipo":   tipo,
+            "modo":   modo,
+            "titulo": "Dashboard de Ventas",
+            # Diccionario de paneles — el frontend lee cada slot por clave
+            "datos": {
+                "kpis": {
+                    "total_actual":   total_actual,
+                    "total_anterior": total_anterior,
+                    "variacion":      variacion,
+                    "n_sucursales":   n_sucursales,
+                },
+                "ventas_sucursal": suc,
+                "top_productos":   prod,
+                "top_vendedores":  vend,
+                "ventas_diario":   dia,
+                "pedidos_activos": pedid,
+            },
+        }
 
     raise HTTPException(status_code=404, detail=f"Tipo '{tipo}' no existe")
 

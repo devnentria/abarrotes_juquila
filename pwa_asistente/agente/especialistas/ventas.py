@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.5.0
+# Versión  : 2.6.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -23,13 +23,23 @@ TABLAS DE VENTAS:
 VENTAS REALIZADAS/PAGADAS DEL DÍA — FUENTE CORRECTA
 ══════════════════════════════════════════════════════════════
 FT_Pedidos_C — encabezado de pedidos (también es el encabezado de ventas diarias)
-  Cve_Folio (int), Cve_Sucursal (int), Cve_Vendedor (varchar),
-  Fecha_Documento (datetime), Estatus (varchar), Referencia_Cliente (varchar)
+  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Movimiento (varchar),
+  Cve_Cliente (varchar), Cve_Vendedor (varchar),
+  Fecha_Documento (datetime), Fecha_Envio (date),
+  Estatus (char) → 'CN'=cancelado,
+  Referencia_Cliente (varchar) → 'PAGADO' cuando cobrado,
+  Cve_Lista_precios (smallint), Paciente (varchar), FolioPago (varchar),
+  ImportePago (decimal)
   ⚠ Para ventas realizadas: Estatus <> 'CN' AND Referencia_Cliente = 'PAGADO'
 
 FT_Pedidos_Dia — detalle de ventas diarias (tabla de venta real, no de cartera)
-  Cve_Folio (int), Cve_Sucursal (int),
-  Cantidad_Ordenada (decimal), Precio (decimal)
+  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Movimiento (varchar),
+  Cve_Producto (varchar), Cve_Presentacion (varchar), Cve_Partida (smallint),
+  Cantidad_Ordenada (decimal), Cantidad_Surtida (decimal), Cantidad_Pendiente (decimal),
+  Precio (float), Precio_Sugerido_Cte (float), Precio_Publico (float),
+  Precio_Minimo_Venta (float), Cve_ListaAplicada (smallint),
+  Importe_Descuentos (float), Porcentaje_Descuento (decimal),
+  Costo_Promedio (float), PrecioNeto (float)
   JOIN con FT_Pedidos_C por: d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
   ⚠ Importe de venta = Cantidad_Ordenada * Precio
 
@@ -58,18 +68,31 @@ CONSULTA ESTÁNDAR para ventas del día/hoy/ayer/período específico (PAGADAS):
 ══════════════════════════════════════════════════════════════
 
 FT_Facturas_C — encabezado de facturas
-  Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Fecha_Documento (datetime), Importe_Total (decimal),
-  Cve_Cliente (int), Cve_Vendedor (varchar), Status (char)
+  Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
+  Cve_Cliente (varchar), Cve_Vendedor (varchar),
+  Fecha_Documento (datetime), Fecha_Vencimiento (datetime),
+  Importe_bruto (float), Importe_Descuento (decimal),
+  Importe_IVA (float), Importe_Total (float), Costo_Neto (float),
+  Status (char) → 'CA'=cancelada,
+  Pagada (varchar), Cve_Lista_precios (smallint),
+  Referencia_Cliente (varchar), Cve_Consignatario (int)
   ⚠ Filtrar: Status <> 'C'
   ⚠ NO existe Cve_Medico en esta tabla
+  ⚠ Cve_Cliente es varchar(10) aunque FK a CM_Clientes.Cve_Cliente (int) — usar CAST al JOIN
 
 FT_Facturas_D — detalle de facturas
   Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
-  Cve_Partida (smallint), Cve_Producto (varchar), Cantidad (decimal),
-  Precio (float), Precio_Publico (float), Precio_Minimo_Venta_Base (float),
-  Importe_Neto (float), Costo (float)
+  Cve_Partida (smallint), Cve_Producto (varchar), Cve_Presentacion (varchar),
+  Cantidad (decimal), Cantidad_Ordenada (decimal), Cantidad_Devuelta (decimal),
+  Precio (float)              → precio real cobrado al cliente,
+  Precio_Publico (float)      → precio público de lista,
+  Precio_Sugerido_Cte (float) → precio sugerido según lista del cliente,
+  Precio_Minimo_Venta_Base (float) → precio lista cliente final (también está aquí),
+  Importe_Bruto (float), Importe_Descuentos (float), Importe_Subtotal (float),
+  Importe_Neto (float), Importe_Iva (float),
+  Costo (float), Costo_Promedio (float), Costo_Oper (float)
   JOIN con FT_Facturas_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
+  ⚠ Base2 / Base3 están SOLO en IM_Productos_Gral — no en esta tabla
 
 CM_Clientes — catálogo de clientes
   Cve_Cliente (int), Razon_Social (varchar), Cve_Ruta (int)
@@ -80,8 +103,9 @@ GC_Medicos — catálogo de médicos
   Cve_Medico (int), Nombre (varchar), Cedula (varchar), cve_vendedor (int)
 
 IM_Productos_Proveedor — costo cotizado por proveedor
-  Cve_Producto (int), Cve_Proveedor (int), Costo_Cotizado (decimal),
-  Fecha_Cotizacion_Precio (datetime)
+  Cve_Producto (varchar), Cve_Proveedor (varchar), Cve_Prioridad (smallint),
+  Costo_Cotizado (decimal), Fecha_Cotizacion_Costo (datetime),
+  Precio_Venta (decimal), Fecha_Cotizacion_Precio (datetime)
   ⚠ WHERE Costo_Cotizado > 0 · Cve_Prioridad = 0 para el proveedor principal
 """
 
@@ -114,14 +138,23 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
   ⚠ NUNCA usar MIN() ni MAX() para precios — producen valores atípicos sin contexto.
   ⚠ NUNCA mezclar variantes en un AVG global (ej. Lorelin 11.25mg ≠ Lorelin 3.75mg).
   ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 siempre.
+  · fd.Precio_Minimo_Venta_Base existe en FT_Facturas_D (precio capturado al momento de la venta).
+    Para precios de lista actuales (Base2, Base3): usar IM_Productos_Gral.
   ⚠ Si no hay ventas en el período: declararlo y ampliar al período anterior.
   ⚠ Si piden precio sin mes/año y no hay contexto: preguntar el período antes de consultar.
 
-CLASIFICACIÓN DE CLIENTES (no existe campo directo — se determina por precio cobrado):
-  · Cliente final   → precio ≈ Precio_Minimo_Venta_Base (más alto)
-  · Venta directa   → precio ≈ Precio_Minimo_Venta_Base2
-  · Distribuidor    → precio ≈ Precio_Minimo_Venta_Base3
-  Si el usuario pide "cliente final" / "distribuidor": aplicar criterio ABS() sin pedir confirmación.
+CLASIFICACIÓN DE CLIENTES — FUENTE CORRECTA:
+  El tipo de cliente se determina por CM_Clientes.Cve_Lista_Precios:
+  · 0 = Cliente final / Mostrador  → usa Precio_Minimo_Venta_Base  (precio más alto)
+  · 1 = Venta directa / Ruta       → usa Precio_Minimo_Venta_Base2 (precio intermedio)
+  · 2 = Distribuidor / Mayoreo     → usa Precio_Minimo_Venta_Base3 (precio más bajo)
+
+  Los precios de lista (Base, Base2, Base3) están en IM_Productos_Gral — NUNCA en FT_Facturas_D.
+  Para comparar precio cobrado (fd.Precio) vs precio de lista: JOIN IM_Productos_Gral p ON p.Cve_Producto = fd.Cve_Producto.
+
+  CONSULTA TIPO para ventas por tipo de cliente:
+    JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
+    WHERE c.Cve_Lista_Precios = 0  -- 0=final, 1=directa, 2=distribuidor
 
 BÚSQUEDA POR NOMBRE (protocolo obligatorio cuando busquen una persona):
 

@@ -64,12 +64,46 @@
       padding: 0 28px; z-index: 50;
       box-shadow: 0 2px 8px rgba(0,0,0,.18);
     }
-    .header-left  { display: flex; align-items: center; gap: 12px; }
+    .header-left  { display: flex; align-items: center; gap: 16px; }
     .header-logo  { font-size: 15px; font-weight: 700; background: rgba(255,255,255,.15); padding: 6px 10px; border-radius: 8px; letter-spacing: .03em; }
     .header-title { font-size: 16px; font-weight: 600; opacity: .92; }
-    .header-right { display: flex; align-items: center; gap: 16px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
     .header-user  { font-size: 13px; opacity: .75; }
     .header-role  { font-size: 11px; background: rgba(255,255,255,.15); padding: 3px 8px; border-radius: 12px; font-weight: 600; text-transform: capitalize; }
+
+    /* Usuario inline en header */
+    .header-user-info { display: flex; flex-direction: column; border-left: 1px solid rgba(255,255,255,.2); padding-left: 16px; }
+    .header-user-name { font-size: 13px; font-weight: 600; color: #fff; line-height: 1.2; }
+    .header-user-sub  { font-size: 11px; color: rgba(255,255,255,.6); line-height: 1.2; margin-top: 1px; }
+    .header-avatar    {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(255,255,255,.2); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; flex-shrink: 0;
+      overflow: hidden; cursor: pointer;
+    }
+    .header-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+    /* Selector de dashboards guardados */
+    .header-dash-select {
+      background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+      color: #fff; font-size: 12px; font-family: inherit;
+      padding: 5px 10px; border-radius: 8px; cursor: pointer;
+      max-width: 200px; outline: none;
+    }
+    .header-dash-select option { background: var(--blue); color: #fff; }
+    .header-dash-select:disabled { opacity: .4; cursor: default; }
+
+    /* Botón guardar en header */
+    .header-save-btn {
+      background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+      color: #fff; font-size: 12px; font-family: inherit; font-weight: 600;
+      padding: 5px 12px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; gap: 5px; white-space: nowrap;
+      transition: background .15s;
+    }
+    .header-save-btn:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+    .header-save-btn:disabled { opacity: .35; cursor: default; }
     .menu-btn {
       background: none; border: none; color: #fff; cursor: pointer;
       padding: 8px; border-radius: 8px; display: flex; flex-direction: column;
@@ -531,6 +565,35 @@
     .sc-send-btn:hover { opacity: .85; }
     .sc-send-btn:disabled { opacity: .4; pointer-events: none; }
 
+    /* ── Sidebar colapsable ── */
+    .studio-sidebar.sb-collapsed {
+      transform: translateX(340px);
+      pointer-events: none;
+    }
+    .page.sb-full { margin-right: 0; }
+
+    /* Pestaña flotante para re-expandir sidebar */
+    .sb-expand-tab {
+      position: fixed; top: 50%; right: 0;
+      transform: translateY(-50%);
+      background: var(--blue-mid); color: #fff;
+      border: none; border-radius: 8px 0 0 8px;
+      padding: 14px 6px; cursor: pointer; z-index: 41;
+      writing-mode: vertical-lr; font-size: 11px; font-weight: 700;
+      letter-spacing: .05em; box-shadow: -2px 0 8px rgba(0,0,0,.15);
+      transition: padding .2s;
+      display: none;
+    }
+    .sb-expand-tab:hover { padding: 14px 10px; }
+
+    /* Botón minimizar en header del sidebar */
+    .sb-collapse-btn {
+      background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+      color: #fff; cursor: pointer; font-size: 16px; line-height: 1;
+      padding: 2px 7px; transition: background .15s;
+    }
+    .sb-collapse-btn:hover { background: rgba(255,255,255,.28); }
+
     @media (max-width: 900px) {
       .studio-sidebar { display: none; }
       .page { margin-right: 0; }
@@ -650,21 +713,28 @@
 
     #dashboard-ia-wrap { margin-bottom: 24px; }
 
+    /* Banner superior del dashboard IA — estilo Power BI */
     .dash-ia-topbar {
       display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 16px; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 20px; gap: 12px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
     }
-    .dash-ia-titulo { font-size: 18px; font-weight: 800; color: var(--text); flex: 1; }
+    .dash-ia-titulo { font-size: 20px; font-weight: 800; color: var(--text); flex: 1; }
     .dash-ia-badge {
-      font-size: 11px; background: var(--blue-mid); color: #fff;
-      padding: 3px 10px; border-radius: 12px; font-weight: 600; white-space: nowrap;
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; background: linear-gradient(135deg, var(--blue-mid), #0097a7); color: #fff;
+      padding: 5px 12px; border-radius: 20px; font-weight: 700; white-space: nowrap;
+      box-shadow: 0 2px 8px rgba(0,137,123,.25);
     }
     .dash-ia-close {
-      background: none; border: 1.5px solid var(--border); border-radius: 8px;
-      color: var(--text-dim); cursor: pointer; font-size: 14px; font-weight: 600;
-      padding: 4px 10px; transition: all .15s;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px;
+      color: var(--text-dim); cursor: pointer; font-size: 13px; font-weight: 600;
+      padding: 7px 14px; transition: all .15s;
     }
-    .dash-ia-close:hover { background: var(--bg); color: var(--text); }
+    .dash-ia-close:hover { background: var(--blue-light); color: var(--blue); border-color: var(--blue-mid); }
 
     .dash-ia-narrativa {
       background: linear-gradient(135deg, var(--blue-light) 0%, var(--card) 100%);
@@ -691,14 +761,20 @@
     }
 
     /* Layout: kpi_bar — KPI strip + bar chart + table */
-    .layout-kpi-strip { display: flex; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-    .layout-kpi-mini {
-      flex: 1; min-width: 130px; background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px 16px;
+    .layout-kpi-strip {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 14px; margin-bottom: 20px;
     }
-    .layout-kpi-mini .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
-    .layout-kpi-mini .kpi-value { font-size: 20px; font-weight: 800; color: var(--text); }
-    .layout-kpi-mini .kpi-sub   { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    @media (max-width: 900px) { .layout-kpi-strip { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 500px) { .layout-kpi-strip { grid-template-columns: 1fr; } }
+    .layout-kpi-mini {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .layout-kpi-mini .kpi-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+    .layout-kpi-mini .kpi-value { font-size: 24px; font-weight: 800; color: var(--text); line-height: 1; }
+    .layout-kpi-mini .kpi-sub   { font-size: 12px; color: var(--text-dim); margin-top: 6px; }
     .layout-kpi-mini.accent     { border-left: 4px solid var(--blue-mid); }
 
     /* Layout: ranking_hbar — horizontal bar ranking */
@@ -719,13 +795,18 @@
     .ranking-sub { font-size: 11px; color: var(--text-dim); min-width: 50px; text-align: right; flex-shrink: 0; }
 
     /* Layout: trend_area — area/line chart */
-    .trend-kpi-row { display: flex; gap: 16px; margin-bottom: 18px; flex-wrap: wrap; }
-    .trend-kpi {
-      flex: 1; min-width: 120px; background: var(--card); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px 16px; text-align: center;
+    .trend-kpi-row {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 14px; margin-bottom: 20px;
     }
-    .trend-kpi-val { font-size: 22px; font-weight: 800; }
-    .trend-kpi-lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    @media (max-width: 700px) { .trend-kpi-row { grid-template-columns: 1fr 1fr; } }
+    .trend-kpi {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px; text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .trend-kpi-val { font-size: 24px; font-weight: 800; line-height: 1; }
+    .trend-kpi-lbl { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
 
     /* Layout: donut_split */
     .donut-split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -775,14 +856,26 @@
   <header class="header">
     <div class="header-left">
       <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:38px;width:auto;max-width:200px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 12px">
+      <div class="header-user-info">
+        <span class="header-user-name">Bienvenido, <span id="header-welcome-nombre">—</span></span>
+        <span class="header-user-sub" id="header-welcome-sub">Suite Analítica</span>
+      </div>
     </div>
     <div class="header-right">
-      <span class="header-role" id="header-role"></span>
-      <span class="header-user" id="header-user"></span>
+      <!-- Navegador de dashboards guardados -->
+      <select class="header-dash-select" id="header-dash-select" onchange="navegarDashHeader(this)" disabled title="Dashboards guardados">
+        <option value="">📊 Mis dashboards</option>
+      </select>
+      <!-- Guardar dashboard activo -->
+      <button class="header-save-btn" id="header-save-btn" onclick="guardarDashActivo()" disabled title="Guardar dashboard actual">
+        💾 Guardar
+      </button>
       <button class="btn-ia-abrir" onclick="focusSidebarIA()" title="Análisis IA en panel derecho">
         <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
         Análisis IA
       </button>
+      <!-- Avatar -->
+      <div class="header-avatar" id="header-avatar" onclick="abrirMenu()" title="Abrir menú">?</div>
       <button class="menu-btn" id="menu-btn" aria-label="Abrir menú" onclick="abrirMenu()">
         <span></span><span></span><span></span>
       </button>
@@ -809,7 +902,11 @@
           <svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11" style="margin-right:3px;vertical-align:middle"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
           Generado con IA
         </span>
-        <button class="dash-ia-close" onclick="cerrarDashboardIA()">Cerrar</button>
+        <button id="dash-ia-save-btn" class="dash-ia-close" onclick="guardarDashActivo()"
+          style="border-color:var(--blue-mid);color:var(--blue-mid)" title="Guardar dashboard">
+          💾 Guardar
+        </button>
+        <button class="dash-ia-close" onclick="cerrarDashboardIA()">← Resumen ejecutivo</button>
       </div>
       <div id="dashboard-ia-contenido"></div>
       <div class="dash-ia-narrativa dash-animate hidden" id="dashboard-ia-narrativa">
@@ -818,14 +915,8 @@
       </div>
     </div>
 
-    <!-- Bienvenida -->
-    <div class="welcome-card">
-      <div>
-        <div class="welcome-greeting">Bienvenido, <span id="welcome-nombre">—</span></div>
-        <div class="welcome-sub" id="welcome-sub">Suite Analítica</div>
-      </div>
-      <div class="welcome-avatar" id="welcome-avatar">?</div>
-    </div>
+    <!-- Contenido estático (resumen ejecutivo) -->
+    <div id="static-dash-area">
 
     <!-- Dashboards -->
     <div class="dashboard-section">
@@ -853,39 +944,43 @@
         </div>
       </div>
 
-      <!-- KPI Cards -->
-      <div class="kpi-grid" id="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-          </div>
+      <!-- KPI Cards — 6 tarjetas -->
+      <div class="kpi-grid" id="kpi-grid" style="grid-template-columns:repeat(6,1fr)">
+        <div class="kpi-card" style="border-left:4px solid var(--blue-mid)">
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg></div>
           <div class="kpi-label">Ventas período</div>
           <div class="kpi-value" id="kpi-ventas">—</div>
           <div class="kpi-sub" id="kpi-ventas-sub">Cargando...</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
-          </div>
-          <div class="kpi-label">Facturas</div>
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
+          <div class="kpi-label">Facturas emitidas</div>
           <div class="kpi-value" id="kpi-facturas">—</div>
           <div class="kpi-sub" id="kpi-facturas-sub">Cargando...</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg>
-          </div>
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg></div>
           <div class="kpi-label">Pedidos activos</div>
           <div class="kpi-value" id="kpi-pedidos">—</div>
           <div class="kpi-sub">En todas las sucursales</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
-          </div>
-          <div class="kpi-label">Sucursales</div>
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>
+          <div class="kpi-label">Sucursales activas</div>
           <div class="kpi-value" id="kpi-sucursales">—</div>
-          <div class="kpi-sub">Activas en el sistema</div>
+          <div class="kpi-sub">En el sistema</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg></div>
+          <div class="kpi-label">Ticket promedio</div>
+          <div class="kpi-value" id="kpi-ticket">—</div>
+          <div class="kpi-sub" id="kpi-ticket-sub">Por factura</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M5 3l3.057-3 11.943 12-11.943 12-3.057-3 9-9z"/></svg></div>
+          <div class="kpi-label">Sucursal líder</div>
+          <div class="kpi-value" id="kpi-top-suc" style="font-size:16px;line-height:1.3">—</div>
+          <div class="kpi-sub">Del período</div>
         </div>
       </div>
 
@@ -973,9 +1068,74 @@
         </div>
       </div>
 
-    </div>
+      <!-- ── Tendencia anual + Proyección ── -->
+      <div class="chart-card" style="margin-top:16px">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Tendencia de ventas — 12 meses + proyección</span>
+          <div id="trend-kpi-strip" style="display:flex;gap:16px;font-size:12px"></div>
+        </div>
+        <div id="chart-tendencia-wrap" class="chart-loading">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+          Cargando...
+        </div>
+        <canvas id="chart-tendencia" style="display:none;max-height:260px"></canvas>
+        <div id="trend-legend" style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--text-dim);flex-wrap:wrap"></div>
+      </div>
+
+      <!-- ── Top Productos + Top Vendedores ── -->
+      <div class="charts-grid" style="margin-top:16px">
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Top 10 productos por ingresos</span>
+          </div>
+          <div id="chart-productos-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+            Cargando...
+          </div>
+          <canvas id="chart-productos" style="display:none;max-height:320px"></canvas>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Top 10 vendedores</span>
+          </div>
+          <div id="chart-vendedores-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+            Cargando...
+          </div>
+          <canvas id="chart-vendedores" style="display:none;max-height:320px"></canvas>
+        </div>
+      </div>
+
+      <!-- ── Ventas diarias + Comparativo mensual ── -->
+      <div class="charts-grid" style="margin-top:16px">
+        <div class="chart-card" style="grid-column:span 2">
+          <div class="chart-card-header">
+            <span class="chart-card-title">Ventas diarias — últimos 30 días</span>
+            <div id="diario-stats" style="font-size:12px;color:var(--text-dim);display:flex;gap:16px"></div>
+          </div>
+          <div id="chart-diario-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+            Cargando...
+          </div>
+          <canvas id="chart-diario" style="display:none;max-height:200px"></canvas>
+        </div>
+      </div>
+
+      <!-- ── Comparativo mensual (6 meses) ── -->
+      <div class="chart-card" style="margin-top:16px">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Comparativo mensual — últimos 6 meses</span>
+        </div>
+        <div id="chart-mensual-wrap" class="chart-loading">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg>
+          Cargando...
+        </div>
+        <canvas id="chart-mensual" style="display:none;max-height:220px"></canvas>
+      </div>
 
     </div>
+
+    </div><!-- /static-dash-area -->
 
   </div>
 
@@ -988,8 +1148,11 @@
         <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="opacity:.7;margin-right:5px;vertical-align:middle"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
         Asistente IA
       </span>
-      <button id="sc-nueva-btn" title="Nueva conversación"
-        style="background:rgba(255,255,255,.15);border:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:#fff;font-size:18px;line-height:1">+</button>
+      <div style="display:flex;align-items:center;gap:5px">
+        <button id="sc-nueva-btn" title="Nueva conversación"
+          style="background:rgba(255,255,255,.15);border:none;border-radius:6px;padding:3px 8px;cursor:pointer;color:#fff;font-size:18px;line-height:1">+</button>
+        <button class="sb-collapse-btn" onclick="toggleSidebar()" title="Minimizar panel">‹</button>
+      </div>
     </div>
 
     <!-- Lista de conversaciones (colapsable, abierta por defecto) -->
@@ -1001,6 +1164,25 @@
     <div id="sc-conv-list" style="flex-shrink:0;max-height:160px;overflow-y:auto;border-bottom:1px solid var(--border);transition:max-height .3s ease">
       <div id="sc-conv-items" style="display:flex;flex-direction:column;gap:2px;padding:6px 8px">
         <div style="font-size:11px;color:var(--text-dim);padding:4px">Sin conversaciones aún</div>
+      </div>
+    </div>
+
+    <!-- Acceso rápido a dashboards -->
+    <div style="padding:6px 10px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-dim);margin-bottom:5px">Dashboards rápidos</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <button class="tpl-btn" onclick="cargarPlantilla('reporte_ventas')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          Dashboard de Ventas completo
+        </button>
+        <button class="tpl-btn" onclick="cargarPlantilla('ventas_hoy')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg>
+          Ventas de hoy
+        </button>
+        <button class="tpl-btn" onclick="cargarPlantilla('top_vendedores')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          Top vendedores
+        </button>
       </div>
     </div>
 
@@ -1025,6 +1207,9 @@
     </div>
 
   </aside>
+
+  <!-- Pestaña para re-expandir sidebar cuando está colapsado -->
+  <button id="sb-expand-tab" class="sb-expand-tab" onclick="toggleSidebar()">IA ›</button>
 
   <!-- ── Drawer de menú ── -->
   <div class="drawer-overlay" id="drawer-overlay" onclick="cerrarMenu()"></div>
@@ -1316,6 +1501,7 @@ let _resetEquipoId = null;
     cargarDashboards('30d');
     cargarVentasHoy();
     cargarDashboardsGuardados();
+    cargarNavDashboards();
     if (_usuario.debe_cambiar_password) _forzarModalPassword();
   } catch {
     clearToken();
@@ -1325,15 +1511,14 @@ let _resetEquipoId = null;
 
 // ── Render header ─────────────────────────────────────────────────────────────
 function renderHeader() {
-  document.getElementById('header-user').textContent = _usuario.nombre;
-  document.getElementById('header-role').textContent = _usuario.rol;
-  document.getElementById('welcome-nombre').textContent = _usuario.nombre;
-  document.getElementById('welcome-avatar').textContent = _usuario.nombre.charAt(0).toUpperCase();
+  document.getElementById('header-welcome-nombre').textContent = _usuario.nombre;
+  document.getElementById('header-avatar').textContent = _usuario.nombre.charAt(0).toUpperCase();
   document.getElementById('drawer-nombre').textContent  = _usuario.nombre;
   document.getElementById('drawer-usuario').textContent = _usuario.email;
 
   const subs = { admin: 'Administrador · Nentria', supervisor: 'Supervisor', usuario: 'Usuario' };
-  document.getElementById('welcome-sub').textContent = subs[_usuario.rol] || 'Suite Analítica';
+  const sub = subs[_usuario.rol] || 'Suite Analítica';
+  document.getElementById('header-welcome-sub').textContent = sub;
 }
 
 // ── Render menú según rol ─────────────────────────────────────────────────────
@@ -1515,7 +1700,7 @@ async function guardarPerfil() {
 }
 
 function actualizarAvatarHeader() {
-  const av = document.getElementById('welcome-avatar');
+  const av  = document.getElementById('header-avatar');
   renderAvatar(av, _usuario.nombre, _usuario.foto_perfil);
 }
 
@@ -1754,6 +1939,7 @@ function _scVerDashboard(jobId) {
 }
 
 function _scMostrarCargandoDashboard() {
+  document.getElementById('static-dash-area').classList.add('hidden');
   const wrap = document.getElementById('dashboard-ia-wrap');
   if (!wrap) return;
   wrap.classList.remove('hidden');
@@ -1783,10 +1969,20 @@ async function _scPollJob(jobId, hasDashHint) {
     if (hasDash) {
       _scDashCache[jobId] = data.dashboard;
       renderDashboard(data.dashboard);
+      // Agregar al historial para poder guardarlo desde el topbar
+      agregarAlHistorial({
+        titulo:    data.dashboard.titulo || 'Dashboard',
+        tipo:      data.dashboard.tipo   || 'ventas_sucursal',
+        layout:    data.dashboard.layout || 'kpi_bar',
+        datos:     data.dashboard.datos,
+        narrativa: data.dashboard.narrativa || '',
+        cargando:  false, guardado: false, db_id: null, ts: Date.now(),
+      });
     } else if (hasDashHint) {
-      // Pidió dashboard pero no se generó — limpiar skeleton
+      // Pidió dashboard pero no se generó — limpiar skeleton y restaurar resumen
       const wrap = document.getElementById('dashboard-ia-wrap');
       if (wrap) wrap.classList.add('hidden');
+      document.getElementById('static-dash-area').classList.remove('hidden');
     }
     _scAddBubble(data.respuesta || 'Sin respuesta.', 'bot', { hasDash, jobId });
   } catch (e) {
@@ -1826,6 +2022,14 @@ async function _scEnviar() {
       if (hasDash) {
         _scDashCache[data.job_id] = data.dashboard;
         renderDashboard(data.dashboard);
+        agregarAlHistorial({
+          titulo:    data.dashboard.titulo || 'Dashboard',
+          tipo:      data.dashboard.tipo   || 'ventas_sucursal',
+          layout:    data.dashboard.layout || 'kpi_bar',
+          datos:     data.dashboard.datos,
+          narrativa: data.dashboard.narrativa || '',
+          cargando:  false, guardado: false, db_id: null, ts: Date.now(),
+        });
       }
       _scAddBubble(data.respuesta || '', 'bot', { hasDash, jobId: data.job_id });
     } else {
@@ -1959,18 +2163,28 @@ async function cargarDashboards(modo) {
   const compLabel = document.getElementById('comp-periodo-label');
   if (compLabel) compLabel.textContent = periodoLabel;
 
-  // Cargar KPIs + ventas + pedidos en paralelo
+  // Cargar todos los datos en paralelo
   try {
-    const [kpisData, ventasData, pedidosData] = await Promise.all([
+    const [kpisData, ventasData, pedidosData, tendenciaData, productosData, vendedoresData, diariaData, mensualData] = await Promise.all([
       api(`/api/datos/kpis?modo=${modo}`),
       api(`/api/datos/ventas?modo=${modo}`),
       api(`/api/datos/pedidos`),
+      api('/api/datos/plantilla/tendencia_anual'),
+      api(`/api/datos/plantilla/top_productos?modo=${modo}`),
+      api(`/api/datos/plantilla/top_vendedores?modo=${modo}`),
+      api('/api/datos/plantilla/ventas_diario'),
+      api('/api/datos/plantilla/comparativo_meses'),
     ]);
 
     renderKPIs(kpisData, modo);
     renderChartVentas(ventasData.sucursales);
     renderChartPedidos(pedidosData.sucursales);
     renderTablaComparativo(ventasData.sucursales, modo);
+    renderChartTendencia(tendenciaData.datos || []);
+    renderChartProductos(productosData.datos || []);
+    renderChartVendedores(vendedoresData.datos || []);
+    renderChartDiario(diariaData.datos || []);
+    renderChartMensual(mensualData.datos || []);
   } catch (e) {
     // Mostrar estado de error en lugar de quedar "Cargando..."
     ['kpi-ventas', 'kpi-facturas', 'kpi-pedidos', 'kpi-sucursales'].forEach(id => {
@@ -2000,10 +2214,16 @@ function renderKPIs(data, modo) {
   const periodoSub = modo === '30d' ? 'Últimos 30 días' : 'Mes actual';
   document.getElementById('kpi-ventas').textContent       = _formatMXN(data.ventas_total);
   document.getElementById('kpi-ventas-sub').textContent   = periodoSub;
-  document.getElementById('kpi-facturas').textContent     = data.facturas_total.toLocaleString('es-MX');
+  document.getElementById('kpi-facturas').textContent     = (data.facturas_total || 0).toLocaleString('es-MX');
   document.getElementById('kpi-facturas-sub').textContent = periodoSub;
-  document.getElementById('kpi-pedidos').textContent      = data.pedidos_activos.toLocaleString('es-MX');
-  document.getElementById('kpi-sucursales').textContent   = data.sucursales_activas;
+  document.getElementById('kpi-pedidos').textContent      = (data.pedidos_activos || 0).toLocaleString('es-MX');
+  document.getElementById('kpi-sucursales').textContent   = data.sucursales_activas || '—';
+  if (data.ticket_promedio !== undefined) {
+    document.getElementById('kpi-ticket').textContent = _formatMXN(data.ticket_promedio);
+  }
+  if (data.top_sucursal) {
+    document.getElementById('kpi-top-suc').textContent = data.top_sucursal;
+  }
 }
 
 function renderChartVentas(sucursales) {
@@ -2143,6 +2363,333 @@ function renderTablaComparativo(sucursales, modo) {
   }).join('');
 }
 
+// ── Tendencia anual + proyección lineal ───────────────────────────────────────
+let _chartTendencia = null;
+function renderChartTendencia(datos) {
+  const canvas = document.getElementById('chart-tendencia');
+  const wrap   = document.getElementById('chart-tendencia-wrap');
+  if (!canvas) return;
+  if (wrap) wrap.style.display = 'none';
+  canvas.style.display = 'block';
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+
+  // datos = [{mes_nombre:'Enero', valor:...}, ...]  (12 meses histórico)
+  const labels  = datos.map(d => (d.mes_nombre || d.mes || d.periodo || d.label || '').slice(0, 3));
+  const valores = datos.map(d => parseFloat(d.total || d.valor || 0));
+
+  // Regresión lineal simple para proyectar 3 meses más
+  const n = valores.length;
+  let proyLabels = [...labels];
+  let proyData   = new Array(n).fill(null);
+  if (n >= 2) {
+    const sumX  = valores.reduce((s, _, i) => s + i, 0);
+    const sumY  = valores.reduce((s, v) => s + v, 0);
+    const sumXY = valores.reduce((s, v, i) => s + i * v, 0);
+    const sumX2 = valores.reduce((s, _, i) => s + i * i, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0;
+    const intercept = (sumY - slope * sumX) / n;
+    const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    // El último dato trae el número de mes real (campo `mes` del backend)
+    const lastMesNum = datos.length ? (datos[datos.length - 1].mes || 0) : 0;
+    for (let k = 1; k <= 3; k++) {
+      const nextMes = lastMesNum ? MESES[(lastMesNum - 1 + k) % 12] : `+${k}`;
+      proyLabels.push(nextMes);
+      proyData.push(Math.max(0, Math.round(intercept + slope * (n - 1 + k))));
+    }
+  }
+
+  if (_chartTendencia) _chartTendencia.destroy();
+  _chartTendencia = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: proyLabels,
+      datasets: [
+        {
+          label: 'Ventas históricas',
+          data: [...valores, null, null, null].slice(0, proyLabels.length),
+          borderColor: COLORES[0],
+          backgroundColor: COLORES[0] + '22',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        },
+        {
+          label: 'Proyección',
+          data: proyData,
+          borderColor: '#EF6C3A',
+          backgroundColor: '#EF6C3A22',
+          borderDash: [6, 4],
+          fill: false,
+          tension: 0.35,
+          pointRadius: 4,
+          pointStyle: 'triangle',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.8,
+      plugins: {
+        legend: { labels: { color: textColor, font: { size: 12 }, boxWidth: 12 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.parsed.y !== null ? ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` : '',
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+// ── Top Productos (barras horizontales) ───────────────────────────────────────
+let _chartProductos = null;
+function renderChartProductos(datos) {
+  const canvas = document.getElementById('chart-productos');
+  const wrap   = document.getElementById('chart-productos-wrap');
+  if (!canvas) return;
+  if (wrap) wrap.style.display = 'none';
+  canvas.style.display = 'block';
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  const top     = datos.slice(0, 10);
+  const labels  = top.map(d => d.producto || d.nombre || d.label || '');
+  const valores = top.map(d => parseFloat(d.total || d.valor || d.importe || 0));
+  const bgs     = COLORES.concat(COLORES).slice(0, top.length);
+
+  if (_chartProductos) _chartProductos.destroy();
+  _chartProductos = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Ventas',
+        data: valores,
+        backgroundColor: bgs,
+        borderRadius: 5,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.6,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+        y: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ── Top Vendedores (barras horizontales) ──────────────────────────────────────
+let _chartVendedores = null;
+function renderChartVendedores(datos) {
+  const canvas = document.getElementById('chart-vendedores');
+  const wrap   = document.getElementById('chart-vendedores-wrap');
+  if (!canvas) return;
+  if (wrap) wrap.style.display = 'none';
+  canvas.style.display = 'block';
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  const top     = datos.slice(0, 10);
+  const labels  = top.map(d => d.vendedor || d.nombre || d.label || '');
+  const valores = top.map(d => parseFloat(d.total || d.valor || d.importe || 0));
+  const bgs     = [COLORES[2], COLORES[3], COLORES[4], COLORES[0], COLORES[1]]
+                  .concat(COLORES).slice(0, top.length);
+
+  if (_chartVendedores) _chartVendedores.destroy();
+  _chartVendedores = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Ventas',
+        data: valores,
+        backgroundColor: bgs,
+        borderRadius: 5,
+        borderSkipped: false,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 1.6,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+        y: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+// ── Ventas diarias (área) con estadísticas ────────────────────────────────────
+let _chartDiario = null;
+function renderChartDiario(datos) {
+  const canvas = document.getElementById('chart-diario');
+  const wrap   = document.getElementById('chart-diario-wrap');
+  if (!canvas) return;
+  if (wrap) wrap.style.display = 'none';
+  canvas.style.display = 'block';
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  const labels  = datos.map(d => d.dia || d.fecha || d.label || '');
+  const valores = datos.map(d => parseFloat(d.total || d.valor || 0));
+
+  // Estadísticas rápidas
+  const statsDiv = document.getElementById('diario-stats');
+  if (valores.length && statsDiv) {
+    const max    = Math.max(...valores);
+    const avg    = valores.reduce((s, v) => s + v, 0) / valores.length;
+    const idxMax = valores.indexOf(max);
+    statsDiv.innerHTML = `
+      <span>Mejor día: <strong>${labels[idxMax] || '—'}</strong> (${_formatMXN(max)})</span>
+      <span>Promedio: <strong>${_formatMXN(Math.round(avg))}</strong></span>
+    `;
+  }
+
+  if (_chartDiario) _chartDiario.destroy();
+  _chartDiario = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Ventas del día',
+        data: valores,
+        borderColor: COLORES[2],
+        backgroundColor: COLORES[2] + '30',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 3,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.y)}` },
+        },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 10 }, maxTicksLimit: 15 }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+// ── Comparativo mensual (barras agrupadas) ────────────────────────────────────
+let _chartMensual = null;
+function renderChartMensual(datos) {
+  const canvas = document.getElementById('chart-mensual');
+  const wrap   = document.getElementById('chart-mensual-wrap');
+  if (!canvas) return;
+  if (wrap) wrap.style.display = 'none';
+  canvas.style.display = 'block';
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  // datos = [{mes_nombre:'Enero', valor:...}, ...]
+  const labels   = datos.map(d => (d.mes_nombre || d.mes || d.periodo || d.label || '').slice(0, 3));
+  const actual   = datos.map(d => parseFloat(d.total || d.actual || d.valor || 0));
+  const anterior = datos.map(d => parseFloat(d.anterior || 0));
+  const conAnterior = anterior.some(v => v > 0);
+
+  if (_chartMensual) _chartMensual.destroy();
+  _chartMensual = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Mes actual',
+          data: actual,
+          backgroundColor: COLORES[0],
+          borderRadius: 5,
+          borderSkipped: false,
+        },
+        ...(conAnterior ? [{
+          label: 'Mes anterior',
+          data: anterior,
+          backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.08)',
+          borderRadius: 5,
+          borderSkipped: false,
+        }] : []),
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      aspectRatio: 2.6,
+      plugins: {
+        legend: {
+          display: conAnterior,
+          labels: { color: textColor, font: { size: 12 }, boxWidth: 12 },
+        },
+        tooltip: {
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` },
+        },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
 // ── Ventas de hoy ─────────────────────────────────────────────────────────────
 async function cargarVentasHoy() {
   document.getElementById('ventas-hoy-loading').style.display = 'flex';
@@ -2178,6 +2725,87 @@ async function cargarVentasHoy() {
 // ── Studio Sidebar — Dashboards con IA ───────────────────────────────────────
 let _historial = [];
 let _histCharts = {};
+let _activeDashIdx = null;   // Índice en _historial del dashboard visible actualmente
+
+// ── Toggle sidebar (minimizar / expandir) ─────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.getElementById('studio-sidebar');
+  const page    = document.querySelector('.page');
+  const tab     = document.getElementById('sb-expand-tab');
+  const isCollapsed = sidebar.classList.contains('sb-collapsed');
+  if (isCollapsed) {
+    sidebar.classList.remove('sb-collapsed');
+    sidebar.style.pointerEvents = '';
+    page.classList.remove('sb-full');
+    tab.style.display = 'none';
+  } else {
+    sidebar.classList.add('sb-collapsed');
+    page.classList.add('sb-full');
+    tab.style.display = 'block';
+  }
+}
+
+// ── Sinc botón guardar en header ─────────────────────────────────────────────
+function _syncHeaderSaveBtn() {
+  const btn = document.getElementById('header-save-btn');
+  if (!btn) return;
+  btn.disabled = _activeDashIdx === null;
+}
+
+// ── Guardar dashboard activo desde el topbar ──────────────────────────────────
+function guardarDashActivo() {
+  if (_activeDashIdx !== null) {
+    guardarDashHistorial(_activeDashIdx);
+  }
+}
+
+// ── Navegador de dashboards guardados en header ───────────────────────────────
+function actualizarNavDashboards(dashboards) {
+  const sel = document.getElementById('header-dash-select');
+  if (!sel) return;
+  // Limpiar opciones menos la primera (placeholder)
+  while (sel.options.length > 1) sel.remove(1);
+  if (!dashboards || !dashboards.length) {
+    sel.disabled = true;
+    return;
+  }
+  dashboards.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.id;
+    opt.textContent = `📊 ${d.titulo || d.nombre || 'Dashboard'}`;
+    sel.appendChild(opt);
+  });
+  sel.disabled = false;
+}
+
+function navegarDashHeader(sel) {
+  const id = parseInt(sel.value);
+  sel.value = '';   // Resetear para que pueda re-seleccionarse
+  if (!id) return;
+  // Buscar en historial local (ya cargado en sidebar de guardados)
+  const idx = _historial.findIndex(h => h.db_id === id || h.id === id);
+  if (idx >= 0) {
+    verDashHistorial(idx);
+    return;
+  }
+  // Si no está en historial, buscarlo en la lista global ya cargada
+  api('/api/datos/dashboards').then(data => {
+    const d = (data.dashboards || []).find(x => x.id === id);
+    if (!d) { mostrarToast('Dashboard no encontrado', 'error'); return; }
+    let datos;
+    try { datos = typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : d.datos_json; } catch { datos = {}; }
+    const entry = {
+      titulo: d.titulo, tipo: d.tipo, datos,
+      guardado: true, db_id: d.id, ts: Date.now(),
+    };
+    _historial.push(entry);
+    const newIdx = _historial.length - 1;
+    entry._idx = newIdx;
+    renderHistorialItem(entry, newIdx);
+    _actualizarContadorHist();
+    verDashHistorial(newIdx);
+  }).catch(e => mostrarToast('Error al cargar dashboard: ' + e.message, 'error'));
+}
 
 // Prompts IA por tipo de dashboard — la IA consulta el ERP y genera el análisis
 const PLANTILLAS_IA = {
@@ -2218,12 +2846,16 @@ function limpiarSidebarIA() {
 function cerrarDashboardIA() {
   const wrap = document.getElementById('dashboard-ia-wrap');
   wrap.classList.add('hidden');
+  document.getElementById('static-dash-area').classList.remove('hidden');
+  _activeDashIdx = null;
+  _syncHeaderSaveBtn();
   // Destruir charts del dashboard activo
   Object.values(_dashCharts).forEach(c => { try { c.destroy(); } catch {} });
   _dashCharts = {};
 }
 
 function _mostrarDashboardCargando() {
+  document.getElementById('static-dash-area').classList.add('hidden');
   const wrap = document.getElementById('dashboard-ia-wrap');
   wrap.classList.remove('hidden');
   document.getElementById('dashboard-ia-titulo').textContent = 'Generando dashboard…';
@@ -2271,6 +2903,7 @@ function renderDashboard(spec) {
   Object.values(_dashCharts).forEach(c => { try { c.destroy(); } catch {} });
   _dashCharts = {};
 
+  document.getElementById('static-dash-area').classList.add('hidden');
   const wrap = document.getElementById('dashboard-ia-wrap');
   wrap.classList.remove('hidden');
 
@@ -2285,6 +2918,7 @@ function renderDashboard(spec) {
     trend_area:   renderLayoutTrendArea,
     donut_split:  renderLayoutDonutSplit,
     dual_compare: renderLayoutDualCompare,
+    full_report:  renderLayoutFullReport,
   };
   (renderers[spec.layout] || renderLayoutKpiBar)(contenido, spec);
 
@@ -2385,7 +3019,7 @@ function renderLayoutKpiBar(container, spec) {
     <div class="layout-kpi-strip">${kpiHtml}</div>
     <div class="dash-card dash-animate" style="animation-delay:.18s;margin-bottom:16px">
       <div class="dash-card-title">Distribución por sucursal</div>
-      <canvas id="dash-main-chart" style="max-height:240px"></canvas>
+      <canvas id="dash-main-chart" style="max-height:320px"></canvas>
     </div>
     <div class="dash-card dash-animate" style="animation-delay:.28s;overflow-x:auto">
       <table class="comp-table">
@@ -2479,7 +3113,7 @@ function renderLayoutRankingHbar(container, spec) {
       </div>
       <div class="dash-card dash-animate" style="animation-delay:.22s">
         <div class="dash-card-title">Comparativa visual</div>
-        <canvas id="dash-main-chart" style="max-height:300px"></canvas>
+        <canvas id="dash-main-chart" style="max-height:360px"></canvas>
       </div>
     </div>`;
 
@@ -2557,7 +3191,7 @@ function renderLayoutTrendArea(container, spec) {
     ${kpiHtml}
     <div class="dash-card dash-animate" style="animation-delay:.18s">
       <div class="dash-card-title">Evolución en el tiempo</div>
-      <canvas id="dash-main-chart" style="max-height:260px"></canvas>
+      <canvas id="dash-main-chart" style="max-height:340px"></canvas>
     </div>`;
 
   const canvas = document.getElementById('dash-main-chart');
@@ -2632,7 +3266,7 @@ function renderLayoutDonutSplit(container, spec) {
     <div class="donut-split-grid">
       <div class="dash-card dash-animate" style="animation-delay:.15s">
         <div class="dash-card-title">Distribución</div>
-        <canvas id="dash-main-chart" style="max-height:260px"></canvas>
+        <canvas id="dash-main-chart" style="max-height:320px"></canvas>
       </div>
       <div class="dash-card dash-animate" style="animation-delay:.22s;overflow-x:auto">
         <div class="dash-card-title">Por sucursal</div>
@@ -2666,6 +3300,214 @@ function renderLayoutDonutSplit(container, spec) {
 }
 
 function int(v) { return parseInt(v) || 0; }
+
+// ── Layout: full_report — dashboard multi-panel estilo Power BI ───────────────
+function renderLayoutFullReport(container, spec) {
+  const panels = spec.datos || {};
+  const kpis   = panels.kpis || {};
+  const sucData  = (panels.ventas_sucursal || {}).datos || [];
+  const prodData = (panels.top_productos   || {}).datos || [];
+  const vendData = (panels.top_vendedores  || {}).datos || [];
+  const diaData  = (panels.ventas_diario   || {}).datos || [];
+  const pedData  = (panels.pedidos_activos || {}).datos || [];
+
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const tc = esDark ? '#94a3b8' : '#6E6E73';
+  const gc = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
+
+  // KPI cards
+  const varPct = kpis.variacion;
+  const varColor = varPct !== null && varPct !== undefined
+    ? (varPct >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--text)';
+  const varHtml = varPct !== null && varPct !== undefined
+    ? `<span style="color:${varColor}">${varPct >= 0 ? '▲' : '▼'} ${Math.abs(varPct)}%</span>`
+    : '—';
+
+  container.innerHTML = `
+    <!-- Fila 1: KPI cards -->
+    <div class="layout-kpi-strip dash-animate" style="animation-delay:0s">
+      <div class="layout-kpi-mini accent">
+        <div class="kpi-label">Ventas período</div>
+        <div class="kpi-value">${_formatMXN(kpis.total_actual || 0)}</div>
+      </div>
+      <div class="layout-kpi-mini">
+        <div class="kpi-label">Período anterior</div>
+        <div class="kpi-value">${_formatMXN(kpis.total_anterior || 0)}</div>
+      </div>
+      <div class="layout-kpi-mini">
+        <div class="kpi-label">Variación</div>
+        <div class="kpi-value" style="font-size:22px">${varHtml}</div>
+      </div>
+      <div class="layout-kpi-mini">
+        <div class="kpi-label">Sucursales activas</div>
+        <div class="kpi-value">${kpis.n_sucursales || '—'}</div>
+      </div>
+    </div>
+
+    <!-- Fila 2: Sucursales (2/3) + Donut (1/3) -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="dash-card dash-animate" style="animation-delay:.12s">
+        <div class="dash-card-title">Ventas por sucursal — actual vs anterior</div>
+        <canvas id="fr-suc" style="max-height:280px"></canvas>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.18s">
+        <div class="dash-card-title">Distribución</div>
+        <canvas id="fr-donut" style="max-height:280px"></canvas>
+      </div>
+    </div>
+
+    <!-- Fila 3: Top productos (1/2) + Top vendedores (1/2) -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <div class="dash-card dash-animate" style="animation-delay:.24s">
+        <div class="dash-card-title">Top 10 productos por ingresos</div>
+        <canvas id="fr-prod" style="max-height:300px"></canvas>
+      </div>
+      <div class="dash-card dash-animate" style="animation-delay:.30s">
+        <div class="dash-card-title">Top 10 vendedores</div>
+        <canvas id="fr-vend" style="max-height:300px"></canvas>
+      </div>
+    </div>
+
+    <!-- Fila 4: Ventas diarias -->
+    <div class="dash-card dash-animate" style="animation-delay:.36s;margin-bottom:0">
+      <div class="dash-card-title">Ventas diarias — tendencia del período</div>
+      <canvas id="fr-dia" style="max-height:200px"></canvas>
+    </div>
+  `;
+
+  // Chart: Sucursales grouped bar
+  if (sucData.length) {
+    _dashCharts['fr-suc'] = new Chart(document.getElementById('fr-suc'), {
+      type: 'bar',
+      data: {
+        labels: sucData.map(r => r.label),
+        datasets: [
+          { label: 'Actual',   data: sucData.map(r => parseFloat(r.actual   || 0)),
+            backgroundColor: COLORES[0], borderRadius: 5, borderSkipped: false },
+          { label: 'Anterior', data: sucData.map(r => parseFloat(r.anterior || 0)),
+            backgroundColor: esDark ? 'rgba(255,255,255,.13)' : 'rgba(0,0,0,.08)',
+            borderRadius: 5, borderSkipped: false },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: tc, font: { size: 11 }, boxWidth: 10 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+               grid: { color: gc }, border: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Chart: Donut distribución
+  const sucActivas = sucData.filter(r => parseFloat(r.actual || 0) > 0);
+  if (sucActivas.length) {
+    _dashCharts['fr-donut'] = new Chart(document.getElementById('fr-donut'), {
+      type: 'doughnut',
+      data: {
+        labels: sucActivas.map(r => r.label),
+        datasets: [{ data: sucActivas.map(r => parseFloat(r.actual || 0)),
+          backgroundColor: COLORES.slice(0, sucActivas.length),
+          borderWidth: 2, borderColor: esDark ? '#1e293b' : '#fff' }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, cutout: '62%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: tc, font: { size: 10 }, boxWidth: 8, padding: 8 } },
+          tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${_formatMXN(ctx.parsed)}` } },
+        },
+      },
+    });
+  }
+
+  // Chart: Top productos horizontal bar
+  const top10prod = prodData.slice(0, 10);
+  if (top10prod.length) {
+    _dashCharts['fr-prod'] = new Chart(document.getElementById('fr-prod'), {
+      type: 'bar',
+      data: {
+        labels: top10prod.map(r => r.label),
+        datasets: [{ data: top10prod.map(r => parseFloat(r.valor || 0)),
+          backgroundColor: COLORES.slice(0, top10prod.length),
+          borderRadius: 4, borderSkipped: false }],
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+               grid: { color: gc }, border: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Chart: Top vendedores horizontal bar
+  const top10vend = vendData.slice(0, 10);
+  if (top10vend.length) {
+    _dashCharts['fr-vend'] = new Chart(document.getElementById('fr-vend'), {
+      type: 'bar',
+      data: {
+        labels: top10vend.map(r => r.label),
+        datasets: [{ data: top10vend.map(r => parseFloat(r.valor || 0)),
+          backgroundColor: COLORES[1], borderRadius: 4, borderSkipped: false }],
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+               grid: { color: gc }, border: { display: false } },
+          y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Chart: Ventas diarias line
+  if (diaData.length) {
+    const diaSorted = [...diaData].slice(0, 30).sort((a, b) =>
+      String(a.fecha || a.label || '').localeCompare(String(b.fecha || b.label || ''))
+    );
+    _dashCharts['fr-dia'] = new Chart(document.getElementById('fr-dia'), {
+      type: 'line',
+      data: {
+        labels: diaSorted.map(r => r.fecha || r.label || ''),
+        datasets: [{
+          label: 'Ventas', data: diaSorted.map(r => parseFloat(r.valor || 0)),
+          borderColor: '#00897B',
+          backgroundColor: esDark ? 'rgba(0,137,123,.18)' : 'rgba(0,137,123,.10)',
+          fill: true, tension: 0.35, pointRadius: 2, pointHoverRadius: 5, borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { color: tc, font: { size: 9 }, maxTicksLimit: 15, maxRotation: 45 },
+               grid: { display: false } },
+          y: { ticks: { color: tc, font: { size: 9 }, callback: v => _formatMXN(v) },
+               grid: { color: gc }, border: { display: false } },
+        },
+      },
+    });
+  }
+}
 
 // ── Layout: dual_compare ──────────────────────────────────────────────────────
 function renderLayoutDualCompare(container, spec) {
@@ -2716,7 +3558,7 @@ function renderLayoutDualCompare(container, spec) {
     <div class="dual-grid">
       <div class="dash-card dash-animate" style="animation-delay:.18s">
         <div class="dash-card-title">Comparativa visual</div>
-        <canvas id="dash-main-chart" style="max-height:280px"></canvas>
+        <canvas id="dash-main-chart" style="max-height:340px"></canvas>
       </div>
       <div class="dash-card dash-animate" style="animation-delay:.25s;overflow-x:auto">
         <div class="dash-card-title">Detalle por vendedor</div>
@@ -2791,6 +3633,8 @@ function agregarAlHistorial(item) {
   const idx = _historial.length;
   item._idx = idx;
   _historial.push(item);
+  _activeDashIdx = idx;
+  _syncHeaderSaveBtn();
   renderHistorialItem(item, idx);
   _actualizarContadorHist();
   document.getElementById('sb-history-list').scrollTop = 0;
@@ -2969,14 +3813,24 @@ async function guardarDashHistorial(idx) {
       if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
     }
     mostrarToast('Dashboard guardado', 'success');
+    cargarNavDashboards();  // Refrescar selector en header
   } catch (e) {
     mostrarToast('Error al guardar: ' + e.message, 'error');
   }
 }
 
+async function cargarNavDashboards() {
+  try {
+    const data = await api('/api/datos/dashboards');
+    actualizarNavDashboards(data.dashboards || []);
+  } catch {}
+}
+
 function verDashHistorial(idx) {
   const item = _historial[idx];
   if (!item || !item.datos) return;
+  _activeDashIdx = idx;
+  _syncHeaderSaveBtn();
   renderDashboard({
     tipo:      item.tipo,
     layout:    item.layout || _layoutPorTipo(item.tipo),
@@ -2993,6 +3847,7 @@ function _layoutPorTipo(tipo) {
     comparativo_meses: 'trend_area', ventas_diario: 'trend_area', tendencia_anual: 'trend_area',
     pedidos_activos: 'donut_split',
     variacion_vendedores: 'dual_compare',
+    reporte_ventas: 'full_report',
   };
   return map[tipo] || 'kpi_bar';
 }
