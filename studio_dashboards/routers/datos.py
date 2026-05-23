@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/datos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.0.0
+# Versión  : 2.1.0
 # ============================================================
 """
 Router de datos del ERP para el Studio Dashboards.
@@ -52,6 +52,10 @@ _SPECS_TIPO: dict = {
     "clientes_frecuentes":  {"titulo": "Clientes más frecuentes",           "layout": "ranking_hbar"},
     "variacion_vendedores": {"titulo": "Variación de vendedores",           "layout": "dual_compare"},
     "reporte_ventas":       {"titulo": "Dashboard de Ventas",               "layout": "full_report"},
+    # Inventario
+    "inventario_stock":     {"titulo": "Stock actual por sucursal",         "layout": "kpi_bar"},
+    "caducidades":          {"titulo": "Productos por caducar (90 días)",   "layout": "ranking_hbar"},
+    "stockouts":            {"titulo": "Productos sin existencia",          "layout": "ranking_hbar"},
 }
 
 _SISTEMA_CLASIFICADOR = """
@@ -76,12 +80,18 @@ Funciones disponibles:
   top_productos        → Top 10 productos más vendidos. modo: 30d|mes. layout: ranking_hbar
   clientes_frecuentes  → Top 15 clientes por importe comprado. modo: 30d|mes. layout: ranking_hbar
   variacion_vendedores → Vendedores: período actual vs anterior. modo: 30d|mes. layout: dual_compare
+  inventario_stock     → Stock actual por sucursal: valor en MXN y unidades. layout: kpi_bar
+  caducidades          → Productos con lotes próximos a caducar (90 días). layout: ranking_hbar
+  stockouts            → Sucursales con más productos sin existencia (stock = 0). layout: ranking_hbar
+
+REGLAS:
+- Si el usuario pide dashboard de un tema no listado arriba, usa "ninguno".
+- Si pide dashboard general sin especificar tipo, usa reporte_ventas.
 
 Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicación:
 {"funcion":"<nombre>","modo":"30d","titulo":"<título conciso en español>","layout":"<layout>"}
 
-Si no aplica dashboard, responde: {"funcion":"ninguno","modo":"","titulo":"","layout":""}
-Si pide dashboard general sin especificar tipo, usa reporte_ventas.
+Si no aplica dashboard: {"funcion":"ninguno","modo":"","titulo":"","layout":""}
 """
 
 _SISTEMA_NARRADOR = """
@@ -676,6 +686,32 @@ def _resumir_datos(tipo: str, datos: dict) -> str:
             resumen += "Mejoran: " + ", ".join(r.get("label", "?") for r in mejores) + ". "
         if caidas:
             resumen += "Bajan: " + ", ".join(r.get("label", "?") for r in caidas) + "."
+    elif tipo == "inventario_stock":
+        total_v = float(datos.get("total_valor", 0) or 0)
+        total_u = float(datos.get("total_unidades", 0) or 0)
+        top = lista[0] if lista else {}
+        criticos = sum(int(r.get("criticos", 0) or 0) for r in lista)
+        resumen = (f"Valor total en stock: {_fmt_mxn(total_v)}. "
+                   f"Unidades: {int(total_u):,}. "
+                   f"Sucursal con mayor stock: {top.get('label','?')} ({_fmt_mxn(float(top.get('actual', 0) or 0))}). "
+                   f"Productos críticos (≤5 piezas): {criticos}.")
+
+    elif tipo == "caducidades":
+        total_uds = sum(float(r.get("unidades", 0) or 0) for r in lista)
+        urgentes  = [r for r in lista if int(r.get("dias", 999) or 999) <= 30]
+        resumen = (f"Lotes próximos a caducar (90 días): {len(lista)}. "
+                   f"Unidades en riesgo: {int(total_uds):,}. "
+                   f"Urgentes (≤30 días): {len(urgentes)}.")
+        if lista:
+            prox = lista[0]
+            resumen += f" Más próximo: {prox.get('label','?')} en {prox.get('dias','?')} días."
+
+    elif tipo == "stockouts":
+        total_prod = int(sum(float(r.get("valor", 0) or 0) for r in lista))
+        top = lista[0] if lista else {}
+        resumen = (f"Total de productos sin existencia: {total_prod:,} en {len(lista)} sucursal(es). "
+                   f"Más afectada: {top.get('label','?')} con {int(float(top.get('valor', 0) or 0)):,} productos sin stock.")
+
     else:
         resumen = f"Dashboard '{tipo}' con {len(lista)} registros."
 
@@ -1095,6 +1131,87 @@ def _fetch_tipo(tipo: str, modo: str) -> dict:
                 "ventas_diario":   dia,
                 "pedidos_activos": pedid,
             },
+        }
+
+    elif tipo == "inventario_stock":
+        rows = query(f"""
+            SELECT s.Nombre AS label,
+                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS actual,
+                   ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                   COUNT(CASE WHEN e.Existencia > 0 AND e.Existencia <= 5 THEN 1 END) AS criticos
+            FROM GN_Sucursales s
+            LEFT JOIN IN_Existencias_Alm e
+              ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            WHERE s.Cve_Sucursal <> 99
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            HAVING ISNULL(SUM(e.Existencia), 0) > 0
+            ORDER BY actual DESC
+        """)
+        for r in rows:
+            r["anterior"] = 0   # kpi_bar layout espera este campo
+        total_valor    = sum(float(r.get("actual")   or 0) for r in rows)
+        total_unidades = sum(float(r.get("unidades") or 0) for r in rows)
+        return {
+            "tipo":           tipo,
+            "titulo":         "Stock actual por sucursal",
+            "total_valor":    total_valor,
+            "total_unidades": total_unidades,
+            "datos":          rows,
+        }
+
+    elif tipo == "caducidades":
+        rows = query(f"""
+            SELECT TOP 20
+                p.Descripcion + ' · Lote: ' + ISNULL(l.Num_Lote, '—') AS label,
+                ISNULL(l.Existencia, 0) AS unidades,
+                ISNULL(l.Existencia * ISNULL(e.Costo_Promedio, 0), 0)  AS valor,
+                DATEDIFF(DAY, CAST({hoy()} AS DATE),
+                         CAST(l.Fecha_Caducidad AS DATE))               AS dias,
+                CONVERT(varchar(10), l.Fecha_Caducidad, 103)            AS fecha_caducidad,
+                s.Nombre AS sucursal
+            FROM IN_Existencias_Lote l
+            JOIN IM_Productos_Gral p
+              ON p.Cve_Producto = l.Cve_Producto
+            JOIN GN_Sucursales s
+              ON s.Cve_Sucursal = l.Cve_Sucursal
+            LEFT JOIN IN_Existencias_Alm e
+              ON e.Cve_Sucursal = l.Cve_Sucursal
+             AND e.Cve_Producto = l.Cve_Producto
+             AND e.Cve_Almacen  = l.Cve_Almacen
+             AND e.Status = 'AC'
+            WHERE l.Existencia > 0
+              AND l.Fecha_Caducidad IS NOT NULL
+              AND CAST(l.Fecha_Caducidad AS DATE) >= CAST({hoy()} AS DATE)
+              AND CAST(l.Fecha_Caducidad AS DATE) <= DATEADD(DAY, 90, CAST({hoy()} AS DATE))
+              AND s.Cve_Sucursal <> 99
+            ORDER BY l.Fecha_Caducidad ASC
+        """)
+        return {
+            "tipo":   tipo,
+            "titulo": "Productos por caducar — próximos 90 días",
+            "datos":  rows,
+        }
+
+    elif tipo == "stockouts":
+        rows = query(f"""
+            SELECT s.Nombre AS label,
+                   COUNT(e.Cve_Producto) AS valor,
+                   COUNT(CASE WHEN e.Existencia > 0 AND e.Existencia <= 5 THEN 1 END) AS criticos
+            FROM GN_Sucursales s
+            JOIN IN_Existencias_Alm e
+              ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            WHERE s.Cve_Sucursal <> 99
+              AND e.Existencia <= 0
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            HAVING COUNT(e.Cve_Producto) > 0
+            ORDER BY valor DESC
+        """)
+        total = int(sum(float(r.get("valor") or 0) for r in rows))
+        return {
+            "tipo":   tipo,
+            "titulo": "Productos sin existencia por sucursal",
+            "total":  total,
+            "datos":  rows,
         }
 
     raise HTTPException(status_code=404, detail=f"Tipo '{tipo}' no existe")

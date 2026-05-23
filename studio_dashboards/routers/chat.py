@@ -73,6 +73,17 @@ _CAPACIDADES = re.compile(
     r"qu[eé]\s+informaci[oó]n|ayuda[s]?\s+con|qu[eé]\s+consultas)",
     re.IGNORECASE,
 )
+_DASHBOARDS_DISPONIBLES = (
+    "Los dashboards visuales disponibles son:\n"
+    "- **Ventas**: reporte completo · ventas de hoy · por sucursal · tendencia · comparativo de meses · diario\n"
+    "- **Vendedores**: top vendedores · variación de vendedores\n"
+    "- **Productos**: top productos más vendidos\n"
+    "- **Clientes**: clientes frecuentes\n"
+    "- **Pedidos**: pedidos activos por sucursal\n"
+    "- **Inventario**: stock actual por sucursal · caducidades próximas · productos sin existencia\n\n"
+    "Pídeme alguno de esos y lo genero con datos del ERP."
+)
+
 _RESPUESTA_CAPACIDADES = (
     "Soy el asistente analítico de Studio.\n\n"
     "Puedo ayudarte con:\n"
@@ -194,6 +205,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
         print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 
     # ── 2. La IA decide si se requiere dashboard (sin regex) ─────────────────
+    _pide_dashboard = bool(re.search(
+        r"dashboard|tablero|gr[aá]fic|chart|visualiza|reporte\s+visual",
+        msg, re.IGNORECASE,
+    ))
     if estado == "done" and _DASHBOARD_FN_OK:
         try:
             spec = _clasificar(msg)
@@ -212,6 +227,9 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 }
                 print(f"[studio-chat] Dashboard generado tipo={tipo} job={job_id}", flush=True)
             else:
+                if _pide_dashboard:
+                    # Pidió un dashboard pero el tema no está disponible — responder con lista
+                    respuesta = _DASHBOARDS_DISPONIBLES
                 print(f"[studio-chat] Sin dashboard (IA decidió ninguno) job={job_id}", flush=True)
         except Exception as e:
             print(f"[studio-chat] Dashboard error job={job_id}: {e}", flush=True)

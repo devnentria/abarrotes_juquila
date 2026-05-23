@@ -1183,6 +1183,18 @@
           <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
           Top vendedores
         </button>
+        <button class="tpl-btn" onclick="cargarPlantilla('inventario_stock')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M20 6h-2.18c.07-.44.18-.88.18-1.37C18 2.06 15.94 0 13.37 0c-1.47 0-2.51.67-3.37 1.66C9.14.67 8.1 0 6.63 0 4.06 0 2 2.06 2 4.63c0 .49.11.93.18 1.37H0v14h20V6zm-7-4c.77 0 1.37.6 1.37 1.37S13.77 4.73 13 4.73s-1.37-.6-1.37-1.36S12.23 2 13 2zM7 2c.77 0 1.37.6 1.37 1.37S7.77 4.73 7 4.73 5.63 4.13 5.63 3.37 6.23 2 7 2zm-5 16V8h18v10H2z"/></svg>
+          Stock por sucursal
+        </button>
+        <button class="tpl-btn" onclick="cargarPlantilla('caducidades')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
+          Caducidades próximas
+        </button>
+        <button class="tpl-btn" onclick="cargarPlantilla('stockouts')">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+          Productos sin existencia
+        </button>
       </div>
     </div>
 
@@ -2950,6 +2962,15 @@ function renderLayoutKpiBar(container, spec) {
       { label: 'Pedidos pagados',       valor: ped.toLocaleString('es-MX') },
       { label: 'Sucursales con ventas', valor: sucActivas },
     ];
+  } else if (tipo === 'inventario_stock') {
+    const totalValor    = parseFloat(datos.total_valor    || lista.reduce((s, r) => s + parseFloat(r.actual    || 0), 0));
+    const totalUnidades = parseFloat(datos.total_unidades || lista.reduce((s, r) => s + parseFloat(r.unidades  || 0), 0));
+    const totalCriticos = lista.reduce((s, r) => s + parseInt(r.criticos || 0), 0);
+    kpis = [
+      { label: 'Valor total en stock',       valor: _formatMXN(totalValor),                                   accent: true },
+      { label: 'Unidades en stock',          valor: Math.round(totalUnidades).toLocaleString('es-MX') },
+      { label: 'Productos críticos (≤5 uds)',valor: totalCriticos.toLocaleString('es-MX') },
+    ];
   } else {
     // ventas_sucursal
     const totalActual   = lista.reduce((s, r) => s + parseFloat(r.actual || 0), 0);
@@ -3060,23 +3081,42 @@ function renderLayoutRankingHbar(container, spec) {
   const total  = lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0);
   const top    = lista[0] || {};
 
+  // Formato según tipo: conteo para inventario, moneda para ventas
+  const _isConteo = ['caducidades', 'stockouts'].includes(tipo);
+  const _fmtV = v => _isConteo
+    ? Math.round(v).toLocaleString('es-MX') + (tipo === 'caducidades' ? ' uds' : ' prod.')
+    : _formatMXN(v);
+  const _fmtVchart = v => _isConteo ? Math.round(v) : v;
+
   // KPI strip
   const subLabel = tipo === 'top_vendedores' ? 'vendedores' :
-                   tipo === 'top_productos'   ? 'productos'  : 'clientes';
+                   tipo === 'top_productos'   ? 'productos'  :
+                   tipo === 'caducidades'     ? 'lotes'      :
+                   tipo === 'stockouts'       ? 'sucursales' : 'clientes';
+  const kpiTopSub = _isConteo
+    ? (tipo === 'caducidades' ? `${parseFloat(top.unidades || top.valor || 0)} uds` : `${parseFloat(top.valor || 0)} productos`)
+    : _formatMXN(parseFloat(top.valor || 0));
+  const kpiTotalLabel = _isConteo
+    ? (tipo === 'caducidades' ? 'Lotes en riesgo' : 'Total sin stock')
+    : 'Monto total';
+  const kpiTotalValor = _isConteo
+    ? Math.round(total).toLocaleString('es-MX')
+    : _formatMXN(total);
+
   const kpiHtml = `
     <div class="layout-kpi-strip">
       <div class="layout-kpi-mini accent dash-animate">
-        <div class="kpi-label">Líder</div>
+        <div class="kpi-label">${tipo === 'caducidades' ? 'Caduca primero' : tipo === 'stockouts' ? 'Más afectada' : 'Líder'}</div>
         <div class="kpi-value" style="font-size:15px">${top.label || '—'}</div>
-        <div class="kpi-sub">${_formatMXN(parseFloat(top.valor || 0))}</div>
+        <div class="kpi-sub">${kpiTopSub}</div>
       </div>
       <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
         <div class="kpi-label">Total ${subLabel}</div>
         <div class="kpi-value">${lista.length}</div>
       </div>
       <div class="layout-kpi-mini dash-animate" style="animation-delay:.12s">
-        <div class="kpi-label">Monto total</div>
-        <div class="kpi-value" style="font-size:16px">${_formatMXN(total)}</div>
+        <div class="kpi-label">${kpiTotalLabel}</div>
+        <div class="kpi-value" style="font-size:16px">${kpiTotalValor}</div>
       </div>
     </div>`;
 
@@ -3088,20 +3128,27 @@ function renderLayoutRankingHbar(container, spec) {
     const pct = maxVal > 0 ? Math.round(val / maxVal * 100) : 0;
     const posClass = i < 3 ? posClasses[i] : '';
     const posLabel = i < 3 ? posSymbols[i] : `${i + 1}`;
-    const subInfo  = r.pedidos !== undefined
-      ? `${r.pedidos} ${tipo === 'top_productos' ? 'uds' : 'ped.'}`
-      : (r.unidades !== undefined ? `${r.unidades} uds` : '');
+    let subInfo = '';
+    if (tipo === 'caducidades') {
+      subInfo = `${r.dias ?? '?'}d · ${r.sucursal || ''} · ${r.fecha_caducidad || ''}`;
+    } else if (tipo === 'stockouts' && r.criticos) {
+      subInfo = `+${r.criticos} críticos`;
+    } else if (r.pedidos !== undefined) {
+      subInfo = `${r.pedidos} ${tipo === 'top_productos' ? 'uds' : 'ped.'}`;
+    } else if (r.unidades !== undefined) {
+      subInfo = `${r.unidades} uds`;
+    }
     return `
       <div class="ranking-row dash-animate" style="animation-delay:${.18 + i * 0.04}s">
         <span class="ranking-pos ${posClass}">${posLabel}</span>
         <span class="ranking-name" title="${r.label}">${r.label}</span>
         <div class="ranking-bar-wrap"><div class="ranking-bar" style="width:${pct}%"></div></div>
-        <span class="ranking-valor">${_formatMXN(val)}</span>
+        <span class="ranking-valor">${_fmtV(val)}</span>
         ${subInfo ? `<span class="ranking-sub">${subInfo}</span>` : ''}
       </div>`;
   }).join('');
 
-  // Top 5 for hbar chart (labels might be long, use chart only for top 8)
+  // Chart — top 8
   const chartData = lista.slice(0, 8);
 
   container.innerHTML = `
@@ -3123,8 +3170,8 @@ function renderLayoutRankingHbar(container, spec) {
     data: {
       labels: chartData.map(r => r.label),
       datasets: [{
-        data: chartData.map(r => parseFloat(r.valor || 0)),
-        backgroundColor: COLORES.slice(0, chartData.length),
+        data: chartData.map(r => _fmtVchart(parseFloat(r.valor || 0))),
+        backgroundColor: _isConteo ? (tipo === 'caducidades' ? '#EF6C3A' : '#5C6BC0') : COLORES[0],
         borderRadius: 5, borderSkipped: false,
       }],
     },
@@ -3133,10 +3180,11 @@ function renderLayoutRankingHbar(container, spec) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+        tooltip: { callbacks: { label: ctx => ` ${_fmtV(ctx.parsed.x)}` } },
       },
       scales: {
-        x: { ticks: { color: tc, font: { size: 10 }, callback: v => _formatMXN(v) },
+        x: { ticks: { color: tc, font: { size: 10 },
+                      callback: v => _isConteo ? v.toLocaleString('es-MX') : _formatMXN(v) },
              grid: { color: gc }, border: { display: false } },
         y: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },
       },
