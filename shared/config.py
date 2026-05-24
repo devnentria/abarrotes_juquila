@@ -33,8 +33,8 @@ OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4.1-mini")
 IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4.1-mini")
 # Modelo para Studio Dashboards — clasificación + narrativa, barato y rápido
 STUDIO_IA_MODEL:   str = os.getenv("STUDIO_IA_MODEL",   "gpt-5-nano")
-# Modelo para Studio Chat — agente completo con SQL (configurable por .env)
-STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "gpt-5-nano")
+# Modelo para Studio Chat — razonamiento (o4-mini) para respuestas más precisas
+STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "o4-mini")
 
 
 # ── Base de datos (SQL Server) ────────────────────────────────────────────────
@@ -65,17 +65,17 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 # costo_ia_usd  → costo real calculado con tokens consumidos de la API de OpenAI
 #
 # Precios por token según modelo (USD):
-#   Modelo          Input/1M     Output/1M
-#   gpt-5-nano      $0.05        $0.20      ← Studio (chat + dashboards)
-#   gpt-4.1-mini    $0.40        $1.60      ← PWA chat  ← modelo actual
-#   gpt-4o-mini     $0.15        $0.60
-#   gpt-4.1         $2.00        $8.00
-#   gpt-4o          $2.50        $10.00
-IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.00000015"))  # por token input
-IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.00000060"))  # por token output
+#   Modelo          Input/1M     Output/1M    Uso
+#   gpt-5-nano      $0.05        $0.40        Studio: clasificación + narrativa dashboard
+#   o4-mini         $1.10        $4.40        Studio: chat (razonamiento, +thinking tokens)
+#   gpt-4.1-mini    $0.40        $1.60        PWA: agente chat principal
+#   gpt-5-mini      $0.25        $2.00        alternativa razonamiento ligero
+IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.0000011"))   # o4-mini input/token
+IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.0000044"))   # o4-mini output/token
 
-# Ratio Studio: cuántos mensajes = 1 consulta descontada (para dashboards)
-IA_RATIO_STUDIO: int = int(os.getenv("IA_RATIO_STUDIO", "1"))
+# Ratio Studio: cada consulta en Studio vale 1.3 (cubre costo de o4-mini + módulo)
+# Dashboards complejos usan _RATIO_DASHBOARD = 3 en datos.py
+IA_RATIO_STUDIO: float = float(os.getenv("IA_RATIO_STUDIO", "1.5"))
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 # Generar un secret seguro: python -c "import secrets; print(secrets.token_hex(32))"
