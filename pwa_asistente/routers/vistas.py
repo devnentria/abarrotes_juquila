@@ -505,3 +505,24 @@ def dashboards_guardados():
             r["datos_json"] = {}
     return JSONResponse({"dashboards": rows})
 
+
+@router.get("/reportes")
+def reportes_compartidos():
+    """
+    Lista los dashboards que el Studio marcó como 'compartidos con PWA'.
+    Son reportes estáticos pre-generados para consulta sin IA.
+    """
+    import json as _json
+    from shared.database_local import fetch_all as _fetch_all
+
+    rows = _fetch_all(
+        "SELECT id, titulo, tipo, datos_json, compartido_en AS fecha "
+        "FROM dashboards WHERE compartido=1 ORDER BY compartido_en DESC LIMIT 20"
+    )
+    for r in rows:
+        try:
+            r["datos_json"] = _json.loads(r["datos_json"])
+        except Exception:
+            r["datos_json"] = {}
+    return JSONResponse({"reportes": rows})
+

@@ -199,8 +199,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     )
 
     execute(
-        "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-        "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+        "UPDATE usuarios SET "
+        "consultas_ia   = consultas_ia + 1, "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1.0, 2), "
+        "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
         (costo_usd, usuario_id),
     )
 
@@ -225,8 +227,8 @@ def enviar_mensaje_async(body: MensajeBody, usuario: dict = Depends(get_current_
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
     verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-    u = fetch_one("SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
-    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
+    u = fetch_one("SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
+    if u and u["limite_ia"] > 0 and u["consultas_ia_r"] >= u["limite_ia"]:
         raise HTTPException(
             429,
             "Has alcanzado tu límite de consultas de IA. "

@@ -66,26 +66,24 @@ def get_connection() -> pyodbc.Connection:
     return pyodbc.connect(_CONNECTION_STRING)
 
 
-def query(sql: str, params: tuple = ()) -> list[dict]:
+def query(sql: str, params: tuple = (), timeout: int = 60) -> list[dict]:
     """
     Ejecuta un SELECT y devuelve una lista de dicts listos para JSON.
 
     Args:
-        sql:    Consulta SQL con ? como placeholder (nunca f-strings con datos externos).
-        params: Tupla de valores para los placeholders.
+        sql:     Consulta SQL con ? como placeholder (nunca f-strings con datos externos).
+        params:  Tupla de valores para los placeholders.
+        timeout: Segundos máximos de ejecución vía SET QUERY_GOVERNOR (default 60). 0 = sin límite.
 
     Returns:
         Lista de dicts. Lista vacía si no hay resultados.
-
-    Ejemplo:
-        rows = query(
-            "SELECT TOP 5 Cve_Producto, Descripcion FROM IM_Productos_Gral WHERE Laboratorio = ?",
-            params=("BAYER",)
-        )
     """
     conn = get_connection()
     cursor = conn.cursor()
     try:
+        if timeout > 0:
+            # Limita el tiempo máximo de ejecución en SQL Server (en segundos)
+            cursor.execute(f"SET LOCK_TIMEOUT {timeout * 1000}")
         cursor.execute(sql, params)
         columns = [col[0] for col in cursor.description]
         rows = [serialize_row(dict(zip(columns, row))) for row in cursor.fetchall()]

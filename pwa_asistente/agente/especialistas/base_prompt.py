@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/base_prompt.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.4.0
+# Versión  : 1.5.0
 # ============================================================
 """
 Bloques base compartidos por todos los agentes especialistas.
@@ -22,31 +22,80 @@ TABLAS_MAESTROS = """
 TABLAS MAESTRAS DEL ERP (disponibles en todos los módulos):
 
 GN_Sucursales — catálogo de sucursales
-  Cve_Sucursal (int), Nombre (varchar)
+  Cve_Sucursal (smallint), Nombre (varchar), Status (char),
+  Tipo_Sucursal (varchar), Tipo_Venta (varchar), Responsable (varchar)
   ⚠ Filtrar siempre: Cve_Sucursal <> 99 (sucursal fantasma del sistema)
 
 CM_Clientes — catálogo de clientes
-  Cve_Cliente (int), Razon_Social (varchar), Cve_Lista_Precios (smallint), Cve_Vendedor (varchar)
+  Cve_Cliente (int), Razon_Social (varchar), Nombre_Cte (varchar),
+  Cve_Vendedor (varchar), Cve_Vendedor1 (varchar), Cve_Vendedor2 (varchar),
+  Cve_Lista_Precios (smallint) → 0=Cliente final/mostrador · 1=Venta directa/ruta · 2=Distribuidor,
+  Cve_Ruta (varchar) → médico prescriptor asignado (FK a GC_Medicos.Cve_Medico),
+  Cve_Tipo_Cte (varchar), Cve_Clase_Cte (varchar),
+  Status (char), Fecha_Ultima_Compra (datetime),
+  EMail (varchar), Telefono (varchar), Latitud (float), Longitud (float),
+  Limite_Credito (float), saldo (decimal),
+  NombrePaciente (varchar), FechaRecompra (date)
   ⚠ La tabla es CM_Clientes. NUNCA uses GC_Clientes — esa tabla NO EXISTE.
+  ⚠ Cve_Lista_Precios es la forma CORRECTA de clasificar el tipo de cliente.
+  ⚠ Cve_Ruta es varchar(10), aunque apunta a GC_Medicos.Cve_Medico (int) — usar CAST al hacer JOIN.
+  ⚠ Filtrar: Status = 'AC' para clientes activos
 
 GC_Vendedores — catálogo de vendedores
-  Cve_Vendedor (varchar), Nombre (varchar)
+  Cve_Vendedor (varchar), Nombre (varchar), Cve_Sucursal (smallint),
+  Status (char) → filtrar 'AC' para activos,
+  TipoVendedor (varchar) → descripción del tipo,
+  Tipo_Vendedor (char) → código de tipo,
+  Cve_Supervisor (varchar), Cve_Ruta (varchar),
+  Porc_Comision (decimal), email (varchar)
 
 GC_Medicos — catálogo de médicos visitados por el equipo de ventas
-  Cve_Medico (int), Nombre (varchar), cedula (varchar), cve_vendedor (varchar)
+  Cve_Medico (int), Nombre (varchar), cedula (varchar),
+  cve_vendedor (varchar) → FK a GC_Vendedores,
+  status (varchar), email (varchar),
+  Telefono1 (varchar), Telefono2 (varchar),
+  Poblacion (varchar), Estado (varchar), consultorio (varchar), horario (varchar)
   ⚠ Muchos registros están duplicados por errores de captura
   ⚠ Para ventas de médicos: buscarlos como clientes en CM_Clientes.Razon_Social — NO existe Cve_Medico en FT_Facturas_C
 
 IM_Productos_Gral — catálogo de productos
-  Cve_Producto (int), Descripcion (varchar), Laboratorio (varchar)
+  Cve_Producto (varchar), Descripcion (varchar), Descripcion_Corta (varchar),
+  Laboratorio (varchar), Nivel (smallint),
+  Status (varchar) → 'AC' activo,
+  Cve_Familia (varchar), Cve_Subfamilia (varchar), Cve_Categoria (varchar),
+  Precio_Minimo_Venta_Base (decimal)  → precio lista CLIENTE FINAL (mostrador, más alto),
+  Precio_Minimo_Venta_Base2 (decimal) → precio lista VENTA DIRECTA (ruta),
+  Precio_Minimo_Venta_Base3 (decimal) → precio lista DISTRIBUIDOR (mayoreo, más bajo),
+  PrecioP (decimal), PrecioF (decimal),
+  Costo_Promedio (decimal), Costo_Ultima_Compra (decimal),
+  Costo_Promedio_Operativo (decimal), Costo_Ultima_Compra_Operativo (decimal),
+  ComisionVentaDirecta (decimal), ComisionDistribuidor (decimal),
+  Porcentaje_Utilidad (decimal), Porcentaje_Comision (decimal),
+  Dias_Inventario (smallint), Dias_Inventario_Minimo (smallint), Dias_Inventario_Maximo (smallint),
+  Fecha_Ultima_Compra (datetime), Producto_Inventariado (varchar)
   ⚠ Promociones crean productos nuevos — usar IM_Codigos_Barra para consolidar variantes
+  ⚠ FUENTE CORRECTA para precios de lista — NUNCA buscar Base2/Base3 en FT_Facturas_D
 
 IM_Codigos_Barra — códigos de barras por producto
-  Cve_Producto (int), Codigo_Barras (varchar)
+  Cve_Producto (varchar), Cve_Presentacion (varchar),
+  Codigo_Barras (varchar), Nivel (int)
+
+CM_Consignatarios — direcciones de entrega de clientes
+  Cve_Cliente (varchar), Cve_Consignatario (int), Nombre (varchar),
+  Calle_No (varchar), Colonia (varchar), Del_Municipio (varchar),
+  CP (char), Poblacion (varchar),
+  Telefono (varchar), Telefono_2 (varchar),
+  EMail (varchar), Status (char), Cve_Ruta (varchar)
+  JOIN con CM_Clientes por Cve_Cliente
+  ⚠ Un cliente puede tener múltiples direcciones de entrega
+  ⚠ Filtrar: Status = 'AC' para activas
 
 PM_Proveedores — proveedores / laboratorios
-  Cve_Proveedor (int), Nombre (varchar), RFC (varchar), Status (varchar)
-  ⚠ Filtrar: Status = 'AC' AND Cve_Proveedor <> 0
+  Cve_Proveedor (varchar), Nombre (varchar), Razon_Social (varchar),
+  RFC (varchar), Status (char), EMail (varchar), Contacto (varchar),
+  Telefono (varchar), Cve_Moneda (varchar)
+  ⚠ Filtrar: Status = 'AC'
+  ⚠ Cve_Proveedor es varchar(10) — usar CAST si se une con tablas numéricas
 """
 
 FECHAS_SQL = """

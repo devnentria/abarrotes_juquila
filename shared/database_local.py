@@ -52,7 +52,8 @@ def init_db() -> None:
                 activo        INTEGER NOT NULL DEFAULT 1,
                 creado_en     TEXT    NOT NULL DEFAULT (datetime('now')),
                 ultimo_acceso TEXT,
-                consultas_ia  INTEGER NOT NULL DEFAULT 0,
+                consultas_ia  INTEGER NOT NULL DEFAULT 0,   -- legacy, usar consultas_ia_r
+                consultas_ia_r REAL   NOT NULL DEFAULT 0.0, -- fuente de verdad (soporta 1.3x)
                 limite_ia     INTEGER NOT NULL DEFAULT 700,
                 costo_ia_usd  REAL    NOT NULL DEFAULT 0.0,
                 mes_consultas TEXT    NOT NULL DEFAULT ''
@@ -174,6 +175,13 @@ def init_db() -> None:
             "ALTER TABLE usuarios ADD COLUMN debe_cambiar_password INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE chat_conversaciones ADD COLUMN modulo TEXT NOT NULL DEFAULT 'pwa'",
             "ALTER TABLE chat_jobs ADD COLUMN meta_json TEXT",
+            # Migración: columna REAL para acumular consultas con decimales (ratio 1.3)
+            # consultas_ia (INTEGER) se mantiene por compatibilidad; consultas_ia_r es la fuente de verdad
+            "ALTER TABLE usuarios ADD COLUMN consultas_ia_r REAL NOT NULL DEFAULT 0.0",
+            "UPDATE usuarios SET consultas_ia_r = CAST(consultas_ia AS REAL) WHERE consultas_ia_r = 0.0 AND consultas_ia > 0",
+            # Dashboard compartido con PWA
+            "ALTER TABLE dashboards ADD COLUMN compartido INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE dashboards ADD COLUMN compartido_en TEXT",
         ]
         for sql in migraciones:
             try:
@@ -242,7 +250,7 @@ def verificar_mes_ia(usuario_id: int, mes_actual: str) -> None:
         mes_actual (str): Mes en formato "YYYY-MM" (ej. "2026-04").
     """
     u = fetch_one(
-        "SELECT consultas_ia, costo_ia_usd, mes_consultas FROM usuarios WHERE id = ?",
+        "SELECT consultas_ia_r, costo_ia_usd, mes_consultas FROM usuarios WHERE id = ?",
         (usuario_id,),
     )
     if not u:
@@ -251,18 +259,18 @@ def verificar_mes_ia(usuario_id: int, mes_actual: str) -> None:
         return
 
     # Archivar mes anterior si tenía datos
-    if u["mes_consultas"] and (u["consultas_ia"] > 0 or u["costo_ia_usd"] > 0):
+    if u["mes_consultas"] and (u["consultas_ia_r"] > 0 or u["costo_ia_usd"] > 0):
         with get_connection() as conn:
             conn.execute(
                 "INSERT INTO consumo_ia_mensual (usuario_id, mes, consultas, costo_usd) "
                 "VALUES (?, ?, ?, ?)",
-                (usuario_id, u["mes_consultas"], u["consultas_ia"], u["costo_ia_usd"]),
+                (usuario_id, u["mes_consultas"], u["consultas_ia_r"], u["costo_ia_usd"]),
             )
             conn.commit()
 
     # Reiniciar contadores y marcar mes actual
     execute(
-        "UPDATE usuarios SET consultas_ia = 0, costo_ia_usd = 0, mes_consultas = ? WHERE id = ?",
+        "UPDATE usuarios SET consultas_ia = 0, consultas_ia_r = 0.0, costo_ia_usd = 0, mes_consultas = ? WHERE id = ?",
         (mes_actual, usuario_id),
     )
 

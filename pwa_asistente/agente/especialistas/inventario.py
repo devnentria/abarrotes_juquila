@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/inventario.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.1.0
+# Versión  : 2.2.0
 # ============================================================
 """
 Agente Especialista — Inventario.
@@ -20,31 +20,68 @@ _SCHEMA = """
 TABLAS DE INVENTARIO:
 
 IN_Existencias_Alm — existencias actuales por sucursal
-  Cve_Sucursal (int), Cve_Producto (int), Existencia (decimal), Status (varchar)
+  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
+  Cve_Presentacion (varchar), Existencia (decimal),
+  Entradas_Pendientes (decimal), Comprometido (decimal),
+  Costo_Promedio (decimal), Costo_Ultima_Compra (decimal),
+  Precio_Minimo_Venta_Base (decimal),
+  Maximo (decimal), Minimo (decimal), Punto_Reorden (decimal),
+  Status (varchar)
   ⚠ Filtrar: Status = 'AC'
   Para existencias actuales con total: GROUP BY ROLLUP usando ISNULL(s.Nombre,'── TOTAL')
 
 IN_Existencias_Lote — existencias por lote (para caducidades)
-  Cve_Sucursal (int), Cve_Producto (int), Num_Lote (varchar),
-  Fecha_Caducidad (date), Existencia (decimal)
+  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
+  Cve_Presentacion (varchar), Num_Lote (varchar),
+  Fecha_Caducidad (datetime), Existencia (decimal), Entrada (decimal)
 
 IN_Existencias_Alm_Diario — snapshot histórico diario
   Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
-  Fecha (datetime), Existencia (decimal), Costo_Ultima_Compra (decimal), Costo_Promedio (decimal)
+  Cve_Presentacion (varchar), Fecha (datetime),
+  Existencia (decimal), Comprometido (decimal),
+  Costo_Ultima_Compra (decimal), Costo_Promedio (decimal)
   ⚠ Cobertura: enero 2024 en adelante · Cve_Producto es VARCHAR — CAST al unir con IM_Productos_Gral
   ⚠ Para fecha específica: registro más cercano anterior con subconsulta MAX(Fecha) <= 'YYYY-MM-DD'
   ⚠ Incluir SIEMPRE todas las variantes (normales + promos) con LIKE '%nombre%'
 
+It_Traspasos_C — encabezado de traspasos entre sucursales
+  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Movimiento (varchar),
+  Cve_Folio (int), Fecha_Documento (datetime),
+  Cve_Sucursal_Destino (smallint), Cve_Almacen_Destino (varchar),
+  Cve_Movimiento_Salida (varchar), Cve_Folio_Salida (int),
+  Cve_Movimiento_Entrada (varchar), Cve_Folio_Entrada (int),
+  Status (char), Cve_Usuario (varchar)
+  ⚠ Filtrar: Status <> 'C' (cancelados)
+
+It_Traspasos_D — detalle de traspasos
+  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Movimiento (varchar),
+  Cve_Folio (int), Cve_Partida (smallint),
+  Cve_Producto (varchar), Cve_Presentacion (varchar),
+  Cantidad (float), Cantidad_Recibida (float),
+  Costo_Unitario (float), Costo_Ultima_Compra (float),
+  Status (char)
+  JOIN con It_Traspasos_C por: Cve_Folio + Cve_Sucursal + Cve_Almacen + Cve_Movimiento
+  ⚠ Cantidad_Recibida puede diferir de Cantidad (traspasos parciales)
+
 IT_Movimientos_C — cabecera de movimientos de almacén
-  Cve_Movimiento (varchar), Fecha_Documento (datetime), Cve_Sucursal (smallint),
-  Cve_Almacen (varchar), Cve_Folio (int), Cve_Proveedor (varchar)
-  Tipos: EC=Entrada Compra, VTA=Venta, EA=Entrada Almacén, SA=Salida, ST/ET=Traspasos
+  Cve_Sucursal (smallint), Cve_Almacen (varchar),
+  Cve_Documento (char) → tipo de documento (char 3),
+  Cve_Movimiento (varchar) → código operación (varchar 3) — DISTINTO de Cve_Documento,
+  Cve_Folio (int), Fecha_Documento (datetime),
+  Cve_Proveedor (varchar), Cve_Cliente (varchar),
+  Status (char), Observaciones (varchar)
+  Tipos Cve_Movimiento: EC=Entrada Compra, VTA=Venta, EA=Entrada Almacén, SA=Salida, ST/ET=Traspasos
 
 IT_Movimientos_D — detalle de movimientos
-  Cve_Movimiento (varchar), Cve_Folio (int), Cve_Almacen (varchar),
-  Cve_Producto (varchar), Cantidad (decimal), Costo_Unitario (decimal),
-  Precio_Venta (decimal), Num_Lote (varchar), Fecha_Caducidad (datetime)
-  JOIN con IT_Movimientos_C por: Cve_Folio + Cve_Movimiento + Cve_Almacen
+  Cve_Sucursal (smallint), Cve_Almacen (varchar),
+  Cve_Documento (char), Cve_Movimiento (varchar),
+  Cve_Folio (int), Cve_Partida (int),
+  Cve_Producto (varchar), Cve_Presentacion (varchar),
+  Cantidad (decimal), Costo_Unitario (decimal),
+  Costo_Ultima_Compra (decimal), Precio_Venta (decimal),
+  Num_Lote (varchar), Fecha_Caducidad (datetime),
+  Status (char)
+  JOIN con IT_Movimientos_C por: Cve_Folio + Cve_Movimiento + Cve_Almacen + Cve_Documento
   ⚠ Último costo: WHERE Cve_Movimiento='EC' ORDER BY Fecha_Documento DESC TOP 1
   ⚠ Costo promedio en período: AVG(Costo_Unitario) WHERE EC + rango fechas
 """
@@ -76,6 +113,12 @@ PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
   ORDER BY p.Descripcion
   · Incluir SIEMPRE todas las variantes/presentaciones del producto (normales + promos)
   · Si el producto tiene una sola variante: mostrar también el costo unitario promedio del período
+
+TRASPASOS ENTRE SUCURSALES:
+  · Consultar It_Traspasos_C + It_Traspasos_D para movimientos entre almacenes.
+  · Cantidad vs Cantidad_Recibida: diferencia indica traspaso parcial o pendiente de confirmar.
+  · JOIN GN_Sucursales por Cve_Sucursal (origen) y Cve_Sucursal_Destino para nombres.
+  · JOIN IM_Productos_Gral p ON p.Cve_Producto = td.Cve_Producto para descripción del producto.
 
 FORMATO ADICIONAL INVENTARIO:
   · ⚠ para alertas de caducidad próxima · 🔴 para sin existencia o caducado

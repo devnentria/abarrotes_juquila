@@ -53,11 +53,8 @@ except Exception as _e:
 _pool = ThreadPoolExecutor(max_workers=4)
 
 # Regex para detectar solicitudes de dashboard en el texto del usuario
-_DASHBOARD_RE = re.compile(
-    r"\b(dashboard|tablero|gr[aá]fico|gr[aá]fic[ao]|chart|reporte\s+visual|visualiza|genera\s+(un|el|una)|"
-    r"muestra\s+(un|el|una)\s*(gr[aá]|chart|dash)|genera.*gr[aá]f|hazme\s+un\s+(dash|tabla|gr[aá]))\b",
-    re.IGNORECASE,
-)
+# — tolerante a typos comunes: dashboad, dasboard, tablero, gráfica, chart, etc.
+
 
 _SALUDO = re.compile(
     r"^[\s¡!]*(hola|buenas?|buenos?\s+días?|buenas?\s+tardes?|buenas?\s+noches?|"
@@ -76,6 +73,17 @@ _CAPACIDADES = re.compile(
     r"qu[eé]\s+informaci[oó]n|ayuda[s]?\s+con|qu[eé]\s+consultas)",
     re.IGNORECASE,
 )
+_DASHBOARDS_DISPONIBLES = (
+    "Los dashboards visuales disponibles son:\n"
+    "- **Ventas**: reporte completo · ventas de hoy · por sucursal · tendencia · comparativo de meses · diario\n"
+    "- **Vendedores**: top vendedores · variación de vendedores\n"
+    "- **Productos**: top productos más vendidos\n"
+    "- **Clientes**: clientes frecuentes\n"
+    "- **Pedidos**: pedidos activos por sucursal\n"
+    "- **Inventario**: stock actual por sucursal · caducidades próximas · productos sin existencia\n\n"
+    "Pídeme alguno de esos y lo genero con datos del ERP."
+)
+
 _RESPUESTA_CAPACIDADES = (
     "Soy el asistente analítico de Studio.\n\n"
     "Puedo ayudarte con:\n"
@@ -97,8 +105,8 @@ _ESPECIALISTAS = {
     "mixto":      mixto.responder,
 }
 
-# Ratio de consultas que descuenta cada mensaje en Studio
-_RATIO = max(IA_RATIO_STUDIO, 2)  # Mínimo 2 — Studio siempre cuesta más
+# Ratio de consultas que descuenta cada mensaje en Studio (1.5 con o4-mini)
+_RATIO = float(IA_RATIO_STUDIO)  # 1.5 — Studio usa o4-mini (razonamiento)
 
 router = APIRouter(prefix="/api/studio/chat")
 
@@ -182,39 +190,64 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     respuesta = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
     estado    = "error"
 
-    # ── 1. Respuesta de texto con el agente ───────────────────────────────────
-    try:
-        area, costo_dir = director.clasificar(msg, historial, model=STUDIO_CHAT_MODEL)
-        fn              = _ESPECIALISTAS.get(area, mixto.responder)
-        resultado       = fn(msg, historial, model=STUDIO_CHAT_MODEL)
-        respuesta       = resultado.texto
-        costo_usd       = costo_dir + (
-            resultado.tokens_prompt     * IA_PRECIO_INPUT
-            + resultado.tokens_completion * IA_PRECIO_OUTPUT
-        )
-        estado = "done"
-    except Exception as e:
-        print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
-
-    # ── 2. Generar dashboard si se detecta en el mensaje ─────────────────────
-    if estado == "done" and _DASHBOARD_FN_OK and _DASHBOARD_RE.search(msg):
+    # ── 1. Clasificar si se requiere dashboard PRIMERO ───────────────────────
+    # Si se genera dashboard, no llamamos al agente o4-mini (innecesario y confuso).
+    # Si no hay dashboard, el agente responde normalmente con texto.
+    _pide_dashboard = bool(re.search(
+        r"dashboard|tablero|gr[aá]fic|chart|visualiza|ventas|inventario|vendedores?|productos?|clientes?|pedidos?",
+        msg, re.IGNORECASE,
+    ))
+    spec_dash = {}
+    if _DASHBOARD_FN_OK:
         try:
-            spec      = _clasificar(msg)
-            tipo      = spec.get("funcion", "ventas_hoy")
-            modo      = spec.get("modo", "hoy")
-            datos     = _fetch_tipo(tipo, modo)
-            narrativa = _narrar(msg, tipo, modo, datos)
+            spec_dash = _clasificar(msg)
+        except Exception as e:
+            print(f"[studio-chat] Clasificar error job={job_id}: {e}", flush=True)
+
+    tipo_dash = spec_dash.get("funcion", "ninguno")
+
+    # ── 2. Generar dashboard si aplica ───────────────────────────────────────
+    if tipo_dash != "ninguno":
+        try:
+            modo      = spec_dash.get("modo", "30d")
+            fi        = spec_dash.get("fecha_inicio")
+            ff        = spec_dash.get("fecha_fin")
+            datos     = _fetch_tipo(tipo_dash, modo, fi, ff)
+            narrativa, _ = _narrar(msg, tipo_dash, modo, datos)
             dashboard = {
-                "tipo":      tipo,
-                "layout":    spec.get("layout", "kpi_bar"),
-                "titulo":    spec.get("titulo", "Dashboard"),
-                "modo":      modo,
-                "narrativa": narrativa,
-                "datos":     datos,
+                "tipo":         tipo_dash,
+                "layout":       spec_dash.get("layout", "kpi_bar"),
+                "chart_type":   spec_dash.get("chart_type", "bar"),
+                "titulo":       spec_dash.get("titulo", "Dashboard"),
+                "modo":         modo,
+                "fecha_inicio": fi,
+                "fecha_fin":    ff,
+                "narrativa":    narrativa,
+                "datos":        datos,
             }
-            print(f"[studio-chat] Dashboard generado tipo={tipo} job={job_id}", flush=True)
+            respuesta = narrativa  # El análisis ejecutivo como texto del chat
+            estado    = "done"
+            costo_usd = 0.0
+            print(f"[studio-chat] Dashboard generado tipo={tipo_dash} job={job_id}", flush=True)
         except Exception as e:
             print(f"[studio-chat] Dashboard error job={job_id}: {e}", flush=True)
+
+    # ── 3. Respuesta de texto con el agente (solo si no hay dashboard) ────────
+    if tipo_dash == "ninguno":
+        try:
+            area, costo_dir = director.clasificar(msg, historial, model=STUDIO_CHAT_MODEL)
+            fn              = _ESPECIALISTAS.get(area, mixto.responder)
+            resultado       = fn(msg, historial, model=STUDIO_CHAT_MODEL)
+            respuesta       = resultado.texto
+            costo_usd       = costo_dir + (
+                resultado.tokens_prompt     * IA_PRECIO_INPUT
+                + resultado.tokens_completion * IA_PRECIO_OUTPUT
+            )
+            estado = "done"
+            if _pide_dashboard:
+                respuesta = _DASHBOARDS_DISPONIBLES
+        except Exception as e:
+            print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 
     # ── 3. Guardar mensaje en el chat ─────────────────────────────────────────
     try:
@@ -228,9 +261,11 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     # ── 4. Descontar consultas ────────────────────────────────────────────────
     try:
         execute(
-            "UPDATE usuarios SET consultas_ia = consultas_ia + ?, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
-            (_RATIO, costo_usd, usuario_id),
+            "UPDATE usuarios SET "
+            "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
+            "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
+            "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+            (_RATIO, _RATIO, costo_usd, usuario_id),
         )
     except Exception as e:
         print(f"[studio-chat] UPDATE usuarios error job={job_id}: {e}", flush=True)
@@ -266,8 +301,8 @@ def enviar_mensaje_async(body: MensajeBody, usuario: dict = Depends(get_current_
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
     verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-    u = fetch_one("SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
-    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
+    u = fetch_one("SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
+    if u and u["limite_ia"] > 0 and u["consultas_ia_r"] >= u["limite_ia"]:
         raise HTTPException(
             429,
             "Has alcanzado tu límite de consultas de IA. "
