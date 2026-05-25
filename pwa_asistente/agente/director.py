@@ -50,18 +50,29 @@ Si el mensaje es sobre tu funcionamiento, modelo, tecnología o arquitectura, re
 """
 
 
-def clasificar(pregunta: str, historial: list[dict], model: str = OPENAI_MODEL) -> tuple[str, float]:
+def clasificar(
+    pregunta: str,
+    historial: list[dict],
+    model: str = OPENAI_MODEL,
+    precio_input: float | None = None,
+    precio_output: float | None = None,
+) -> tuple[str, float]:
     """
     Clasifica la pregunta en un área de negocio.
 
     Args:
-        pregunta  (str):        Mensaje actual del usuario.
-        historial (list[dict]): Mensajes previos de la conversación
-                                [{rol, contenido}, ...].
+        pregunta       (str):         Mensaje actual del usuario.
+        historial      (list[dict]):  Mensajes previos [{rol, contenido}, ...].
+        model          (str):         Modelo OpenAI a usar.
+        precio_input   (float|None):  Precio por token de entrada. None = usa IA_PRECIO_INPUT.
+        precio_output  (float|None):  Precio por token de salida.  None = usa IA_PRECIO_OUTPUT.
 
     Returns:
-        tuple[str, float]: (área, costo_usd) — área clasificada y costo real de tokens.
+        tuple[str, float]: (área, costo_usd).
     """
+    p_in  = precio_input  if precio_input  is not None else IA_PRECIO_INPUT
+    p_out = precio_output if precio_output is not None else IA_PRECIO_OUTPUT
+
     mensajes = [{"role": "system", "content": _SYSTEM}]
 
     # Solo últimos 4 mensajes para dar contexto sin inflar el prompt
@@ -80,8 +91,8 @@ def clasificar(pregunta: str, historial: list[dict], model: str = OPENAI_MODEL) 
         costo = 0.0
         if resp.usage:
             costo = (
-                resp.usage.prompt_tokens     * IA_PRECIO_INPUT
-                + resp.usage.completion_tokens * IA_PRECIO_OUTPUT
+                resp.usage.prompt_tokens     * p_in
+                + resp.usage.completion_tokens * p_out
             )
         return (area if area in AREAS else "mixto"), costo
     except Exception:

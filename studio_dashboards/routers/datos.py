@@ -31,7 +31,7 @@ from pydantic import BaseModel
 from shared.auth import get_current_user
 from shared.config import (
     OPENAI_API_KEY, STUDIO_IA_MODEL,
-    IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_STUDIO,
+    STUDIO_PRECIO_INPUT, STUDIO_PRECIO_OUTPUT, IA_RATIO_STUDIO,
 )
 from shared.database import query, hoy
 from shared.database_local import execute, fetch_all, fetch_one
@@ -687,7 +687,8 @@ def _fmt_mxn(n: float) -> str:
 def _resumir_datos(tipo: str, datos: dict) -> str:
     """Genera un resumen textual de los datos para alimentar al narrador IA."""
     lista = datos.get("datos", [])
-    if not lista:
+    # Dashboards multi-panel: datos["datos"] es un dict, no una lista — no hacer early-return
+    if not lista and tipo not in ("reporte_inventario", "reporte_ventas"):
         return "Sin datos disponibles."
 
     if tipo in ("ventas_hoy",):
@@ -766,9 +767,11 @@ def _resumir_datos(tipo: str, datos: dict) -> str:
         if caidas:
             resumen += "Bajan: " + ", ".join(r.get("label", "?") for r in caidas) + "."
     elif tipo == "reporte_inventario":
-        stock_data = datos.get("inventario_stock", {})
-        cad_data   = datos.get("caducidades", {})
-        out_data   = datos.get("stockouts", {})
+        # _fetch_tipo devuelve { ..., datos: { inventario_stock, ... } } — desenvolver
+        _inner     = datos.get("datos") if isinstance(datos.get("datos"), dict) else datos
+        stock_data = _inner.get("inventario_stock", {})
+        cad_data   = _inner.get("caducidades", {})
+        out_data   = _inner.get("stockouts", {})
         total_v    = float(stock_data.get("total_valor", 0) or 0)
         total_u    = float(stock_data.get("total_unidades", 0) or 0)
         criticos   = sum(int(r.get("criticos", 0) or 0) for r in stock_data.get("datos", []))
@@ -858,8 +861,8 @@ def _narrar(pregunta: str, tipo: str, modo: str, datos: dict) -> tuple[str, floa
         costo = 0.0
         if resp.usage:
             costo = (
-                resp.usage.prompt_tokens     * IA_PRECIO_INPUT
-                + resp.usage.completion_tokens * IA_PRECIO_OUTPUT
+                resp.usage.prompt_tokens     * STUDIO_PRECIO_INPUT
+                + resp.usage.completion_tokens * STUDIO_PRECIO_OUTPUT
             )
         return texto, costo
     except Exception:
@@ -1327,38 +1330,26 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
         out   = _fetch_tipo("stockouts",        modo)
 
         # Tendencia histórica de valor de stock (últimos 4 meses)
-        tendencia_stock = query(f"""
-            SELECT YEAR(h.Fecha) AS anio, MONTH(h.Fecha) AS mes,
-                   DATENAME(MONTH, h.Fecha) AS mes_nombre,
-                   ISNULL(SUM(h.Existencia * ISNULL(h.Costo_Promedio, 0)), 0) AS valor,
-                   ISNULL(SUM(h.Existencia), 0) AS unidades
-            FROM IN_Existencias_Alm_Diario h
-            JOIN GN_Sucursales s ON s.Cve_Sucursal = h.Cve_Sucursal
-            WHERE h.Fecha IN (
-                SELECT MAX(h2.Fecha)
-                FROM IN_Existencias_Alm_Diario h2
-                WHERE h2.Fecha < DATEFROMPARTS(YEAR(t.m), MONTH(t.m)+1, 1)
-                  AND h2.Fecha >= DATEFROMPARTS(YEAR(t.m), MONTH(t.m), 1)
-                GROUP BY YEAR(h2.Fecha), MONTH(h2.Fecha)
-            )
-            AND s.Cve_Sucursal <> 99
-            GROUP BY YEAR(h.Fecha), MONTH(h.Fecha), DATENAME(MONTH, h.Fecha)
-            ORDER BY anio, mes
-        """) if False else query(f"""
-            SELECT TOP 4 anio, mes, mes_nombre, SUM(valor) AS valor, SUM(unidades) AS unidades
-            FROM (
-                SELECT YEAR(h.Fecha) AS anio, MONTH(h.Fecha) AS mes,
-                       DATENAME(MONTH, h.Fecha) AS mes_nombre,
-                       ISNULL(h.Existencia * ISNULL(h.Costo_Promedio,0), 0) AS valor,
-                       ISNULL(h.Existencia, 0) AS unidades
-                FROM IN_Existencias_Alm_Diario h
-                JOIN GN_Sucursales s ON s.Cve_Sucursal = h.Cve_Sucursal
-                WHERE h.Fecha >= DATEADD(MONTH,-3,DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
-                  AND h.Fecha <  DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1)
-                  AND s.Cve_Sucursal <> 99
-                  AND DAY(h.Fecha) = 1
-            ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
-        """)
+        # IN_Existencias_Alm_Diario puede no existir en todos los ERP — si falla, lista vacía
+        try:
+            tendencia_stock = query(f"""
+                SELECT TOP 4 anio, mes, mes_nombre, SUM(valor) AS valor, SUM(unidades) AS unidades
+                FROM (
+                    SELECT YEAR(h.Fecha) AS anio, MONTH(h.Fecha) AS mes,
+                           DATENAME(MONTH, h.Fecha) AS mes_nombre,
+                           ISNULL(h.Existencia * ISNULL(h.Costo_Promedio,0), 0) AS valor,
+                           ISNULL(h.Existencia, 0) AS unidades
+                    FROM IN_Existencias_Alm_Diario h
+                    JOIN GN_Sucursales s ON s.Cve_Sucursal = h.Cve_Sucursal
+                    WHERE h.Fecha >= DATEADD(MONTH,-3,DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
+                      AND h.Fecha <  DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1)
+                      AND s.Cve_Sucursal <> 99
+                      AND DAY(h.Fecha) = 1
+                ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
+            """)
+        except Exception as _te:
+            print(f"[inventario] tendencia_stock omitida (tabla no disponible): {_te}", flush=True)
+            tendencia_stock = []
 
         # Proyección de valor de stock siguiente mes
         valores_stock = [float(r.get("valor") or 0) for r in tendencia_stock]

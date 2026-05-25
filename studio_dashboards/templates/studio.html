@@ -3323,7 +3323,9 @@ function int(v) { return parseInt(v) || 0; }
 
 // ── Layout: full_report — dashboard multi-panel estilo Power BI ───────────────
 function renderLayoutFullReport(container, spec) {
-  const panels   = spec.datos || {};
+  // _fetch_tipo devuelve { ..., datos: { kpis, ventas_sucursal, ... } } — desenvolver un nivel
+  const _raw     = spec.datos || {};
+  const panels   = (_raw.datos && !Array.isArray(_raw.datos)) ? _raw.datos : _raw;
   const kpis     = panels.kpis || {};
   const sucData  = (panels.ventas_sucursal   || {}).datos || [];
   const prodData = (panels.top_productos     || {}).datos || [];
@@ -3691,7 +3693,9 @@ function renderLayoutDualCompare(container, spec) {
 
 // ── Layout: inventory_report ──────────────────────────────────────────────────
 function renderLayoutInventoryReport(container, spec) {
-  const datos       = spec.datos || {};
+  // _fetch_tipo devuelve { ..., datos: { inventario_stock, ... } } — desenvolver un nivel
+  const _raw        = spec.datos || {};
+  const datos       = (_raw.datos && !Array.isArray(_raw.datos)) ? _raw.datos : _raw;
   const stockSpec   = datos.inventario_stock || {};
   const cadSpec     = datos.caducidades      || {};
   const outSpec     = datos.stockouts        || {};
