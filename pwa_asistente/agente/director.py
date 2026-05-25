@@ -11,6 +11,7 @@ Agente Director — enruta la pregunta al especialista correcto.
 No sabe de SQL ni de negocio. Su único trabajo es leer
 la pregunta y decidir a qué área pertenece.
 """
+from __future__ import annotations
 from openai import OpenAI
 from shared.config import OPENAI_API_KEY, OPENAI_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
 
