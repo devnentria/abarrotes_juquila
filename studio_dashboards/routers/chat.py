@@ -32,7 +32,7 @@ from pydantic import BaseModel
 
 from shared.auth import get_current_user
 from shared.config import (
-    IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_STUDIO,
+    STUDIO_PRECIO_INPUT, STUDIO_PRECIO_OUTPUT, IA_RATIO_STUDIO,
     STUDIO_CHAT_MODEL,
 )
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
@@ -235,13 +235,16 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     # ── 3. Respuesta de texto con el agente (solo si no hay dashboard) ────────
     if tipo_dash == "ninguno":
         try:
-            area, costo_dir = director.clasificar(msg, historial, model=STUDIO_CHAT_MODEL)
+            area, costo_dir = director.clasificar(
+                msg, historial, model=STUDIO_CHAT_MODEL,
+                precio_input=STUDIO_PRECIO_INPUT, precio_output=STUDIO_PRECIO_OUTPUT,
+            )
             fn              = _ESPECIALISTAS.get(area, mixto.responder)
             resultado       = fn(msg, historial, model=STUDIO_CHAT_MODEL)
             respuesta       = resultado.texto
             costo_usd       = costo_dir + (
-                resultado.tokens_prompt     * IA_PRECIO_INPUT
-                + resultado.tokens_completion * IA_PRECIO_OUTPUT
+                resultado.tokens_prompt     * STUDIO_PRECIO_INPUT
+                + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
             estado = "done"
             if _pide_dashboard:

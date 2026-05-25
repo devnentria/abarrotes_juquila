@@ -195,13 +195,12 @@
             <th>Permisos</th>
             <th>Estado</th>
             <th>Consultas IA</th>
-            <th>Costo IA</th>
             <th>Último acceso</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="tabla-usuarios">
-          <tr class="empty-row"><td colspan="10">Cargando...</td></tr>
+          <tr class="empty-row"><td colspan="9">Cargando...</td></tr>
         </tbody>
       </table>
     </div>
@@ -417,7 +416,6 @@ async function cargarUsuarios() {
         <td>${u.permisos.map(p => `<span class="badge badge-permiso">${p}</span>`).join('')}</td>
         <td><span class="badge ${u.activo ? 'badge-activo' : 'badge-inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
         <td>${renderConsultasIA(u)}</td>
-        <td style="font-size:12px;color:var(--text-dim)">$${(u.costo_ia_usd || 0).toFixed(4)} USD</td>
         <td style="color:var(--text-dim);font-size:12px">${u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-MX') : '—'}</td>
         <td>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -432,9 +430,9 @@ async function cargarUsuarios() {
           </div>
         </td>
       </tr>
-    `).join('') || '<tr class="empty-row"><td colspan="10">Sin usuarios registrados</td></tr>';
+    `).join('') || '<tr class="empty-row"><td colspan="9">Sin usuarios registrados</td></tr>';
   } catch (e) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="10">Error al cargar: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="9">Error al cargar: ${e.message}</td></tr>`;
   }
 }
 
@@ -619,7 +617,7 @@ async function verHistorialIA(id, nombre) {
           <tr style="border-bottom:1px solid var(--border)">
             <th style="text-align:left;padding:6px 8px;color:var(--text-dim);font-weight:500">Mes</th>
             <th style="text-align:right;padding:6px 8px;color:var(--text-dim);font-weight:500">Consultas</th>
-            <th style="text-align:right;padding:6px 8px;color:var(--text-dim);font-weight:500">Costo USD</th>
+            <th style="text-align:right;padding:6px 8px;color:var(--text-dim);font-weight:500">Relación</th>
           </tr>
         </thead>
         <tbody>
@@ -627,7 +625,7 @@ async function verHistorialIA(id, nombre) {
             <tr style="border-bottom:1px solid var(--border)">
               <td style="padding:6px 8px"><strong>${r.mes}</strong></td>
               <td style="padding:6px 8px;text-align:right">${r.consultas}</td>
-              <td style="padding:6px 8px;text-align:right;color:var(--text-dim)">$${r.costo_usd.toFixed(4)}</td>
+              <td style="padding:6px 8px;text-align:right;color:var(--text-dim)">${r.costo_usd.toFixed(4)}</td>
             </tr>`).join('')}
         </tbody>
       </table>`;

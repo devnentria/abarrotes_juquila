@@ -61,19 +61,25 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 
 
 # ── Consumo de IA ────────────────────────────────────────────────────────────
-# consultas_ia  → cuota de negocio: +1 por cada pregunta real al agente IA
-# costo_ia_usd  → costo real calculado con tokens consumidos de la API de OpenAI
+# consultas_ia       → cuota de negocio: +1 por cada pregunta real al agente IA
+# costo_ia_usd       → costo real calculado con tokens consumidos de la API de OpenAI
 #
-# Precios por token según modelo (USD):
-#   Modelo          Input/1M     Output/1M    Uso
-#   gpt-5-nano      $0.05        $0.40        Studio: clasificación + narrativa dashboard
-#   o4-mini         $1.10        $4.40        Studio: chat (razonamiento, +thinking tokens)
-#   gpt-4.1-mini    $0.40        $1.60        PWA: agente chat principal
-#   gpt-5-mini      $0.25        $2.00        alternativa razonamiento ligero
-IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.0000011"))   # o4-mini input/token
-IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.0000044"))   # o4-mini output/token
+# Precios por token según modelo (USD por token):
+#   Modelo          Input/1M     Output/1M    → por token input   output       Uso
+#   gpt-5-nano      $0.05        $0.40        → 0.00000005        0.0000004    Studio chat + dashboards
+#   gpt-4.1-mini    $0.40        $1.60        → 0.0000004         0.0000016    PWA chat principal
+#   gpt-5-mini      $0.25        $2.00        → 0.00000025        0.000002     alternativa razonamiento
+#   o4-mini         $1.10        $4.40        → 0.0000011         0.0000044    si se activa razonamiento
 
-# Ratio Studio: cada consulta en Studio vale 1.3 (cubre costo de o4-mini + módulo)
+# PWA — modelo gpt-4.1-mini por defecto
+IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.0000004"))   # gpt-4.1-mini input/token
+IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.0000016"))   # gpt-4.1-mini output/token
+
+# Studio — modelo gpt-5-nano por defecto (más barato, costo se suma por más llamadas)
+STUDIO_PRECIO_INPUT:  float = float(os.getenv("STUDIO_PRECIO_INPUT",  "0.00000005"))  # gpt-5-nano input/token
+STUDIO_PRECIO_OUTPUT: float = float(os.getenv("STUDIO_PRECIO_OUTPUT", "0.0000004"))   # gpt-5-nano output/token
+
+# Ratio Studio: cada consulta en Studio vale 1.5 en cuota de usuario
 # Dashboards complejos usan _RATIO_DASHBOARD = 3 en datos.py
 IA_RATIO_STUDIO: float = float(os.getenv("IA_RATIO_STUDIO", "1.5"))
 
