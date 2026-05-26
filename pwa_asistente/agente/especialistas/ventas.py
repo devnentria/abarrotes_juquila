@@ -281,7 +281,19 @@ VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
   ⛔ NUNCA omitir el JOIN a IM_Productos_Gral ni el filtro AND p.Descripcion LIKE '%nombre%'.
   ✅ SIEMPRE hacer JOIN a FT_Facturas_D fd → IM_Productos_Gral p y filtrar por p.Descripcion.
 
-  Consulta estándar para ventas de un producto en un período:
+  ⚠ PRODUCTOS PROMOCIONALES — REGLA CRÍTICA:
+    En este ERP las promociones crean productos nuevos en IM_Productos_Gral con descripciones como:
+      "SAIZEN 20MG/60UI PIEZA PROMOCION GRATIS", "NORDITROPIN PROMO", "PRODUCTO X GRATIS", etc.
+    Precio de estos productos es ~$0.01 — incluirlos DISTORSIONA los totales de ventas reales.
+
+    ⛔ NUNCA incluir productos PROMO/GRATIS en las ventas de un producto salvo que el usuario
+       explícitamente pregunte por promociones o piezas gratis.
+    ✅ SIEMPRE agregar en el WHERE:
+       AND p.Descripcion NOT LIKE '%PROMO%'
+       AND p.Descripcion NOT LIKE '%GRATIS%'
+       AND p.Descripcion NOT LIKE '%PROMOCION%'
+
+  Consulta estándar para ventas de un producto en un período (sin promociones):
     SELECT p.Descripcion, SUM(fd.Importe_Neto) AS Total, SUM(fd.Cantidad) AS Piezas,
            COUNT(DISTINCT fc.Cve_Folio) AS Facturas
     FROM FT_Facturas_C fc
@@ -289,9 +301,36 @@ VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
     JOIN IM_Productos_Gral p ON p.Cve_Producto=fd.Cve_Producto
     WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
       AND p.Descripcion LIKE '%Omnitrope 10%'
+      AND p.Descripcion NOT LIKE '%PROMO%'
+      AND p.Descripcion NOT LIKE '%GRATIS%'
+      AND p.Descripcion NOT LIKE '%PROMOCION%'
       AND YEAR(fc.Fecha_Documento)=2026 AND MONTH(fc.Fecha_Documento)=1
     GROUP BY p.Descripcion
     ORDER BY Total DESC
+
+  Si el usuario pregunta explícitamente por "piezas gratis", "promociones" o "muestras":
+    ✅ Quitar los filtros NOT LIKE y reportar solo los productos con PROMO/GRATIS en la descripción.
+
+PACIENTES DE UN MÉDICO POR PRODUCTO — PROTOCOLO:
+  FT_Pedidos_C tiene el campo Paciente (varchar) — nombre del paciente en el pedido.
+  Para buscar pacientes de un médico que compraron un producto específico:
+
+    SELECT DISTINCT c.Paciente
+    FROM FT_Pedidos_C c
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
+    JOIN CM_Clientes cl ON cl.Cve_Cliente = c.Cve_Cliente
+    JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
+    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+      AND p.Descripcion LIKE '%nombre_producto%'
+      AND p.Descripcion NOT LIKE '%PROMO%'
+      AND p.Descripcion NOT LIKE '%GRATIS%'
+      AND m.Nombre LIKE '%nombre_medico%'
+      AND c.Paciente IS NOT NULL AND LTRIM(RTRIM(c.Paciente)) <> ''
+    ORDER BY c.Paciente
+
+  ⚠ Si el resultado es vacío, buscar al médico en GC_Medicos primero para confirmar que existe.
+  ⚠ Si el médico no existe con el nombre exacto, buscar por palabras separadas.
 
 VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
   Cuando la pregunta menciona una sucursal (ej: "ventas en Puebla", "cómo va CDMX", "Monterrey abril"):

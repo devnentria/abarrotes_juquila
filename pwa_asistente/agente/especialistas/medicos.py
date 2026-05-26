@@ -33,6 +33,24 @@ FT_Facturas_C — ventas (para ventas directas o por prescripción)
   Cve_Cliente (int), Importe_Total (decimal), Fecha_Documento (datetime), Status (char)
   ⚠ Filtrar: Status <> 'C'
   ⚠ NO existe Cve_Medico en FT_Facturas_C
+
+FT_Pedidos_C — pedidos pagados (fuente para consultas de pacientes)
+  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Cliente (varchar),
+  Paciente (varchar) → nombre del paciente en el pedido,
+  Estatus (char) → 'CN'=cancelado, Referencia_Cliente (varchar) → 'PAGADO'
+  ⚠ Para ventas reales: Estatus <> 'CN' AND Referencia_Cliente = 'PAGADO'
+
+FT_Pedidos_Dia — detalle de pedidos
+  Cve_Folio, Cve_Sucursal, Cve_Producto (varchar)
+  JOIN con FT_Pedidos_C por: Cve_Folio + Cve_Sucursal
+
+IM_Productos_Gral — catálogo de productos
+  Cve_Producto (varchar), Descripcion (varchar)
+  ⚠ Productos PROMO: el ERP crea productos con "PROMO", "GRATIS" o "PROMOCION" en la descripción
+    — precio ~$0.01. SIEMPRE excluirlos con:
+    AND p.Descripcion NOT LIKE '%PROMO%'
+    AND p.Descripcion NOT LIKE '%GRATIS%'
+    AND p.Descripcion NOT LIKE '%PROMOCION%'
 """
 
 _REGLAS = """
@@ -81,6 +99,29 @@ RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
   [AND fc.Fecha_Documento BETWEEN ... AND ...]
   GROUP BY m.Cve_Medico, m.Nombre
   ORDER BY Total_Prescrito DESC
+
+PACIENTES DE UN MÉDICO POR PRODUCTO — PROTOCOLO:
+  Cuando preguntan "pacientes de [producto] del Dr. [nombre]" o "¿quiénes usan [producto] con [médico]?":
+  Usar FT_Pedidos_C.Paciente cruzando médico → clientes → pedidos → producto.
+
+    SELECT DISTINCT c.Paciente
+    FROM FT_Pedidos_C c
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
+    JOIN CM_Clientes cl ON cl.Cve_Cliente = c.Cve_Cliente
+    JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
+    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+      AND p.Descripcion LIKE '%nombre_producto%'
+      AND p.Descripcion NOT LIKE '%PROMO%'
+      AND p.Descripcion NOT LIKE '%GRATIS%'
+      AND p.Descripcion NOT LIKE '%PROMOCION%'
+      AND m.Nombre LIKE '%palabra1%' [OR m.Nombre LIKE '%palabra2%' ...]
+      AND c.Paciente IS NOT NULL AND LTRIM(RTRIM(c.Paciente)) <> ''
+    ORDER BY c.Paciente
+
+  ⚠ Buscar al médico por palabras separadas (nunca nombre completo junto).
+  ⚠ Si no hay resultados, confirmar primero que el médico existe en GC_Medicos.
+  ⚠ Si el médico existe pero no hay pacientes: reportarlo claramente sin sugerir "¿deseas algo más?".
 
 MÉDICOS SIN CÉDULA — REGLA OBLIGATORIA:
   · Filtrar SIEMPRE registros de sistema: WHERE LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')

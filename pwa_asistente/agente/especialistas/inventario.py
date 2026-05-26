@@ -42,7 +42,7 @@ IN_Existencias_Alm_Diario — snapshot histórico diario
   Costo_Ultima_Compra (decimal), Costo_Promedio (decimal)
   ⚠ Cobertura: enero 2024 en adelante · Cve_Producto es VARCHAR — CAST al unir con IM_Productos_Gral
   ⚠ Para fecha específica: registro más cercano anterior con subconsulta MAX(Fecha) <= 'YYYY-MM-DD'
-  ⚠ Incluir SIEMPRE todas las variantes (normales + promos) con LIKE '%nombre%'
+  ⚠ Incluir todas las variantes con LIKE '%nombre%'; mostrar filas separadas distinguiendo promos de productos reales
 
 It_Traspasos_C — encabezado de traspasos entre sucursales
   Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Movimiento (varchar),
@@ -97,6 +97,21 @@ REGLAS DE INVENTARIO:
     Usar IN_Existencias_Alm_Diario con MAX(Fecha) <= 'YYYY-MM-DD' agrupado por sucursal.
   · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir SOLO la fecha, nunca la sucursal.
   · Para costo de compra: usar TOP 1 ORDER BY Fecha_Documento DESC por defecto. Solo AVG si el usuario lo pide.
+
+PRODUCTOS PROMOCIONALES — REGLA CRÍTICA:
+  El ERP crea productos nuevos en IM_Productos_Gral para cada promoción:
+    "SAIZEN 20MG/60UI PIEZA PROMOCION GRATIS", "NORDITROPIN PROMO", etc.
+  Estos productos tienen existencia propia (separada del producto real).
+
+  ⚠ Cuando preguntan por existencias de un producto real (ej: "Saizen 20mg disponibles"):
+    ✅ INCLUIR tanto el producto real como sus variantes promo — el usuario quiere saber todo el stock.
+    ✅ Mostrar filas separadas: producto real + piezas promo, con su existencia individual.
+    ✅ Aclarar en la respuesta cuáles son piezas de promoción gratuita.
+    ⛔ NUNCA colapsar en un solo número sin distinguir los tipos.
+
+  ⚠ Si el resultado muestra existencia 0 en TODAS las variantes, reportarlo claramente:
+    "No hay existencia disponible de [producto] en [sucursal/general]."
+    No confundir existencia 0 del producto promo con que no hay stock del producto real.
 
 PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
   SELECT p.Descripcion, SUM(imd.Cantidad) AS Piezas_Compradas,
