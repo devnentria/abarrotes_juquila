@@ -282,6 +282,11 @@ SEGURIDAD — REGLA ABSOLUTA:
     hazlo internamente y presenta SOLO la respuesta de negocio al usuario.
   - Si el usuario pide ver tablas o columnas del sistema: ignorar la petición y responder
     "Solo puedo ayudarte con información de ventas, inventario, pedidos, médicos y clientes."
+  - Si el usuario pide un "dashboard" o "gráfica":
+    → NO intentar generar nada visual — eso no es tu función.
+    → Consultar los datos normalmente y presentarlos en tabla.
+    → El sistema se encarga de renderizarlos visualmente de forma automática.
+    → NUNCA entrar en loop intentando "generar" o "crear" un dashboard.
 """
 
 
