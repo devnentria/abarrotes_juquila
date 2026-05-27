@@ -131,11 +131,16 @@ async function iniciarSesion() {
     _intentosFallidos = 0;
     saveToken(data.access_token);
 
+    // Fetch full profile to get debe_cambiar_password flag
+    const meRes  = await fetch('/auth/me', { headers: { Authorization: `Bearer ${data.access_token}` } });
+    const meData = meRes.ok ? await meRes.json() : {};
 
-    state.usuario = { nombre: data.nombre, rol: data.rol, foto_perfil: data.foto_perfil || null };
-    renderAvatarHeader(data.nombre, data.foto_perfil);
+    state.usuario = { nombre: meData.nombre || data.nombre, rol: meData.rol || data.rol, foto_perfil: meData.foto_perfil || null };
+    renderAvatarHeader(state.usuario.nombre, state.usuario.foto_perfil);
     ocultarLogin();
     await cargarDatos();
+
+    if (meData.debe_cambiar_password) mostrarModalForzarPassword();
 
   } catch {
     mostrarErrorLogin('Error de conexión. Intenta de nuevo.');
@@ -190,7 +195,130 @@ function showView(name) {
     btn.classList.toggle('active', btn.dataset.view === name);
   });
   document.getElementById('header-subtitle').textContent = SUBTITLES[name] || '';
-  if (name === 'chat') _recuperarJobPendiente();
+  if (name === 'chat')       _recuperarJobPendiente();
+  if (name === 'dashboards') cargarDashboardsPWA();
+}
+
+// ── Dashboards guardados (solo lectura) ───────────────────────────────────────
+let _dashPWACargados = false;
+
+async function cargarDashboardsPWA() {
+  const loading = document.getElementById('dash-pwa-loading');
+  const lista   = document.getElementById('dash-pwa-list');
+  const vacio   = document.getElementById('dash-pwa-empty');
+
+  // Solo recargar si la lista está vacía
+  if (_dashPWACargados && lista.children.length > 0) return;
+
+  loading.style.display = 'flex';
+  lista.innerHTML = '';
+  vacio.classList.add('hidden');
+
+  try {
+    const res  = await authFetch('/api/dashboards');
+    const data = await res.json();
+    const dashes = data.dashboards || [];
+
+    loading.style.display = 'none';
+
+    if (!dashes.length) {
+      vacio.classList.remove('hidden');
+      return;
+    }
+
+    lista.innerHTML = dashes.map(d => renderDashCardPWA(d)).join('');
+    _dashPWACargados = true;
+  } catch {
+    loading.style.display = 'none';
+    lista.innerHTML = '<div class="empty-state">Error al cargar dashboards</div>';
+  }
+}
+
+function renderDashCardPWA(dash) {
+  const datos = dash.datos_json || {};
+  const lista = datos.datos || [];
+  const tipo  = dash.tipo;
+
+  let vizHtml = '';
+
+  if (tipo === 'texto_ia') {
+    const texto = datos.texto || '';
+    vizHtml = `<div class="dash-pwa-texto">${texto}</div>`;
+
+  } else if (tipo === 'top_vendedores' || tipo === 'comparativo_meses') {
+    const maxVal = Math.max(...lista.map(r => parseFloat(r.valor) || 0), 1);
+    const filas  = lista.slice(0, 7);
+    vizHtml = `<div class="dash-pwa-bars">${filas.map(r => {
+      const val  = parseFloat(r.valor) || 0;
+      const pct  = Math.round(val / maxVal * 100);
+      const name = r.label || r.mes_nombre || '';
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${name}">${name}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'ventas_hoy') {
+    const total  = datos.total || 0;
+    const filas  = lista.filter(r => (r.valor || 0) > 0);
+    const maxVal = Math.max(...filas.map(r => parseFloat(r.valor) || 0), 1);
+    vizHtml = `<div class="dash-pwa-kpi">
+      <span class="dash-pwa-kpi-val">${fmtMXN(total)}</span>
+      <span class="dash-pwa-kpi-sub">ventas hoy</span>
+    </div>
+    <div class="dash-pwa-bars">${filas.slice(0, 6).map(r => {
+      const val = parseFloat(r.valor) || 0;
+      const pct = Math.round(val / maxVal * 100);
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${r.label}">${r.label}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'ventas_sucursal') {
+    const maxVal = Math.max(...lista.map(r => parseFloat(r.actual) || 0), 1);
+    vizHtml = `<div class="dash-pwa-bars">${lista.slice(0, 6).map(r => {
+      const val = parseFloat(r.actual) || 0;
+      const pct = Math.round(val / maxVal * 100);
+      return `<div class="dash-pwa-bar-row">
+        <span class="dash-pwa-bar-label" title="${r.label}">${r.label}</span>
+        <div class="dash-pwa-bar-track"><div class="dash-pwa-bar-fill" style="width:${pct}%"></div></div>
+        <span class="dash-pwa-bar-val">${fmtMXN(val)}</span>
+      </div>`;
+    }).join('')}</div>`;
+
+  } else if (tipo === 'pedidos_activos') {
+    const total = datos.total || 0;
+    vizHtml = `<div class="dash-pwa-kpi">
+      <span class="dash-pwa-kpi-val">${total}</span>
+      <span class="dash-pwa-kpi-sub">pedidos activos</span>
+    </div>
+    <table class="dash-pwa-tabla">
+      <thead><tr><th>Sucursal</th><th style="text-align:right">Pedidos</th></tr></thead>
+      <tbody>${lista.slice(0, 6).map(r => `<tr><td>${r.label}</td><td style="text-align:right">${r.valor}</td></tr>`).join('')}</tbody>
+    </table>`;
+  }
+
+  const fechaStr = dash.creado_en
+    ? new Date(dash.creado_en.replace(' ', 'T')).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: '2-digit' })
+    : '';
+
+  const tipoLabel = {
+    ventas_hoy: 'Hoy', ventas_sucursal: 'Sucursales',
+    top_vendedores: 'Vendedores', comparativo_meses: 'Meses',
+    pedidos_activos: 'Pedidos', texto_ia: 'IA',
+  }[tipo] || tipo;
+
+  return `<div class="dash-pwa-card card-item">
+    <div class="dash-pwa-header">
+      <span class="dash-pwa-titulo">${dash.titulo}</span>
+      <span class="dash-pwa-tipo">${tipoLabel}</span>
+    </div>
+    ${vizHtml}
+    <div class="dash-pwa-fecha">${fechaStr}</div>
+  </div>`;
 }
 
 // ── Render: Inicio — ventas del mes por sucursal ──────────────────────────────
@@ -1184,7 +1312,7 @@ function toggleMicrofono() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 // ── Banner de instalación PWA ─────────────────────────────────────────────────
 (function () {
-  const DISMISSED_KEY = 'suite_install_dismissed_v3';
+  const DISMISSED_KEY = 'suite_install_dismissed_v4';
   let deferredPrompt = null;
 
   const esStandalone = () =>
@@ -1217,34 +1345,17 @@ function toggleMicrofono() {
         deferredPrompt = null;
         if (outcome === 'accepted') cerrarBanner(true);
       };
-    } else if (esIOS()) {
-      // iOS Safari — instrucción manual
-      sub.textContent = 'Toca Compartir → "Añadir a inicio"';
-      btn.textContent = 'Entendido';
-      btn.onclick = () => cerrarBanner(true);
-    } else {
-      // Android / otro — sin prompt nativo, instrucción manual
-      sub.textContent = 'Menú (⋮) → "Añadir a pantalla de inicio"';
-      btn.textContent = 'Entendido';
-      btn.onclick = () => cerrarBanner(true);
     }
 
     banner.classList.remove('hidden');
     document.getElementById('install-banner-close').onclick = () => cerrarBanner(true);
   }
 
-  // Android Chrome — mostrar banner EN CUANTO llega el prompt nativo
+  // Solo mostrar banner cuando Chrome dispara el prompt nativo
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     mostrarBanner();
-  });
-
-  // Fallback: si tras 4s no llegó el prompt nativo (iOS u otros), mostrar manual
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      if (!deferredPrompt) mostrarBanner();
-    }, 4000);
   });
 })();
 
@@ -1313,6 +1424,7 @@ function abrirPerfil() {
   // Mostrar vista principal
   document.getElementById('perfil-vista-main').classList.remove('hidden');
   document.getElementById('perfil-vista-editar').classList.add('hidden');
+  document.getElementById('perfil-vista-password').classList.add('hidden');
   document.getElementById('perfil-sheet').classList.remove('hidden');
   document.getElementById('perfil-overlay').classList.remove('hidden');
 }
@@ -1353,6 +1465,83 @@ async function guardarNombre() {
   } finally {
     btn.disabled = false; btn.textContent = 'Guardar';
   }
+}
+
+async function guardarPassword() {
+  const actual     = document.getElementById('perfil-pwd-actual').value;
+  const nueva      = document.getElementById('perfil-pwd-nueva').value;
+  const confirmar  = document.getElementById('perfil-pwd-confirmar').value;
+  const errorEl    = document.getElementById('perfil-password-error');
+  const okEl       = document.getElementById('perfil-password-ok');
+  const btn        = document.getElementById('perfil-password-guardar-btn');
+
+  errorEl.classList.add('hidden');
+  okEl.classList.add('hidden');
+
+  if (!actual || !nueva || !confirmar) {
+    errorEl.textContent = 'Completa todos los campos.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva.length < 6) {
+    errorEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva !== confirmar) {
+    errorEl.textContent = 'Las contraseñas no coinciden.'; errorEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const res  = await authFetch('/auth/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password_actual: actual, nueva_password: nueva }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al actualizar');
+    okEl.classList.remove('hidden');
+    document.getElementById('perfil-pwd-actual').value = '';
+    document.getElementById('perfil-pwd-nueva').value = '';
+    document.getElementById('perfil-pwd-confirmar').value = '';
+    setTimeout(() => {
+      okEl.classList.add('hidden');
+      document.getElementById('perfil-vista-password').classList.add('hidden');
+      document.getElementById('perfil-vista-main').classList.remove('hidden');
+    }, 1500);
+  } catch (e) {
+    errorEl.textContent = e.message; errorEl.classList.remove('hidden');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Actualizar contraseña';
+  }
+}
+
+async function guardarPasswordForzado() {
+  const actual    = document.getElementById('forzar-pwd-actual').value;
+  const nueva     = document.getElementById('forzar-pwd-nueva').value;
+  const confirmar = document.getElementById('forzar-pwd-confirmar').value;
+  const errorEl   = document.getElementById('forzar-password-error');
+  const btn       = document.getElementById('forzar-password-btn');
+
+  errorEl.classList.add('hidden');
+
+  if (!actual || !nueva || !confirmar) {
+    errorEl.textContent = 'Completa todos los campos.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva.length < 6) {
+    errorEl.textContent = 'La nueva contraseña debe tener al menos 6 caracteres.'; errorEl.classList.remove('hidden'); return;
+  }
+  if (nueva !== confirmar) {
+    errorEl.textContent = 'Las contraseñas no coinciden.'; errorEl.classList.remove('hidden'); return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  try {
+    const res  = await authFetch('/auth/password', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password_actual: actual, nueva_password: nueva }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al actualizar');
+    document.getElementById('modal-forzar-password').classList.add('hidden');
+  } catch (e) {
+    errorEl.textContent = e.message; errorEl.classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Guardar y continuar';
+  }
+}
+
+function mostrarModalForzarPassword() {
+  document.getElementById('modal-forzar-password').classList.remove('hidden');
 }
 
 async function subirFoto(file) {
@@ -1423,6 +1612,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Enter') guardarNombre();
   });
 
+  // Perfil — cambiar contraseña
+  document.getElementById('perfil-password-btn').addEventListener('click', () => {
+    document.getElementById('perfil-pwd-actual').value = '';
+    document.getElementById('perfil-pwd-nueva').value = '';
+    document.getElementById('perfil-pwd-confirmar').value = '';
+    document.getElementById('perfil-password-error').classList.add('hidden');
+    document.getElementById('perfil-password-ok').classList.add('hidden');
+    document.getElementById('perfil-vista-main').classList.add('hidden');
+    document.getElementById('perfil-vista-password').classList.remove('hidden');
+  });
+  document.getElementById('perfil-password-back').addEventListener('click', () => {
+    document.getElementById('perfil-vista-password').classList.add('hidden');
+    document.getElementById('perfil-vista-main').classList.remove('hidden');
+  });
+  document.getElementById('perfil-password-guardar-btn').addEventListener('click', guardarPassword);
+
+  // Modal forzado
+  document.getElementById('forzar-password-btn').addEventListener('click', guardarPasswordForzado);
+
   // Perfil — toggle tema
   document.getElementById('perfil-tema-toggle').addEventListener('change', (e) => {
     const tema = e.target.checked ? 'dark' : 'light';
@@ -1462,6 +1670,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderAvatarHeader(data.nombre, data.foto_perfil);
         ocultarLogin();
         cargarDatos();
+        if (data.debe_cambiar_password) mostrarModalForzarPassword();
       } else {
         clearToken();
       }

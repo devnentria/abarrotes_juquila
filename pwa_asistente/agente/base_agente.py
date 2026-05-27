@@ -35,7 +35,7 @@ class RespuestaIA(NamedTuple):
     tokens_completion: int
 
 
-def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> RespuestaIA:
+def ejecutar(system: str, pregunta: str, historial: list[dict], area: str, model: str = OPENAI_MODEL, prefijo: str = "") -> RespuestaIA:
     """
     Ejecuta el loop agentico OpenAI para un especialista.
 
@@ -73,14 +73,15 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str) -> Re
     # Limitar historial a los últimos 20 mensajes para no exceder el contexto del modelo
     for msg in historial[-20:]:
         mensajes.append({"role": msg["rol"], "content": msg["contenido"]})
-    mensajes.append({"role": "user", "content": pregunta})
+    contenido_usuario = f"{prefijo}\n\n{pregunta}" if prefijo else pregunta
+    mensajes.append({"role": "user", "content": contenido_usuario})
 
     total_prompt     = 0
     total_completion = 0
 
     for _ in range(_MAX_ITER):
         resp = _client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model=model,
             messages=mensajes,
             tools=[ejecutor.TOOL],
             tool_choice="auto",

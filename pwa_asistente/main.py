@@ -23,7 +23,7 @@ from fastapi import FastAPI
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from shared.config import PWA_PORT
+from shared.config import PWA_PORT, PWA_BASE_PATH
 from shared.database_local import init_db
 from pwa_asistente.routers import auth, chat, ia_flash, paginas, vistas
 
@@ -55,6 +55,39 @@ self.addEventListener('activate', () => {
   });
 });
 """
+
+
+@app.get("/manifest.json", include_in_schema=False)
+async def serve_manifest():
+    """Manifest dinámico según entorno.
+    Local (.env sin PWA_BASE_PATH): scope '/', iconos en /static/icons/
+    Servidor (.env con PWA_BASE_PATH=/IA): scope '/IA/', iconos en /IA/static/icons/
+    """
+    import json
+    b = PWA_BASE_PATH  # "" local | "/IA" servidor
+    manifest = {
+        "name": "Suite Analítica",
+        "short_name": "Analítica",
+        "description": "Asistente analítico empresarial",
+        "start_url": f"{b}/",
+        "scope": f"{b}/",
+        "display": "standalone",
+        "background_color": "#ffffff",
+        "theme_color": "#1a56db",
+        "orientation": "portrait",
+        "icons": [
+            {"src": f"{b}/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": f"{b}/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+            {"src": f"{b}/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": f"{b}/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+    }
+    return Response(
+        content=json.dumps(manifest),
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
 
 @app.get("/static/sw.js", include_in_schema=False)
 async def serve_sw_kill():

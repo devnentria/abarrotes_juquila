@@ -13,7 +13,6 @@ Endpoints:
   POST   /api/chat/conversaciones           → Crea una nueva conversación
   GET    /api/chat/conversaciones/{id}      → Mensajes de una conversación
   DELETE /api/chat/conversaciones/{id}      → Elimina una conversación
-  POST   /api/chat/mensaje                  → Envía mensaje (respuesta síncrona)
   POST   /api/chat/mensaje/async            → Envía mensaje (procesamiento en background)
   GET    /api/chat/job/{id}                 → Consulta estado de un job async
   POST   /api/chat/feedback                 → Registra feedback 👍/👎 de una respuesta
@@ -25,13 +24,13 @@ from datetime import date
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
 from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
-from pwa_asistente.agente import director, loop_stream
+from pwa_asistente.agente import director
 from pwa_asistente.agente import feedback as _feedback
 from pwa_asistente.agente import candidatas as _candidatas
 from pwa_asistente.agente.especialistas import (
@@ -166,254 +165,6 @@ def eliminar_conversacion(conv_id: int, usuario: dict = Depends(get_current_user
 
 # ── Helper: guardar mensajes y actualizar contador ────────────────────────────
 
-def _guardar_y_contar(
-    conv_id: int,
-    pregunta: str,
-    respuesta: str,
-    usuario_id: int,
-    costo_usd: float = 0.0,
-    es_ia: bool = False,
-) -> None:
-    execute(
-        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
-        (conv_id, "user", pregunta),
-    )
-    execute(
-        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
-        (conv_id, "assistant", respuesta),
-    )
-    execute(
-        "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
-        (pregunta[:80], conv_id),
-    )
-    if es_ia:
-        execute(
-            "UPDATE usuarios "
-            "SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) "
-            "WHERE id = ?",
-            (costo_usd, usuario_id),
-        )
-
-
-# ── Mensaje ───────────────────────────────────────────────────────────────────
-
-@router.post("/mensaje")
-def enviar_mensaje(body: MensajeBody, usuario: dict = Depends(get_current_user)):
-    """
-    Procesa un mensaje del usuario:
-      1. Verifica límite de IA
-      2. Crea o reutiliza conversación
-      3. Director clasifica el área
-      4. Especialista responde consultando el ERP
-      5. Guarda ambos mensajes en la BD
-      6. Actualiza consultas_ia (+1) y costo_ia_usd (tokens reales)
-    """
-    if not body.mensaje.strip():
-        raise HTTPException(400, "El mensaje no puede estar vacío")
-
-    # 1. Verificar límite de consultas IA (con auto-reset mensual)
-    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-    u = fetch_one(
-        "SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?",
-        (usuario["id"],),
-    )
-    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
-        raise HTTPException(
-            429,
-            "Has alcanzado tu límite de consultas de IA. "
-            "Contacta a tu administrador para ampliar el límite.",
-        )
-
-    # 2. Obtener o crear conversación
-    conv_id = body.conversacion_id
-    if not conv_id:
-        titulo  = body.mensaje.strip()[:80]
-        conv_id = execute(
-            "INSERT INTO chat_conversaciones (usuario_id, titulo) VALUES (?, ?)",
-            (usuario["id"], titulo),
-        )
-    else:
-        # Verificar que la conversación pertenece al usuario
-        conv = fetch_one(
-            "SELECT id FROM chat_conversaciones WHERE id = ? AND usuario_id = ?",
-            (conv_id, usuario["id"]),
-        )
-        if not conv:
-            raise HTTPException(404, "Conversación no encontrada")
-
-    # 3. Obtener historial de esta conversación
-    historial = fetch_all(
-        "SELECT rol, contenido FROM chat_mensajes "
-        "WHERE conversacion_id = ? ORDER BY id",
-        (conv_id,),
-    )
-
-    # 4. Saludo o pregunta sobre capacidades — respuesta instantánea sin OpenAI
-    msg = body.mensaje.strip()
-    costo_usd = 0.0
-    if _SALUDO.match(msg):
-        area = "saludo"
-        respuesta = _RESPUESTA_SALUDO
-    elif _CAPACIDADES.search(msg) and len(msg) < 120:
-        area = "capacidades"
-        respuesta = _RESPUESTA_CAPACIDADES
-    else:
-        respuesta, costo_usd = _intentar_funcion_fija(msg)
-        if respuesta:
-            area = "funcion_fija"
-        else:
-            # Director clasifica y especialista responde
-            area, costo_director = director.clasificar(body.mensaje, historial)
-            fn = _ESPECIALISTAS.get(area, mixto.responder)
-            try:
-                resultado  = fn(body.mensaje, historial)
-                respuesta  = resultado.texto
-                costo_usd  = costo_director + (
-                    resultado.tokens_prompt     * IA_PRECIO_INPUT
-                    + resultado.tokens_completion * IA_PRECIO_OUTPUT
-                )
-            except Exception:
-                respuesta = (
-                    "Ocurrió un error al procesar tu consulta. "
-                    "Intenta de nuevo o reformula la pregunta."
-                )
-                costo_usd = costo_director
-
-    # 5. Guardar mensajes y actualizar contadores
-    _guardar_y_contar(
-        conv_id, body.mensaje, respuesta, usuario["id"],
-        costo_usd=costo_usd if area not in ("saludo", "capacidades") else 0.0,
-        es_ia=area not in ("saludo", "capacidades"),
-    )
-
-    return JSONResponse({
-        "respuesta":      respuesta,
-        "conversacion_id": conv_id,
-        "area":           area,
-    })
-
-
-# ── Mensaje (streaming SSE) ───────────────────────────────────────────────────
-
-@router.post("/mensaje/stream")
-def enviar_mensaje_stream(body: MensajeBody, usuario: dict = Depends(get_current_user)):
-    """
-    Igual que /mensaje pero devuelve la respuesta del agente como SSE
-    para que el frontend pueda mostrarla chunk por chunk.
-
-    Eventos SSE:
-      data: {"type": "status", "text": "Consultando el sistema..."}
-      data: {"type": "token",  "text": "fragmento de texto"}
-      data: {"type": "done",   "conversacion_id": 123, "area": "ventas"}
-      data: {"type": "error",  "text": "mensaje de error"}
-    """
-    if not body.mensaje.strip():
-        raise HTTPException(400, "El mensaje no puede estar vacío")
-
-    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-    u = fetch_one(
-        "SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?",
-        (usuario["id"],),
-    )
-    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
-        raise HTTPException(
-            429,
-            "Has alcanzado tu límite de consultas de IA. "
-            "Contacta a tu administrador para ampliar el límite.",
-        )
-
-    conv_id = body.conversacion_id
-    if not conv_id:
-        titulo  = body.mensaje.strip()[:80]
-        conv_id = execute(
-            "INSERT INTO chat_conversaciones (usuario_id, titulo) VALUES (?, ?)",
-            (usuario["id"], titulo),
-        )
-    else:
-        conv = fetch_one(
-            "SELECT id FROM chat_conversaciones WHERE id = ? AND usuario_id = ?",
-            (conv_id, usuario["id"]),
-        )
-        if not conv:
-            raise HTTPException(404, "Conversación no encontrada")
-
-    historial = fetch_all(
-        "SELECT rol, contenido FROM chat_mensajes "
-        "WHERE conversacion_id = ? ORDER BY id",
-        (conv_id,),
-    )
-
-    msg     = body.mensaje.strip()
-    usuario_id = usuario["id"]
-
-    def _sse(obj: dict) -> str:
-        return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
-
-    def _generador():
-        # Respuestas instantáneas sin IA
-        if _SALUDO.match(msg):
-            yield _sse({"type": "token",  "text": _RESPUESTA_SALUDO})
-            _guardar_y_contar(conv_id, msg, _RESPUESTA_SALUDO, usuario_id)
-            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "saludo"})
-            return
-        if _CAPACIDADES.search(msg) and len(msg) < 120:
-            yield _sse({"type": "token",  "text": _RESPUESTA_CAPACIDADES})
-            _guardar_y_contar(conv_id, msg, _RESPUESTA_CAPACIDADES, usuario_id)
-            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "capacidades"})
-            return
-
-        # Función predefinida — sin LLM para generación de SQL
-        respuesta_fija, costo_fija = _intentar_funcion_fija(msg)
-        if respuesta_fija:
-            yield _sse({"type": "token", "text": respuesta_fija})
-            _guardar_y_contar(conv_id, msg, respuesta_fija, usuario_id,
-                              costo_usd=costo_fija, es_ia=True)
-            yield _sse({"type": "done", "conversacion_id": conv_id, "area": "funcion_fija"})
-            return
-
-        yield _sse({"type": "status", "text": "Consultando el sistema..."})
-
-        area, costo_director = director.clasificar(msg, historial)
-
-        # Obtener el system prompt del especialista correspondiente
-        _sistemas = {
-            "ventas":     ventas,
-            "inventario": inventario,
-            "pedidos":    pedidos,
-            "medicos":    medicos,
-            "clientes":   clientes,
-            "mixto":      mixto,
-        }
-        modulo = _sistemas.get(area, mixto)
-        sistema_prompt = getattr(modulo, "_SYSTEM", "")
-        from datetime import date as _date
-        from shared.config import TEST_DATE
-        _fecha = TEST_DATE if TEST_DATE else _date.today().strftime("%Y-%m-%d")
-        sistema_completo = sistema_prompt + f"\n\nFECHA ACTUAL: {_fecha}. Usa esta fecha como referencia para hoy, ayer, este mes, mes anterior, etc."
-
-        try:
-            respuesta_completa = ""
-            for chunk in loop_stream.responder_stream(sistema_completo, msg, historial):
-                respuesta_completa += chunk
-                yield _sse({"type": "token", "text": chunk})
-
-            if not respuesta_completa:
-                respuesta_completa = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
-                yield _sse({"type": "token", "text": respuesta_completa})
-
-        except Exception as e:
-            respuesta_completa = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
-            yield _sse({"type": "token", "text": respuesta_completa})
-
-        # El costo del director siempre se registra; el del stream no tiene token count exacto
-        _guardar_y_contar(conv_id, msg, respuesta_completa, usuario_id,
-                          costo_usd=costo_director, es_ia=True)
-        yield _sse({"type": "done", "conversacion_id": conv_id, "area": area})
-
-    return StreamingResponse(_generador(), media_type="text/event-stream")
-
-
 # ── Procesamiento en background ───────────────────────────────────────────────
 
 def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_id: int) -> None:
@@ -448,8 +199,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     )
 
     execute(
-        "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-        "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+        "UPDATE usuarios SET "
+        "consultas_ia   = consultas_ia + 1, "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1.0, 2), "
+        "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
         (costo_usd, usuario_id),
     )
 
@@ -474,8 +227,8 @@ def enviar_mensaje_async(body: MensajeBody, usuario: dict = Depends(get_current_
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
     verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
-    u = fetch_one("SELECT consultas_ia, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
-    if u and u["limite_ia"] > 0 and u["consultas_ia"] >= u["limite_ia"]:
+    u = fetch_one("SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
+    if u and u["limite_ia"] > 0 and u["consultas_ia_r"] >= u["limite_ia"]:
         raise HTTPException(
             429,
             "Has alcanzado tu límite de consultas de IA. "

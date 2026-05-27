@@ -8,13 +8,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Analítica">
   <title>Suite Analítica</title>
-  <link rel="manifest" href="/static/manifest.json">
-  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
-  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+  <link rel="manifest" href="{{ base_path }}/manifest.json">
+  <link rel="icon" type="image/x-icon" href="{{ base_path }}/static/favicon.ico">
+  <link rel="apple-touch-icon" href="{{ base_path }}/static/icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=48">
+  <link rel="stylesheet" href="/static/style.css?v=51">
 </head>
 <body>
 
@@ -40,13 +40,13 @@
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header class="app-header">
     <div class="app-header-left">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:44px;width:auto;max-width:260px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 14px">
-      <div class="app-header-titles">
-        <span class="app-name" id="header-nombre">Bienvenido</span>
-        <span class="app-subtitle" id="header-subtitle">Inicio</span>
-      </div>
+      <img src="/static/logo_transparente.png" alt="LebenMedik" class="app-header-logo">
     </div>
     <div class="app-header-right">
+      <div class="app-header-user">
+        <span class="app-name" id="header-nombre">—</span>
+        <span class="app-subtitle" id="header-subtitle">Inicio</span>
+      </div>
       <div class="app-avatar" id="app-avatar">?</div>
     </div>
   </header>
@@ -76,16 +76,21 @@
 
     <!-- ── Dashboards ─────────────────────────────────────── -->
     <section class="view hidden" id="view-dashboards">
-      <div class="placeholder-state">
+      <div id="dash-pwa-loading" class="loading-state" style="display:none">
+        <div class="spinner"></div>
+        <span>Cargando dashboards...</span>
+      </div>
+      <div id="dash-pwa-empty" class="placeholder-state hidden">
         <div class="placeholder-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
             <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
           </svg>
         </div>
-        <p class="placeholder-title">Dashboards</p>
-        <p class="placeholder-text">Los dashboards generados en el Studio aparecerán aquí.</p>
+        <p class="placeholder-title">Sin dashboards</p>
+        <p class="placeholder-text">Guarda dashboards desde el Studio y aparecerán aquí.</p>
       </div>
+      <div class="card-list" id="dash-pwa-list"></div>
     </section>
 
     <!-- ── Chat ───────────────────────────────────────────── -->
@@ -207,7 +212,7 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=48"></script>
+  <script src="/static/app.js?v=52"></script>
   <!-- ── Perfil bottom sheet ───────────────────────────────── -->
   <div id="perfil-overlay" class="perfil-overlay hidden"></div>
   <div id="perfil-sheet" class="perfil-sheet hidden">
@@ -242,6 +247,11 @@
             <span class="perfil-toggle-track"></span>
           </label>
         </div>
+        <!-- Cambiar contraseña -->
+        <button id="perfil-password-btn" class="perfil-opcion">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+          Cambiar contraseña
+        </button>
         <!-- Cerrar sesión -->
         <button id="perfil-logout-btn" class="perfil-opcion perfil-opcion-danger">
           <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5-5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
@@ -263,6 +273,38 @@
         <div id="perfil-editar-error" class="login-error hidden"></div>
         <button id="perfil-guardar-btn" class="login-btn">Guardar</button>
       </div>
+    </div>
+
+    <!-- Vista cambiar contraseña -->
+    <div id="perfil-vista-password" class="hidden">
+      <div class="perfil-header">
+        <button class="perfil-cerrar" id="perfil-password-back">‹</button>
+        <span style="flex:1;font-size:15px;font-weight:700;color:var(--text)">Cambiar contraseña</span>
+      </div>
+      <div style="padding:16px 20px 24px;display:flex;flex-direction:column;gap:12px">
+        <input id="perfil-pwd-actual" type="password" class="login-input" placeholder="Contraseña actual" autocomplete="current-password">
+        <input id="perfil-pwd-nueva" type="password" class="login-input" placeholder="Nueva contraseña (mín. 6 caracteres)" autocomplete="new-password">
+        <input id="perfil-pwd-confirmar" type="password" class="login-input" placeholder="Confirmar nueva contraseña" autocomplete="new-password">
+        <div id="perfil-password-error" class="login-error hidden"></div>
+        <div id="perfil-password-ok" class="hidden" style="text-align:center;color:#22c55e;font-size:13px;font-weight:600">¡Contraseña actualizada!</div>
+        <button id="perfil-password-guardar-btn" class="login-btn">Actualizar contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal forzado: primer inicio de sesión ─────────────── -->
+  <div id="modal-forzar-password" class="hidden" style="position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);backdrop-filter:blur(4px)">
+    <div style="background:var(--card);border-radius:18px;padding:28px 24px;width:min(92vw,380px);box-shadow:0 8px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:14px">
+      <div style="text-align:center">
+        <div style="font-size:36px;margin-bottom:4px">🔑</div>
+        <h2 style="font-size:17px;font-weight:700;color:var(--text);margin:0">Crea tu contraseña</h2>
+        <p style="font-size:13px;color:var(--text-secondary);margin:6px 0 0">Por seguridad debes establecer una contraseña personal antes de continuar.</p>
+      </div>
+      <input id="forzar-pwd-actual" type="password" class="login-input" placeholder="Contraseña temporal asignada" autocomplete="current-password">
+      <input id="forzar-pwd-nueva" type="password" class="login-input" placeholder="Tu nueva contraseña (mín. 6 caracteres)" autocomplete="new-password">
+      <input id="forzar-pwd-confirmar" type="password" class="login-input" placeholder="Confirmar nueva contraseña" autocomplete="new-password">
+      <div id="forzar-password-error" class="login-error hidden"></div>
+      <button id="forzar-password-btn" class="login-btn">Guardar y continuar</button>
     </div>
   </div>
 
@@ -322,7 +364,7 @@
 
   <script>
     if ('serviceWorker' in navigator) {
-      // Desregistrar cualquier SW viejo que no sea /sw.js
+      // Desregistrar cualquier SW viejo que no sea el actual
       navigator.serviceWorker.getRegistrations().then(regs => {
         regs.forEach(reg => {
           if (reg.active && !reg.active.scriptURL.endsWith('/sw.js')) {
@@ -331,7 +373,7 @@
         });
       });
 
-      navigator.serviceWorker.register('/sw.js').then(reg => {
+      navigator.serviceWorker.register('sw.js').then(reg => {
         // Revisar actualización cada vez que el usuario vuelve a la app
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible') reg.update();

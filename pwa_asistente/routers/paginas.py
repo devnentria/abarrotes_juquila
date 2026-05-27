@@ -17,6 +17,8 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from shared.config import PWA_BASE_PATH
+
 router = APIRouter()
 
 _templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
@@ -28,6 +30,10 @@ _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "
 @router.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """Shell PWA — experiencia móvil (chat, inventario, médicos)."""
-    return _templates.TemplateResponse("index.html", {"request": request}, headers=_NO_CACHE)
+    return _templates.TemplateResponse(
+        "index.html",
+        {"request": request, "base_path": PWA_BASE_PATH},
+        headers=_NO_CACHE,
+    )
 
 

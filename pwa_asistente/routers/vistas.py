@@ -42,29 +42,42 @@ def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
     modo=mes → mes actual vs mismo período mes anterior
     """
     hoy_fecha = f"CAST({hoy()} AS DATE)"
+    # En la query exterior el subquery se expone como alias "t" → usar t.Fecha_Documento
     if modo == "30d":
-        filtro_actual   = f"CAST(fc.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
-        filtro_anterior = f"CAST(fc.Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{hoy_fecha}) AND CAST(fc.Fecha_Documento AS DATE) < DATEADD(DAY,-30,{hoy_fecha})"
-        filtro_fact     = filtro_actual
+        filtro_actual   = f"CAST(t.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
+        filtro_anterior = (
+            f"CAST(t.Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{hoy_fecha}) "
+            f"AND CAST(t.Fecha_Documento AS DATE) < DATEADD(DAY,-30,{hoy_fecha})"
+        )
     else:
-        filtro_actual   = f"YEAR(fc.Fecha_Documento) = YEAR({hoy()}) AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})"
-        filtro_anterior = f"YEAR(fc.Fecha_Documento) = YEAR(DATEADD(MONTH,-1,{hoy()})) AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()})) AND DAY(fc.Fecha_Documento) <= DAY({hoy()})"
-        filtro_fact     = filtro_actual
+        filtro_actual   = (
+            f"YEAR(t.Fecha_Documento) = YEAR({hoy()}) "
+            f"AND MONTH(t.Fecha_Documento) = MONTH({hoy()})"
+        )
+        filtro_anterior = (
+            f"YEAR(t.Fecha_Documento) = YEAR(DATEADD(MONTH,-1,{hoy()})) "
+            f"AND MONTH(t.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()})) "
+            f"AND DAY(t.Fecha_Documento) <= DAY({hoy()})"
+        )
 
     rows = query(f"""
         SELECT
-            s.Cve_Sucursal                                                  AS cve_sucursal,
-            s.Nombre                                                        AS sucursal,
-            COALESCE(SUM(CASE WHEN {filtro_actual}   THEN fd.Importe_Neto END), 0) AS ventas_mes,
-            COUNT(DISTINCT CASE WHEN {filtro_fact}   THEN fc.Cve_Folio END)        AS facturas_mes,
-            COALESCE(SUM(CASE WHEN {filtro_anterior} THEN fd.Importe_Neto END), 0) AS ventas_mes_anterior
+            s.Cve_Sucursal                                                    AS cve_sucursal,
+            s.Nombre                                                          AS sucursal,
+            ISNULL(SUM(CASE WHEN {filtro_actual}   THEN t.Monto END), 0)     AS ventas_mes,
+            COUNT(DISTINCT CASE WHEN {filtro_actual} THEN t.Cve_Folio END)   AS facturas_mes,
+            ISNULL(SUM(CASE WHEN {filtro_anterior} THEN t.Monto END), 0)     AS ventas_mes_anterior
         FROM GN_Sucursales s
-        LEFT JOIN FT_Facturas_C fc
-               ON fc.Cve_Sucursal = s.Cve_Sucursal AND fc.Status <> 'C'
-        LEFT JOIN FT_Facturas_D fd
-               ON fd.Cve_Folio      = fc.Cve_Folio
-              AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-              AND fd.Cve_Movimiento = fc.Cve_Movimiento
+        LEFT JOIN (
+            SELECT c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento,
+                   ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS Monto
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            WHERE c.Estatus <> 'CN'
+              AND c.Referencia_Cliente = 'PAGADO'
+            GROUP BY c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento
+        ) t ON t.Cve_Sucursal = s.Cve_Sucursal
         WHERE s.Cve_Sucursal <> 99
         GROUP BY s.Cve_Sucursal, s.Nombre
         ORDER BY ventas_mes DESC
@@ -289,17 +302,18 @@ def sucursal_resumen(cve_sucursal: int):
     Se carga solo cuando el usuario expande una sucursal en Inicio.
     """
     ventas_ayer = query(f"""
-        SELECT
-            COUNT(DISTINCT fc.Cve_Folio)    AS total_facturas,
-            COALESCE(SUM(fd.Importe_Neto), 0) AS importe_total
-        FROM FT_Facturas_C fc
-        JOIN FT_Facturas_D fd
-          ON fd.Cve_Folio      = fc.Cve_Folio
-         AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-         AND fd.Cve_Movimiento = fc.Cve_Movimiento
-        WHERE fc.Cve_Sucursal = ?
-          AND fc.Status      <> 'C'
-          AND CAST(fc.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+        SELECT COUNT(Cve_Folio) AS total_facturas, ISNULL(SUM(Monto), 0) AS importe_total
+        FROM (
+            SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS Monto
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            WHERE c.Cve_Sucursal = ?
+              AND c.Estatus <> 'CN'
+              AND c.Referencia_Cliente = 'PAGADO'
+              AND CAST(c.Fecha_Documento AS DATE) = CAST(DATEADD(DAY, -1, {hoy()}) AS DATE)
+            GROUP BY c.Cve_Folio
+        ) AS t
     """, (cve_sucursal,))
 
     top_productos = query(f"""
@@ -467,4 +481,48 @@ def medicos_duplicados():
         "por_cedula": list(grupos_cedula.values()),
         "por_nombre": list(grupos_nombre.values()),
     })
+
+
+# ── Dashboards guardados (solo lectura para PWA) ──────────────────────────────
+
+@router.get("/dashboards")
+def dashboards_guardados():
+    """
+    Lista los dashboards guardados desde el Studio.
+    Solo lectura — la PWA no puede crear ni modificar dashboards.
+    """
+    import json as _json
+    from shared.database_local import fetch_all as _fetch_all
+
+    rows = _fetch_all(
+        "SELECT id, titulo, tipo, datos_json, creado_en "
+        "FROM dashboards WHERE guardado=1 ORDER BY creado_en DESC"
+    )
+    for r in rows:
+        try:
+            r["datos_json"] = _json.loads(r["datos_json"])
+        except Exception:
+            r["datos_json"] = {}
+    return JSONResponse({"dashboards": rows})
+
+
+@router.get("/reportes")
+def reportes_compartidos():
+    """
+    Lista los dashboards que el Studio marcó como 'compartidos con PWA'.
+    Son reportes estáticos pre-generados para consulta sin IA.
+    """
+    import json as _json
+    from shared.database_local import fetch_all as _fetch_all
+
+    rows = _fetch_all(
+        "SELECT id, titulo, tipo, datos_json, compartido_en AS fecha "
+        "FROM dashboards WHERE compartido=1 ORDER BY compartido_en DESC LIMIT 20"
+    )
+    for r in rows:
+        try:
+            r["datos_json"] = _json.loads(r["datos_json"])
+        except Exception:
+            r["datos_json"] = {}
+    return JSONResponse({"reportes": rows})
 

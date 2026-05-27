@@ -73,7 +73,8 @@ def build_api_router() -> APIRouter:
         """Retorna la lista completa de usuarios registrados en la Suite."""
         filas = fetch_all(
             "SELECT id, nombre, email, rol, modulos, permisos, activo, creado_en, ultimo_acceso, "
-            "       consultas_ia, limite_ia, costo_ia_usd, mes_consultas "
+            "       consultas_ia, COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, "
+            "       limite_ia, costo_ia_usd, mes_consultas "
             "FROM usuarios ORDER BY id"
         )
         for u in filas:
@@ -100,8 +101,8 @@ def build_api_router() -> APIRouter:
             raise HTTPException(status_code=400, detail="El email ya está registrado")
 
         nuevo_id = execute(
-            "INSERT INTO usuarios (nombre, email, password_hash, rol, modulos, permisos, limite_ia) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO usuarios (nombre, email, password_hash, rol, modulos, permisos, limite_ia, debe_cambiar_password) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
             (
                 datos.nombre,
                 datos.email,
@@ -185,7 +186,7 @@ def build_api_router() -> APIRouter:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
         execute(
-            "UPDATE usuarios SET consultas_ia = 0, costo_ia_usd = 0, mes_consultas = '' WHERE id = ?",
+            "UPDATE usuarios SET consultas_ia = 0, consultas_ia_r = 0.0, costo_ia_usd = 0, mes_consultas = '' WHERE id = ?",
             (usuario_id,),
         )
         return JSONResponse({"mensaje": "Contador de consultas reiniciado"})
@@ -230,7 +231,7 @@ def build_api_router() -> APIRouter:
             )
 
         execute(
-            "UPDATE usuarios SET password_hash = ? WHERE id = ?",
+            "UPDATE usuarios SET password_hash = ?, debe_cambiar_password = 1 WHERE id = ?",
             (hash_password(datos.nueva_password), usuario_id),
         )
         return JSONResponse({"mensaje": "Contraseña restablecida exitosamente"})

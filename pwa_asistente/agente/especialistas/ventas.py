@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.5.0
+# Versión  : 2.6.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -11,26 +11,119 @@ Agente Especialista — Ventas.
 Responde preguntas sobre facturas, importes, comparativos,
 productos más vendidos y rendimiento por sucursal o vendedor.
 """
+import re
+from typing import Optional
 from pwa_asistente.agente import base_agente
 from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
 
+# Palabras genéricas que NO son productos
+_NO_PRODUCTO = frozenset([
+    "enero","febrero","marzo","abril","mayo","junio","julio","agosto",
+    "septiembre","octubre","noviembre","diciembre","mes","año","trimestre",
+    "hoy","ayer","semana","quincena","periodo","período","fecha","dia","día",
+    "ventas","venta","importe","total","piezas","monto","factura","facturas",
+    "sucursal","sucursales","cdmx","puebla","monterrey","guadalajara","cancun",
+    "merida","queretaro","tijuana","leon","cuernavaca","todas","nacional",
+    "cuantas","cuántas","cuanto","cuánto","fueron","fue","dame","dime","muestra",
+    "de","en","el","la","los","las","por","del","al","entre","y","a","que","cual",
+    "cuales","fueron","fueron","fue","han","sido","es","son",
+])
+
+_PATRON_PRODUCTO = re.compile(
+    r'(?:ventas?\s+de\s+|cuánto[s]?\s+(?:vendimos\s+)?de\s+|cuanto[s]?\s+(?:vendimos\s+)?de\s+)'
+    r'([A-Za-záéíóúñÁÉÍÓÚÑ0-9][A-Za-záéíóúñÁÉÍÓÚÑ0-9\s\-\.\/]{1,40}?)'
+    r'(?:\s+(?:en|entre|del|al|de|por|el)\b|$)',
+    re.IGNORECASE,
+)
+
+
+def _detectar_producto(pregunta: str) -> str:
+    """Retorna el nombre de producto detectado, o '' si la pregunta es general."""
+    match = _PATRON_PRODUCTO.search(pregunta)
+    if not match:
+        return ""
+    candidato = match.group(1).strip()
+    palabras_significativas = [p for p in candidato.lower().split() if p not in _NO_PRODUCTO]
+    return candidato if palabras_significativas else ""
+
 _SCHEMA = """
 TABLAS DE VENTAS:
 
+══════════════════════════════════════════════════════════════
+VENTAS REALIZADAS/PAGADAS DEL DÍA — FUENTE CORRECTA
+══════════════════════════════════════════════════════════════
+FT_Pedidos_C — encabezado de pedidos (también es el encabezado de ventas diarias)
+  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Movimiento (varchar),
+  Cve_Cliente (varchar), Cve_Vendedor (varchar),
+  Fecha_Documento (datetime), Fecha_Envio (date),
+  Estatus (char) → 'CN'=cancelado,
+  Referencia_Cliente (varchar) → 'PAGADO' cuando cobrado,
+  Cve_Lista_precios (smallint), Paciente (varchar), FolioPago (varchar),
+  ImportePago (decimal)
+  ⚠ Para ventas realizadas: Estatus <> 'CN' AND Referencia_Cliente = 'PAGADO'
+
+FT_Pedidos_Dia — detalle de ventas diarias (tabla de venta real, no de cartera)
+  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Movimiento (varchar),
+  Cve_Producto (varchar), Cve_Presentacion (varchar), Cve_Partida (smallint),
+  Cantidad_Ordenada (decimal), Cantidad_Surtida (decimal), Cantidad_Pendiente (decimal),
+  Precio (float), Precio_Sugerido_Cte (float), Precio_Publico (float),
+  Precio_Minimo_Venta (float), Cve_ListaAplicada (smallint),
+  Importe_Descuentos (float), Porcentaje_Descuento (decimal),
+  Costo_Promedio (float), PrecioNeto (float)
+  JOIN con FT_Pedidos_C por: d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+  ⚠ Importe de venta = Cantidad_Ordenada * Precio
+
+CONSULTA ESTÁNDAR para ventas del día/hoy/ayer/período específico (PAGADAS):
+  SELECT COUNT(cve_folio) AS Pedidos, ISNULL(SUM(Monto),0) AS Monto
+  FROM (
+      SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad_Ordenada * d.Precio),0) AS Monto
+      FROM FT_Pedidos_C c
+      INNER JOIN FT_Pedidos_Dia d
+        ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+      WHERE c.Estatus <> 'CN'
+        AND c.Referencia_Cliente = 'PAGADO'
+        AND [filtro de fecha sobre c.Fecha_Documento]
+        -- Opcional: AND c.Cve_Sucursal = ? / AND c.Cve_Vendedor = '?'
+      GROUP BY c.Cve_Folio
+  ) AS t
+
+  • Para HOY:  CAST(c.Fecha_Documento AS DATE) = CAST(GETDATE() AS DATE)
+  • Para AYER: CAST(c.Fecha_Documento AS DATE) = CAST(DATEADD(DAY,-1,GETDATE()) AS DATE)
+  • Para un MES: MONTH(c.Fecha_Documento) = ? AND YEAR(c.Fecha_Documento) = ?
+
+  ⚠ SIEMPRE usar esta consulta cuando se pregunte por ventas del día, hoy, ayer o una fecha puntual.
+  ⚠ NUNCA usar FT_Facturas_C/D para ventas diarias — las facturas pueden no reflejar el día real.
+  ⚠ Por sucursal: agregar AND c.Cve_Sucursal = [cve] dentro del WHERE interior.
+  ⚠ Por vendedor: agregar AND c.Cve_Vendedor = '[cve_vendedor]'.
+══════════════════════════════════════════════════════════════
+
 FT_Facturas_C — encabezado de facturas
-  Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Fecha_Documento (datetime), Importe_Total (decimal),
-  Cve_Cliente (int), Cve_Vendedor (varchar), Status (char)
-  ⚠ Filtrar: Status <> 'C'
+  Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
+  Cve_Cliente (varchar), Cve_Vendedor (varchar),
+  Fecha_Documento (datetime), Fecha_Vencimiento (datetime),
+  Importe_bruto (float), Importe_Descuento (decimal),
+  Importe_IVA (float), Importe_Total (float), Costo_Neto (float),
+  Status (char) → 'CA'=cancelada,
+  Pagada (varchar), Cve_Lista_precios (smallint),
+  Referencia_Cliente (varchar), Cve_Consignatario (int)
+  ⚠ Filtrar: Status = 'AC'  (los cancelados son 'CN' — NUNCA usar Status <> 'C')
   ⚠ NO existe Cve_Medico en esta tabla
+  ⚠ Cve_Cliente es varchar(10) aunque FK a CM_Clientes.Cve_Cliente (int) — usar CAST al JOIN
 
 FT_Facturas_D — detalle de facturas
   Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
-  Cve_Partida (smallint), Cve_Producto (varchar), Cantidad (decimal),
-  Precio (float), Precio_Publico (float), Precio_Minimo_Venta_Base (float),
-  Importe_Neto (float), Costo (float)
+  Cve_Partida (smallint), Cve_Producto (varchar), Cve_Presentacion (varchar),
+  Cantidad (decimal), Cantidad_Ordenada (decimal), Cantidad_Devuelta (decimal),
+  Precio (float)              → precio real cobrado al cliente,
+  Precio_Publico (float)      → precio público de lista,
+  Precio_Sugerido_Cte (float) → precio sugerido según lista del cliente,
+  Precio_Minimo_Venta_Base (float) → precio lista cliente final (también está aquí),
+  Importe_Bruto (float), Importe_Descuentos (float), Importe_Subtotal (float),
+  Importe_Neto (float), Importe_Iva (float),
+  Costo (float), Costo_Promedio (float), Costo_Oper (float)
   JOIN con FT_Facturas_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
+  ⚠ Base2 / Base3 están SOLO en IM_Productos_Gral — no en esta tabla
 
 CM_Clientes — catálogo de clientes
   Cve_Cliente (int), Razon_Social (varchar), Cve_Ruta (int)
@@ -41,12 +134,58 @@ GC_Medicos — catálogo de médicos
   Cve_Medico (int), Nombre (varchar), Cedula (varchar), cve_vendedor (int)
 
 IM_Productos_Proveedor — costo cotizado por proveedor
-  Cve_Producto (int), Cve_Proveedor (int), Costo_Cotizado (decimal),
-  Fecha_Cotizacion_Precio (datetime)
+  Cve_Producto (varchar), Cve_Proveedor (varchar), Cve_Prioridad (smallint),
+  Costo_Cotizado (decimal), Fecha_Cotizacion_Costo (datetime),
+  Precio_Venta (decimal), Fecha_Cotizacion_Precio (datetime)
   ⚠ WHERE Costo_Cotizado > 0 · Cve_Prioridad = 0 para el proveedor principal
 """
 
 _REGLAS = """
+══════════════════════════════════════════════════════════════
+⚠⚠⚠ REGLA ABSOLUTA — SE EVALÚA PRIMERO ⚠⚠⚠
+══════════════════════════════════════════════════════════════
+VENTAS DE UN PRODUCTO ESPECÍFICO:
+  Si la pregunta menciona un producto (ej: "ventas de Saizen 20mg", "cuánto de Norditropin",
+  "Ozempic en enero", "Lorelin abril") — esto es una consulta de PRODUCTO ESPECÍFICO.
+
+  ⛔⛔ NUNCA devolver ventas totales del período sin filtrar por producto.
+  ⛔⛔ NUNCA generar "Reporte Ejecutivo" ni panorama general cuando se pidió un producto concreto.
+  ✅ SIEMPRE hacer JOIN a FT_Facturas_D fd → IM_Productos_Gral p y filtrar por p.Descripcion LIKE '%nombre%'.
+
+  ⚠ REGALÍAS — excluir SIEMPRE salvo que el usuario las pida explícitamente:
+    Las regalías son piezas de $0.01 que el ERP registra como línea separada.
+    Se identifican por PRECIO, no por nombre (un producto puede llamarse "PROMOCION" y tener precio real).
+    ✅ FILTRO CORRECTO:   AND d.Precio > 1
+    ✅ FILTRO ADICIONAL:  AND p.Descripcion NOT LIKE '%GRATIS%'
+    ⛔ NUNCA usar NOT LIKE '%PROMO%' ni NOT LIKE '%PROMOCION%' — excluyen productos reales.
+
+  ⚠ TOTAL OBLIGATORIO — siempre calcular en SQL con ROLLUP, NUNCA manualmente:
+    GROUP BY ROLLUP(p.Descripcion) con ISNULL(p.Descripcion,'── TOTAL')
+
+  ⚠ FUENTE OBLIGATORIA: FT_Pedidos_C + FT_Pedidos_Dia (NO FT_Facturas) — coincide con los reportes del ERP.
+     Importe = Cantidad_Ordenada * Precio
+
+  Consulta estándar para ventas de un producto en un período:
+    SELECT ISNULL(p.Descripcion, '── TOTAL') AS Descripcion,
+           SUM(d.Cantidad_Ordenada) AS Piezas,
+           SUM(d.Cantidad_Ordenada * d.Precio) AS Total,
+           COUNT(DISTINCT c.Cve_Folio) AS Pedidos
+    FROM FT_Pedidos_C c
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
+    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+      AND c.Cve_Sucursal <> 99
+      AND p.Descripcion LIKE '%SAIZEN%' AND p.Descripcion LIKE '%20%'
+      AND p.Descripcion NOT LIKE '%GRATIS%'
+      AND d.Precio > 1
+      AND YEAR(c.Fecha_Documento)=2026 AND MONTH(c.Fecha_Documento)=4
+    GROUP BY ROLLUP(p.Descripcion)
+    ORDER BY Piezas DESC
+
+  Si el usuario pregunta explícitamente por "piezas gratis" o "regalías":
+    ✅ Quitar AND d.Precio > 1 y filtrar WHERE d.Precio <= 1.
+══════════════════════════════════════════════════════════════
+
 PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
 
   ⚠ FUENTE EXCLUSIVA para precios de venta: FT_Facturas_D (fd)
@@ -65,7 +204,7 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
       ON fc.Cve_Folio = fd.Cve_Folio AND fc.Cve_Sucursal = fd.Cve_Sucursal
          AND fc.Cve_Movimiento = fd.Cve_Movimiento
     JOIN IM_Productos_Gral p ON p.Cve_Producto = fd.Cve_Producto
-    WHERE fc.Status <> 'C'
+    WHERE fc.Status = 'AC'
       AND p.Descripcion LIKE '%nombre_producto%'
       AND [filtro de período sobre fc.Fecha_Documento]
     GROUP BY p.Cve_Producto, p.Descripcion
@@ -75,14 +214,23 @@ PRECIOS DE VENTA — PROTOCOLO OBLIGATORIO:
   ⚠ NUNCA usar MIN() ni MAX() para precios — producen valores atípicos sin contexto.
   ⚠ NUNCA mezclar variantes en un AVG global (ej. Lorelin 11.25mg ≠ Lorelin 3.75mg).
   ⚠ NUNCA preguntar qué tipo de precio quiere — reportar los 3 siempre.
+  · fd.Precio_Minimo_Venta_Base existe en FT_Facturas_D (precio capturado al momento de la venta).
+    Para precios de lista actuales (Base2, Base3): usar IM_Productos_Gral.
   ⚠ Si no hay ventas en el período: declararlo y ampliar al período anterior.
   ⚠ Si piden precio sin mes/año y no hay contexto: preguntar el período antes de consultar.
 
-CLASIFICACIÓN DE CLIENTES (no existe campo directo — se determina por precio cobrado):
-  · Cliente final   → precio ≈ Precio_Minimo_Venta_Base (más alto)
-  · Venta directa   → precio ≈ Precio_Minimo_Venta_Base2
-  · Distribuidor    → precio ≈ Precio_Minimo_Venta_Base3
-  Si el usuario pide "cliente final" / "distribuidor": aplicar criterio ABS() sin pedir confirmación.
+CLASIFICACIÓN DE CLIENTES — FUENTE CORRECTA:
+  El tipo de cliente se determina por CM_Clientes.Cve_Lista_Precios:
+  · 0 = Cliente final / Mostrador  → usa Precio_Minimo_Venta_Base  (precio más alto)
+  · 1 = Venta directa / Ruta       → usa Precio_Minimo_Venta_Base2 (precio intermedio)
+  · 2 = Distribuidor / Mayoreo     → usa Precio_Minimo_Venta_Base3 (precio más bajo)
+
+  Los precios de lista (Base, Base2, Base3) están en IM_Productos_Gral — NUNCA en FT_Facturas_D.
+  Para comparar precio cobrado (fd.Precio) vs precio de lista: JOIN IM_Productos_Gral p ON p.Cve_Producto = fd.Cve_Producto.
+
+  CONSULTA TIPO para ventas por tipo de cliente:
+    JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
+    WHERE c.Cve_Lista_Precios = 0  -- 0=final, 1=directa, 2=distribuidor
 
 BÚSQUEDA POR NOMBRE (protocolo obligatorio cuando busquen una persona):
 
@@ -123,7 +271,7 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
     JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
     JOIN CM_Clientes c  ON c.Cve_Cliente = fc.Cve_Cliente
     JOIN GC_Medicos m   ON m.Cve_Medico  = c.Cve_Ruta
-    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
     [AND fc.Fecha_Documento BETWEEN ... AND ...]
     GROUP BY m.Cve_Medico, m.Nombre
@@ -136,7 +284,7 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
     JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
     JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
     JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
       AND m.Nombre LIKE '%nombre_medico%'
     GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
@@ -151,7 +299,7 @@ TOTALES DE VENTA — REGLA CRÍTICA (para que los números coincidan con el dash
   ⚠ NUNCA usar fc.Importe_Total de FT_Facturas_C — ese campo incluye IVA y no coincide con el reporte de ventas.
   ⚠ SIEMPRE filtrar fc.Cve_Sucursal <> 99 en la query aunque no haya JOIN a GN_Sucursales.
   · Para todo total de ventas: JOIN FT_Facturas_C fc + FT_Facturas_D fd, luego SUM(fd.Importe_Neto)
-    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
   · NO filtrar por Cve_Movimiento salvo que se pida explícitamente
 
 MARGEN BRUTO — CÁLCULO OBLIGATORIO:
@@ -171,7 +319,7 @@ MARGEN BRUTO — CÁLCULO OBLIGATORIO:
     JOIN FT_Facturas_C fc
       ON fc.Cve_Folio = fd.Cve_Folio AND fc.Cve_Sucursal = fd.Cve_Sucursal
          AND fc.Cve_Movimiento = fd.Cve_Movimiento
-    WHERE fc.Status <> 'C'
+    WHERE fc.Status = 'AC'
       AND [filtro de período sobre fc.Fecha_Documento]
 
 CONSULTA DE VENDEDOR ESPECÍFICO — OBLIGATORIO cuando se mencione un nombre de vendedor:
@@ -182,7 +330,7 @@ CONSULTA DE VENDEDOR ESPECÍFICO — OBLIGATORIO cuando se mencione un nombre de
      FROM FT_Facturas_C fc
      JOIN FT_Facturas_D fd ON fd.Cve_Folio = fc.Cve_Folio AND fd.Cve_Sucursal = fc.Cve_Sucursal AND fd.Cve_Movimiento = fc.Cve_Movimiento
      JOIN GC_Vendedores v ON v.Cve_Vendedor = fc.Cve_Vendedor
-     WHERE v.Nombre LIKE '%Violeta%' AND fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+     WHERE v.Nombre LIKE '%Violeta%' AND fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
      GROUP BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento), DATENAME(MONTH, fc.Fecha_Documento)
      ORDER BY YEAR(fc.Fecha_Documento), MONTH(fc.Fecha_Documento)
   3. Si se piden médicos relacionados: usar EXACTAMENTE esta consulta (sin agregar ventas):
@@ -202,24 +350,48 @@ DETALLE DE VENTAS POR CLIENTE — OBLIGATORIO:
   · Incluir fila TOTAL al final con ROLLUP
   · NUNCA responder solo con un número total sin la tabla de detalle
 
-VENTAS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
-  Cuando la pregunta menciona un producto (ej: "ventas de Omnitrope 10 mg enero 2026",
-  "cuánto vendimos de Norditropin", "Saizen en marzo"):
-  ⛔ NUNCA devolver ventas totales del período sin filtrar por producto.
-  ⛔ NUNCA omitir el JOIN a IM_Productos_Gral ni el filtro AND p.Descripcion LIKE '%nombre%'.
-  ✅ SIEMPRE hacer JOIN a FT_Facturas_D fd → IM_Productos_Gral p y filtrar por p.Descripcion.
 
-  Consulta estándar para ventas de un producto en un período:
-    SELECT p.Descripcion, SUM(fd.Importe_Neto) AS Total, SUM(fd.Cantidad) AS Piezas,
-           COUNT(DISTINCT fc.Cve_Folio) AS Facturas
-    FROM FT_Facturas_C fc
-    JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
-    JOIN IM_Productos_Gral p ON p.Cve_Producto=fd.Cve_Producto
-    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
-      AND p.Descripcion LIKE '%Omnitrope 10%'
-      AND YEAR(fc.Fecha_Documento)=2026 AND MONTH(fc.Fecha_Documento)=1
-    GROUP BY p.Descripcion
-    ORDER BY Total DESC
+PACIENTES DE UN MÉDICO POR PRODUCTO — PROTOCOLO:
+  FT_Pedidos_C tiene el campo Paciente (varchar) — nombre del paciente en el pedido.
+  Para buscar pacientes de un médico que compraron un producto específico:
+
+    SELECT DISTINCT c.Paciente
+    FROM FT_Pedidos_C c
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
+    JOIN CM_Clientes cl ON cl.Cve_Cliente = c.Cve_Cliente
+    JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
+    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+      AND p.Descripcion LIKE '%nombre_producto%'
+      AND p.Descripcion NOT LIKE '%PROMO%'
+      AND p.Descripcion NOT LIKE '%GRATIS%'
+      AND m.Nombre LIKE '%nombre_medico%'
+      AND c.Paciente IS NOT NULL AND LTRIM(RTRIM(c.Paciente)) <> ''
+    ORDER BY c.Paciente
+
+  ⚠ Si el resultado es vacío, buscar al médico en GC_Medicos primero para confirmar que existe.
+  ⚠ Si el médico no existe con el nombre exacto, buscar por palabras separadas.
+
+SUCURSALES — NOMBRES EXACTOS EN EL ERP (siempre en MAYÚSCULAS):
+  Cve_Sucursal=1  → CDMX        (Ciudad de México / DF / CDMX)
+  Cve_Sucursal=2  → PUEBLA
+  Cve_Sucursal=3  → QUERETARO   (Querétaro)
+  Cve_Sucursal=4  → MONTERREY
+  Cve_Sucursal=5  → CANCUN      (Cancún)
+  Cve_Sucursal=6  → MERIDA      (Mérida)
+  Cve_Sucursal=7  → TIJUANA
+  Cve_Sucursal=8  → CUERNAVACA
+  Cve_Sucursal=9  → GUADALAJARA
+  Cve_Sucursal=10 → LEON        (León)
+  ⚠ NUNCA buscar por nombre largo — usar siempre el nombre corto exacto.
+
+BÚSQUEDA DE PRODUCTOS — REGLA CRÍTICA:
+  Las descripciones tienen espacios entre número y unidad:
+    "SAIZEN 20 MG/ 60 UI (5.83MG/ML)", "NORDITROPIN 10 MG/ 1.5 ML"
+  ⚠ NUNCA buscar con nombre pegado: LIKE '%SAIZEN 20MG%' — fallará.
+  ✅ Buscar por términos separados o con espacio:
+    p.Descripcion LIKE '%SAIZEN%' AND p.Descripcion LIKE '%20%'
+    o bien: p.Descripcion LIKE '%SAIZEN 20%'
 
 VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
   Cuando la pregunta menciona una sucursal (ej: "ventas en Puebla", "cómo va CDMX", "Monterrey abril"):
@@ -234,7 +406,7 @@ VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
     FROM FT_Facturas_C fc
     JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
     JOIN GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal
-    WHERE fc.Status <> 'C' AND fc.Cve_Sucursal <> 99
+    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
       AND s.Nombre LIKE '%nombre_sucursal%'
       AND [filtro de período sobre fc.Fecha_Documento]
     GROUP BY s.Nombre
@@ -253,15 +425,17 @@ _SYSTEM = build(
 )
 
 
-def responder(pregunta: str, historial: list[dict]) -> RespuestaIA:
+def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
     Genera una respuesta sobre ventas.
 
     Args:
         pregunta  (str):        Pregunta del usuario.
         historial (list[dict]): Historial [{rol, contenido}].
+        model     (str|None):   Modelo OpenAI a usar (None = default del sistema).
 
     Returns:
         RespuestaIA: texto + tokens consumidos.
     """
-    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "ventas")
+    kwargs = {"model": model} if model else {}
+    return base_agente.ejecutar(_SYSTEM, pregunta, historial, "ventas", **kwargs)

@@ -28,9 +28,13 @@ if _env_path.exists():
 
 # ── OpenAI ────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
-OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4o-mini")
+OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4.1-mini")
 # Modelo para resúmenes flash (IA en cards) — no requiere razonamiento, prioriza velocidad
-IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4o-mini")
+IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4.1-mini")
+# Modelo para Studio Dashboards — clasificación + narrativa, barato y rápido
+STUDIO_IA_MODEL:   str = os.getenv("STUDIO_IA_MODEL",   "gpt-5-nano")
+# Modelo para Studio Chat — razonamiento (o4-mini) para respuestas más precisas
+STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "o4-mini")
 
 
 # ── Base de datos (SQL Server) ────────────────────────────────────────────────
@@ -46,6 +50,10 @@ DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 PWA_PORT:    int = int(os.getenv("PWA_PORT",    "8001"))
 STUDIO_PORT: int = int(os.getenv("STUDIO_PORT", "8002"))
 
+# ── Prefijo de ruta (vacío en local, "/IA" en servidor con Apache) ───────────
+# En el servidor agregar al .env: PWA_BASE_PATH=/IA
+PWA_BASE_PATH: str = os.getenv("PWA_BASE_PATH", "")
+
 # ── Fecha de prueba ───────────────────────────────────────────────────────────
 # Para probar con datos históricos, pon una fecha en .env: TEST_DATE=2026-03-28
 # En producción dejar vacío — usará la fecha real del servidor.
@@ -53,20 +61,27 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 
 
 # ── Consumo de IA ────────────────────────────────────────────────────────────
-# consultas_ia  → cuota de negocio: +1 por cada pregunta real al agente IA
-# costo_ia_usd  → costo real calculado con tokens consumidos de la API de OpenAI
+# consultas_ia       → cuota de negocio: +1 por cada pregunta real al agente IA
+# costo_ia_usd       → costo real calculado con tokens consumidos de la API de OpenAI
 #
-# Precios por token según modelo (USD):
-#   Modelo          Input/1M     Output/1M
-#   gpt-4o-mini     $0.15        $0.60      ← modelo actual
-#   gpt-4.1-nano    $0.10        $0.40
-#   gpt-4.1-mini    $0.40        $1.60
-#   gpt-4o          $2.50        $10.00
-IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.00000015"))  # por token input
-IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.00000060"))  # por token output
+# Precios por token según modelo (USD por token):
+#   Modelo          Input/1M     Output/1M    → por token input   output       Uso
+#   gpt-5-nano      $0.05        $0.40        → 0.00000005        0.0000004    Studio chat + dashboards
+#   gpt-4.1-mini    $0.40        $1.60        → 0.0000004         0.0000016    PWA chat principal
+#   gpt-5-mini      $0.25        $2.00        → 0.00000025        0.000002     alternativa razonamiento
+#   o4-mini         $1.10        $4.40        → 0.0000011         0.0000044    si se activa razonamiento
 
-# Ratio Studio: cuántos mensajes = 1 consulta descontada (para dashboards)
-IA_RATIO_STUDIO: int = int(os.getenv("IA_RATIO_STUDIO", "1"))
+# PWA — modelo gpt-4.1-mini por defecto
+IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.0000004"))   # gpt-4.1-mini input/token
+IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.0000016"))   # gpt-4.1-mini output/token
+
+# Studio — modelo gpt-5-nano por defecto (más barato, costo se suma por más llamadas)
+STUDIO_PRECIO_INPUT:  float = float(os.getenv("STUDIO_PRECIO_INPUT",  "0.00000005"))  # gpt-5-nano input/token
+STUDIO_PRECIO_OUTPUT: float = float(os.getenv("STUDIO_PRECIO_OUTPUT", "0.0000004"))   # gpt-5-nano output/token
+
+# Ratio Studio: cada consulta en Studio vale 1.5 en cuota de usuario
+# Dashboards complejos usan _RATIO_DASHBOARD = 3 en datos.py
+IA_RATIO_STUDIO: float = float(os.getenv("IA_RATIO_STUDIO", "1.5"))
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 # Generar un secret seguro: python -c "import secrets; print(secrets.token_hex(32))"
