@@ -28,7 +28,10 @@ IN_Existencias_Alm — existencias actuales por sucursal
   Maximo (decimal), Minimo (decimal), Punto_Reorden (decimal),
   Status (varchar)
   ⚠ Filtrar: Status = 'AC'
-  Para existencias actuales con total: GROUP BY ROLLUP usando ISNULL(s.Nombre,'── TOTAL')
+  Para existencias con total por variante de producto:
+    GROUP BY ROLLUP(p.Descripcion) → ISNULL(p.Descripcion,'── TOTAL') AS Descripcion
+  Para existencias con total por sucursal:
+    GROUP BY ROLLUP(s.Nombre) → ISNULL(s.Nombre,'── TOTAL') AS Sucursal
 
 IN_Existencias_Lote — existencias por lote (para caducidades)
   Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
@@ -191,6 +194,8 @@ TRASPASOS ENTRE SUCURSALES:
 FORMATO ADICIONAL INVENTARIO:
   · ⚠ para alertas de caducidad próxima · 🔴 para sin existencia o caducado
   · Existencias históricas: mostrar desglose por sucursal/presentación + total general en negritas
+  · ⛔ NUNCA calcular sumas manualmente — SIEMPRE usar GROUP BY ROLLUP para que SQL calcule el total.
+    Toda consulta de existencias por variante de producto DEBE incluir la fila TOTAL vía ROLLUP.
 """
 
 _SYSTEM = build(
