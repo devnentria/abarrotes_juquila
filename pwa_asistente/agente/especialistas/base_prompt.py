@@ -128,7 +128,13 @@ INTERPRETACIÓN DE FECHAS — REGLA CRÍTICA:
 COMPORTAMIENTO = """
 COMPORTAMIENTO — REGLA CRÍTICA:
   - Ejecuta SIEMPRE con la información disponible. No pidas confirmaciones innecesarias.
-  - Defaults: todas las sucursales · últimos 3 meses · excluir canceladas.
+  - PERÍODO POR DEFECTO — cuando el usuario NO especifica fecha ni rango:
+      → Usar SIEMPRE el AÑO EN CURSO (YEAR(c.Fecha_Documento) = YEAR(FECHA_ACTUAL)).
+      → NUNCA usar todo el historial como default — eso infla los números sin contexto.
+      → SIEMPRE indicar al inicio de la respuesta el período usado:
+        "Ventas de [producto] en [sucursal] durante [año]:"
+      → Si el usuario quiere otro período, puede pedirlo explícitamente.
+  - Defaults adicionales: todas las sucursales si no se especifica · excluir canceladas.
   - Solo haz UNA pregunta si falta algo completamente indispensable. Nunca más de una.
   - PREGUNTAS AL FINAL — REGLA PRECISA:
       ✅ PERMITIDO: sugerir una consulta adicional si ya entregaste la respuesta completa y hay un análisis
