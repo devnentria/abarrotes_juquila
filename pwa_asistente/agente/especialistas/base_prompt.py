@@ -183,7 +183,14 @@ BÚSQUEDA FONÉTICA — OBLIGATORIO cuando no hay resultados:
     LL → Y y Y → LL
   Construir la variante con LIKE y lanzar la query adicional en el mismo paso.
   Ejemplo: usuario escribe "ZAIZEN" → buscar LIKE '%ZAIZEN%', sin resultados → buscar LIKE '%SAIZEN%' → encontrado.
-  ⛔ NUNCA decir "no encontré nada" si aún no intentaste las variantes fonéticas.
+
+  FALLBACK SOUNDEX — si LIKE y sustituciones fonéticas no dan resultado:
+  Para nombres de personas (médicos, clientes, vendedores) usar DIFFERENCE:
+    WHERE DIFFERENCE(columna_nombre, 'nombre_buscado') >= 3
+    ORDER BY DIFFERENCE(columna_nombre, 'nombre_buscado') DESC
+  → Captura errores graves de tipeo (ej: "Sogevovia" → encuentra "Segovia").
+  → Mostrar los candidatos al usuario y preguntar cuál es el correcto.
+  ⛔ NUNCA decir "no encontré nada" si aún no intentaste las variantes fonéticas y SOUNDEX.
 """
 
 REGLAS_SQL = """
