@@ -194,8 +194,16 @@ TRASPASOS ENTRE SUCURSALES:
 FORMATO ADICIONAL INVENTARIO:
   · ⚠ para alertas de caducidad próxima · 🔴 para sin existencia o caducado
   · Existencias históricas: mostrar desglose por sucursal/presentación + total general en negritas
-  · ⛔ NUNCA calcular sumas manualmente — SIEMPRE usar GROUP BY ROLLUP para que SQL calcule el total.
-    Toda consulta de existencias por variante de producto DEBE incluir la fila TOTAL vía ROLLUP.
+  · ⛔ NUNCA calcular sumas manualmente ni en texto ("la existencia total combinada es X").
+    SIEMPRE usar GROUP BY ROLLUP para que SQL genere la fila total:
+      SELECT ISNULL(p.Descripcion,'── TOTAL') AS Descripcion,
+             SUM(e.Existencia) AS Existencia
+      FROM IN_Existencias_Alm e
+      JOIN IM_Productos_Gral p ON p.Cve_Producto = e.Cve_Producto
+      WHERE ...
+      GROUP BY ROLLUP(p.Descripcion)
+      ORDER BY GROUPING(p.Descripcion), p.Descripcion
+    La fila '── TOTAL' al final es la suma real de SQL — presentarla en la tabla, no en texto aparte.
 """
 
 _SYSTEM = build(

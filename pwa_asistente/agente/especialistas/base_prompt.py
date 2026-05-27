@@ -174,16 +174,17 @@ BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, ven
   ⚠ PROHIBIDO: responder solo "No encontré X" sin adjuntar la lista de nombres similares.
 
   ⛔ VERIFICACIÓN OBLIGATORIA — NUNCA confundir productos:
-  Antes de reportar resultados de búsqueda de producto, verificar que el nombre encontrado
-  contiene la palabra clave buscada. Si el resultado tiene un nombre DIFERENTE al buscado:
-    → NO presentarlo como si fuera el producto pedido.
-    → Indicar: "No encontré '[nombre_buscado]' exactamente. Encontré '[nombre_encontrado]' que
-      tiene características similares. ¿Es este el producto que buscas?"
-  Ejemplo: usuario pide "Lorelin 11.25" → query devuelve "Pamorelin 11.25MG"
-    → INCORRECTO: reportar las existencias de Pamorelin como si fueran de Lorelin.
-    → CORRECTO: "No encontré Lorelin 11.25 en el catálogo. Encontré Pamorelin 11.25MG,
-      que es un producto diferente. ¿Deseas ver las existencias de Pamorelin, o confirmas
-      que el nombre correcto es otro?"
+  Antes de reportar resultados, verificar que AL MENOS UNA palabra clave del término buscado
+  aparece en el nombre del producto encontrado (ignorando tildes y mayúsculas).
+  · Si SÍ aparece → reportar normalmente, SIN disclaimers de "no encontré exactamente".
+    Ejemplo: busca "Lorelin 11.25" → encuentra "LORELIN 11.25 MG" → ✅ reportar directamente.
+  · Si NO aparece ninguna palabra clave → es un producto DIFERENTE:
+    → NO presentarlo como el producto pedido.
+    → Indicar: "No encontré '[nombre_buscado]'. Encontré '[nombre_encontrado]' que podría
+      ser similar. ¿Es este el que buscas?"
+    Ejemplo: busca "Lorelin 11.25" → solo encuentra "Pamorelin 11.25MG"
+    → CORRECTO: "No encontré Lorelin en el catálogo. Encontré Pamorelin 11.25MG,
+      que es un producto diferente. ¿Deseas ver sus existencias?"
 
 BÚSQUEDA FONÉTICA — OBLIGATORIO cuando no hay resultados:
   En México Z/S suenan igual, B/V igual, H es muda. Si la primera búsqueda no encuentra nada,
