@@ -63,6 +63,14 @@ BÚSQUEDA DE MÉDICOS POR NOMBRE — OBLIGATORIO:
     Ejemplo: "Luz Stella Seamanduras" → LIKE '%Luz%' OR LIKE '%Stella%' OR LIKE '%Seamanduras%'
   · NUNCA buscar el nombre completo junto — dividir siempre en palabras individuales.
 
+  FALLBACK FONÉTICO — si LIKE no devuelve resultados:
+  ⛔ NUNCA responder "no encontré" sin antes intentar DIFFERENCE (SOUNDEX):
+    SELECT Cve_Medico, Nombre FROM GC_Medicos
+    WHERE DIFFERENCE(Nombre, 'palabra_buscada') >= 3
+    ORDER BY DIFFERENCE(Nombre, 'palabra_buscada') DESC
+  → Esto encuentra nombres mal escritos (ej: "Sogevovia" → encuentra "Segovia").
+  → Mostrar los resultados al usuario y preguntar cuál es el correcto antes de continuar.
+
 VENTAS POR MÉDICO — DOS TIPOS (aclarar cuál se pide):
 
   1. Ventas directas (el médico compra como cliente registrado):
@@ -98,26 +106,50 @@ RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
   GROUP BY m.Cve_Medico, m.Nombre
   ORDER BY Total_Prescrito DESC
 
-PACIENTES DE UN MÉDICO POR PRODUCTO — PROTOCOLO:
-  Cuando preguntan "pacientes de [producto] del Dr. [nombre]" o "¿quiénes usan [producto] con [médico]?":
-  Usar FT_Pedidos_C.Paciente cruzando médico → clientes → pedidos → producto.
+PACIENTES DE UN MÉDICO — PROTOCOLO OBLIGATORIO (3 PASOS):
 
-    SELECT DISTINCT c.Paciente
-    FROM FT_Pedidos_C c
-    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-    JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
-    JOIN CM_Clientes cl ON cl.Cve_Cliente = c.Cve_Cliente
-    JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
-    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
-      AND p.Descripcion LIKE '%nombre_producto%'
-      AND p.Descripcion NOT LIKE '%GRATIS%'
-      AND m.Nombre LIKE '%palabra1%' [OR m.Nombre LIKE '%palabra2%' ...]
-      AND c.Paciente IS NOT NULL AND LTRIM(RTRIM(c.Paciente)) <> ''
-    ORDER BY c.Paciente
+  PASO 1 — Buscar el médico en GC_Medicos por palabras separadas:
+    SELECT Cve_Medico, Nombre, ISNULL(Cedula,'') AS Cedula
+    FROM GC_Medicos
+    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%'
 
-  ⚠ Buscar al médico por palabras separadas (nunca nombre completo junto).
-  ⚠ Si no hay resultados, confirmar primero que el médico existe en GC_Medicos.
-  ⚠ Si el médico existe pero no hay pacientes: reportarlo claramente sin sugerir "¿deseas algo más?".
+  → Si NO hay resultados: usar DIFFERENCE >= 3 (fallback fonético).
+  → Si hay UN solo resultado: continuar al PASO 3 directamente.
+  → Si hay MÁS DE UNO: ejecutar PASO 2.
+
+  PASO 2 — Múltiples médicos encontrados: detectar duplicados y preguntar.
+    · Contar cuántos clientes tiene cada uno:
+      SELECT m.Cve_Medico, m.Nombre, COUNT(cl.Cve_Cliente) AS Clientes
+      FROM GC_Medicos m
+      LEFT JOIN CM_Clientes cl ON CAST(cl.Cve_Ruta AS int) = m.Cve_Medico
+      WHERE m.Nombre LIKE '%palabra%'
+      GROUP BY m.Cve_Medico, m.Nombre
+    · Mostrar tabla con: Nombre | Clientes
+    · Si los nombres son variantes del mismo (ej: "Segovia Gómez Helberth" / "Helberth Armando Segovia Gómez"):
+      → Indicar: "⚠ Encontré X registros que parecen ser el mismo médico con duplicados."
+      → Preguntar: "¿Busco pacientes de todos los registros consolidados, o solo uno específico?"
+    · Si son médicos claramente distintos: listar y preguntar cuál.
+
+  PASO 3 — Buscar pacientes usando todos los Cve_Medico relevantes:
+    (Si el usuario eligió consolidar duplicados, incluir todos los Cve_Medico en el IN)
+
+    SELECT DISTINCT p.Paciente, COUNT(DISTINCT p.Cve_Folio) AS Pedidos
+    FROM FT_Pedidos_C p
+    JOIN CM_Clientes cl ON cl.Cve_Cliente = p.Cve_Cliente
+    WHERE p.Estatus <> 'CN' AND p.Referencia_Cliente = 'PAGADO'
+      AND cl.Cve_Ruta IN (236, 237, 273)    -- todos los Cve_Medico del doctor
+      AND p.Paciente IS NOT NULL AND LTRIM(RTRIM(p.Paciente)) <> ''
+    GROUP BY p.Paciente
+    ORDER BY Pedidos DESC, p.Paciente
+
+    Si además preguntan por producto específico, agregar:
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+    JOIN IM_Productos_Gral pr ON pr.Cve_Producto=d.Cve_Producto
+    AND pr.Descripcion LIKE '%nombre_producto%' AND pr.Descripcion NOT LIKE '%GRATIS%'
+    AND d.Precio > 1
+
+  ⚠ NUNCA mostrar Cve_Medico en la respuesta — solo nombres.
+  ⚠ Si consolidas duplicados: mencionar en la respuesta cuántos registros se unificaron.
 
 MÉDICOS SIN CÉDULA — REGLA OBLIGATORIA:
   · Filtrar SIEMPRE registros de sistema: WHERE LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')
