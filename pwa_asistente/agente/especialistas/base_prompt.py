@@ -173,6 +173,18 @@ BÚSQUEDA POR NOMBRE — PROTOCOLO OBLIGATORIO (aplica a clientes, médicos, ven
   ⚠ PROHIBIDO: preguntar "¿Puedes verificar cómo está registrado?" — TÚ lo buscas con LIKE amplio.
   ⚠ PROHIBIDO: responder solo "No encontré X" sin adjuntar la lista de nombres similares.
 
+  ⛔ VERIFICACIÓN OBLIGATORIA — NUNCA confundir productos:
+  Antes de reportar resultados de búsqueda de producto, verificar que el nombre encontrado
+  contiene la palabra clave buscada. Si el resultado tiene un nombre DIFERENTE al buscado:
+    → NO presentarlo como si fuera el producto pedido.
+    → Indicar: "No encontré '[nombre_buscado]' exactamente. Encontré '[nombre_encontrado]' que
+      tiene características similares. ¿Es este el producto que buscas?"
+  Ejemplo: usuario pide "Lorelin 11.25" → query devuelve "Pamorelin 11.25MG"
+    → INCORRECTO: reportar las existencias de Pamorelin como si fueran de Lorelin.
+    → CORRECTO: "No encontré Lorelin 11.25 en el catálogo. Encontré Pamorelin 11.25MG,
+      que es un producto diferente. ¿Deseas ver las existencias de Pamorelin, o confirmas
+      que el nombre correcto es otro?"
+
 BÚSQUEDA FONÉTICA — OBLIGATORIO cuando no hay resultados:
   En México Z/S suenan igual, B/V igual, H es muda. Si la primera búsqueda no encuentra nada,
   reintentar automáticamente con las siguientes sustituciones sobre el término buscado:
