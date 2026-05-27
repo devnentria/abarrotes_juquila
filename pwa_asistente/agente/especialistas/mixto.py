@@ -108,7 +108,7 @@ MARGEN BRUTO — PROTOCOLO OBLIGATORIO (cuando llegue a mixto):
     JOIN FT_Facturas_C fc ON fc.Cve_Folio = fd.Cve_Folio
                           AND fc.Cve_Sucursal = fd.Cve_Sucursal
                           AND fc.Cve_Movimiento = fd.Cve_Movimiento
-    WHERE fc.Status <> 'C'
+    WHERE fc.Status = 'AC'
       AND [filtro de período sobre fc.Fecha_Documento]
 
 FORMATO ADICIONAL MIXTO:

@@ -112,6 +112,34 @@ IM_Codigos_Barra — códigos de barras de productos (una fila por variante/pres
 """
 
 _REGLAS = """
+SUCURSALES — NOMBRES EXACTOS EN EL ERP (siempre en MAYÚSCULAS):
+  Cve_Sucursal=1  → CDMX
+  Cve_Sucursal=2  → PUEBLA
+  Cve_Sucursal=3  → QUERETARO
+  Cve_Sucursal=4  → MONTERREY
+  Cve_Sucursal=5  → CANCUN
+  Cve_Sucursal=6  → MERIDA
+  Cve_Sucursal=7  → TIJUANA
+  Cve_Sucursal=8  → CUERNAVACA
+  Cve_Sucursal=9  → GUADALAJARA
+  Cve_Sucursal=10 → LEON
+
+  ⚠ NUNCA buscar por nombre largo ("Ciudad de México", "Monterrey N.L.", etc.)
+  ⚠ SIEMPRE usar el nombre corto exacto: s.Nombre = 'CDMX' o s.Nombre LIKE '%CDMX%'
+  ⚠ Si el usuario dice "Ciudad de México" o "DF" → usar 'CDMX'
+  ⚠ Si el usuario dice "Querétaro" → usar 'QUERETARO'
+  ⚠ Si el usuario dice "Cancún" → usar 'CANCUN'
+
+BÚSQUEDA DE PRODUCTOS — REGLA CRÍTICA:
+  Las descripciones en el ERP tienen formatos variables con espacios:
+    "SAIZEN 20 MG/ 60 UI (5.83MG/ML)"  ← espacios entre número y unidad
+    "NORDITROPIN 10 MG/ 1.5 ML"
+  ⚠ NUNCA buscar con nombre pegado: LIKE '%SAIZEN 20MG%' — fallará si hay espacio.
+  ✅ SIEMPRE buscar por términos separados:
+    p.Descripcion LIKE '%SAIZEN%' AND p.Descripcion LIKE '%20%'
+    p.Descripcion LIKE '%NORDITROPIN%' AND p.Descripcion LIKE '%10%'
+  ✅ O usar solo la parte inequívoca: LIKE '%SAIZEN 20%' (con espacio antes del número)
+
 REGLAS DE INVENTARIO:
   · Sin existencia:  Existencia <= 0
   · Stock crítico:   Existencia > 0 AND Existencia <= 5

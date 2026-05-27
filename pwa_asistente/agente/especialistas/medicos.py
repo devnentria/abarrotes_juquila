@@ -47,10 +47,8 @@ FT_Pedidos_Dia — detalle de pedidos
 IM_Productos_Gral — catálogo de productos
   Cve_Producto (varchar), Descripcion (varchar)
   ⚠ Productos PROMO: el ERP crea productos con "PROMO", "GRATIS" o "PROMOCION" en la descripción
-    — precio ~$0.01. SIEMPRE excluirlos con:
-    AND p.Descripcion NOT LIKE '%PROMO%'
+    — regalías identificadas por precio ~\$0.01. Excluir por precio y por nombre GRATIS:\n    AND d.Precio > 1 (FT_Pedidos_Dia) o AND fd.Precio > 1 (FT_Facturas_D)
     AND p.Descripcion NOT LIKE '%GRATIS%'
-    AND p.Descripcion NOT LIKE '%PROMOCION%'
 """
 
 _REGLAS = """
@@ -71,7 +69,7 @@ VENTAS POR MÉDICO — DOS TIPOS (aclarar cuál se pide):
      SELECT c.Razon_Social, SUM(fc.Importe_Total) AS Total
      FROM CM_Clientes c
      JOIN FT_Facturas_C fc ON fc.Cve_Cliente = c.Cve_Cliente
-     WHERE fc.Status <> 'C'
+     WHERE fc.Status = 'AC'
        AND c.Razon_Social LIKE '%palabra1%' OR c.Razon_Social LIKE '%palabra2%'
      GROUP BY c.Razon_Social
 
@@ -80,7 +78,7 @@ VENTAS POR MÉDICO — DOS TIPOS (aclarar cuál se pide):
      FROM FT_Facturas_C fc
      JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
      JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-     WHERE fc.Status <> 'C'
+     WHERE fc.Status = 'AC'
        AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
        AND m.Nombre LIKE '%nombre_medico%'
      GROUP BY m.Cve_Medico, m.Nombre
@@ -94,7 +92,7 @@ RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
   FROM FT_Facturas_C fc
   JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
   JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-  WHERE fc.Status <> 'C'
+  WHERE fc.Status = 'AC'
     AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
   [AND fc.Fecha_Documento BETWEEN ... AND ...]
   GROUP BY m.Cve_Medico, m.Nombre
@@ -112,9 +110,7 @@ PACIENTES DE UN MÉDICO POR PRODUCTO — PROTOCOLO:
     JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
     WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
       AND p.Descripcion LIKE '%nombre_producto%'
-      AND p.Descripcion NOT LIKE '%PROMO%'
       AND p.Descripcion NOT LIKE '%GRATIS%'
-      AND p.Descripcion NOT LIKE '%PROMOCION%'
       AND m.Nombre LIKE '%palabra1%' [OR m.Nombre LIKE '%palabra2%' ...]
       AND c.Paciente IS NOT NULL AND LTRIM(RTRIM(c.Paciente)) <> ''
     ORDER BY c.Paciente

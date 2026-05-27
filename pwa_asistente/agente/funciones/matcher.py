@@ -168,6 +168,18 @@ def detectar(pregunta: str) -> Optional[tuple]:
 
     # --- Ventas por período ---------------------------------------------------
     if _RE_VENTAS_BASE.search(pregunta):
+        # Si hay "ventas de [nombre_específico]" → producto concreto, no función predefinida
+        _m_de = re.search(
+            r'\bventas?\s+de\s+([a-zA-ZáéíóúñÁÉÍÓÚÑ0-9][a-zA-ZáéíóúñÁÉÍÓÚÑ0-9\s\-]{1,40}?)'
+            r'(?:\s+(?:en|entre|del?|al|el|la|\d)|$)',
+            pregunta, re.IGNORECASE,
+        )
+        if _m_de:
+            _palabras = [p for p in _m_de.group(1).strip().lower().split()
+                         if p not in _PALABRAS_PERIODO]
+            if _palabras:
+                return None  # Es consulta de producto específico → agente dinámico
+
         # Mes con nombre explícito ("enero", "febrero", ...)
         mes_m = _RE_MES_NOMBRE.search(pregunta)
         if mes_m:
