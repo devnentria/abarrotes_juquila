@@ -84,6 +84,31 @@ IT_Movimientos_D — detalle de movimientos
   JOIN con IT_Movimientos_C por: Cve_Folio + Cve_Movimiento + Cve_Almacen + Cve_Documento
   ⚠ Último costo: WHERE Cve_Movimiento='EC' ORDER BY Fecha_Documento DESC TOP 1
   ⚠ Costo promedio en período: AVG(Costo_Unitario) WHERE EC + rango fechas
+
+IM_Codigos_Barra — códigos de barras de productos (una fila por variante/presentación)
+  Cve_Producto (varchar), Codigo_Barras (varchar)
+  ⚠ USAR cuando LIKE sobre IM_Productos_Gral.Descripcion devuelva 0 resultados o resultados sospechosos.
+  ⚠ Razón: las promociones crean productos NUEVOS en IM_Productos_Gral con Cve_Producto distinto,
+    pero el mismo código de barras. Buscar por Codigo_Barras consolida todas las variantes del producto.
+
+  PROTOCOLO cuando no se encuentra stock con LIKE:
+    PASO 1 — Buscar con LIKE '%nombre%' en IM_Productos_Gral. Si devuelve existencia > 0: reportar. FIN.
+    PASO 2 — Si todos muestran existencia 0, buscar el código de barras del producto:
+      SELECT DISTINCT cb.Codigo_Barras
+      FROM IM_Codigos_Barra cb
+      JOIN IM_Productos_Gral p ON p.Cve_Producto = cb.Cve_Producto
+      WHERE p.Descripcion LIKE '%nombre%'
+    PASO 3 — Con ese código de barras, buscar TODOS los productos que lo tienen:
+      SELECT p.Descripcion, SUM(e.Existencia) AS Existencia
+      FROM IN_Existencias_Alm e
+      JOIN IM_Productos_Gral p ON p.Cve_Producto = e.Cve_Producto
+      JOIN IM_Codigos_Barra cb ON cb.Cve_Producto = e.Cve_Producto
+      WHERE cb.Codigo_Barras IN (-- códigos del paso 2 --)
+        AND e.Status = 'AC' AND e.Cve_Sucursal <> 99
+        [AND e.Cve_Sucursal = -- sucursal si aplica --]
+      GROUP BY p.Descripcion
+      ORDER BY Existencia DESC
+    → Esto muestra el stock REAL consolidado aunque esté bajo distintos Cve_Producto.
 """
 
 _REGLAS = """
