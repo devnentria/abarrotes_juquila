@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/chat.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.3
 # ============================================================
 """
 Router de Chat — Studio Dashboards.
@@ -52,8 +52,13 @@ except Exception as _e:
 
 _pool = ThreadPoolExecutor(max_workers=4)
 
-# Regex para detectar solicitudes de dashboard en el texto del usuario
-# — tolerante a typos comunes: dashboad, dasboard, tablero, gráfica, chart, etc.
+# Regex para detectar solicitudes EXPLÍCITAS de dashboard en el texto del usuario.
+# Solo coincide cuando el usuario pide un dashboard/gráfica/tablero directamente.
+# Palabras genéricas como "ventas", "inventario" NO deben activar el generador de dashboards.
+_PIDE_DASH = re.compile(
+    r"\b(dash\w*|tablero|gr[aá]fic[ao]s?|chart|visualiza[cr]|report[e]?)\b",
+    re.IGNORECASE,
+)
 
 
 _SALUDO = re.compile(
@@ -191,20 +196,17 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     estado    = "error"
 
     # ── 1. Clasificar si se requiere dashboard PRIMERO ───────────────────────
-    # Si se genera dashboard, no llamamos al agente o4-mini (innecesario y confuso).
-    # Si no hay dashboard, el agente responde normalmente con texto.
-    _pide_dashboard = bool(re.search(
-        r"dashboard|tablero|gr[aá]fic|chart|visualiza|ventas|inventario|vendedores?|productos?|clientes?|pedidos?",
-        msg, re.IGNORECASE,
-    ))
+    # Solo intentar dashboard cuando el usuario lo pide explícitamente
+    # ("dashboard", "gráfica", "tablero"…). Preguntas sobre ventas o inventario
+    # sin esa palabra van directamente al agente de texto.
     spec_dash = {}
-    if _DASHBOARD_FN_OK:
+    tipo_dash = "ninguno"
+    if _DASHBOARD_FN_OK and bool(_PIDE_DASH.search(msg)):
         try:
             spec_dash = _clasificar(msg)
+            tipo_dash = spec_dash.get("funcion", "ninguno")
         except Exception as e:
             print(f"[studio-chat] Clasificar error job={job_id}: {e}", flush=True)
-
-    tipo_dash = spec_dash.get("funcion", "ninguno")
 
     # ── 2. Generar dashboard si aplica ───────────────────────────────────────
     if tipo_dash != "ninguno":
@@ -231,8 +233,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
             print(f"[studio-chat] Dashboard generado tipo={tipo_dash} job={job_id}", flush=True)
         except Exception as e:
             print(f"[studio-chat] Dashboard error job={job_id}: {e}", flush=True)
+            # Si el generador falla, dejar que el agente responda con texto
+            tipo_dash = "ninguno"
 
-    # ── 3. Respuesta de texto con el agente (solo si no hay dashboard) ────────
+    # ── 3. Respuesta de texto con el agente (si no hay dashboard o falló) ────
     if tipo_dash == "ninguno":
         try:
             area, costo_dir = director.clasificar(
@@ -247,12 +251,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
             estado = "done"
-            if _pide_dashboard:
-                respuesta = _DASHBOARDS_DISPONIBLES
         except Exception as e:
             print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 
-    # ── 3. Guardar mensaje en el chat ─────────────────────────────────────────
+    # ── 4. Guardar mensaje en el chat ─────────────────────────────────────────
     try:
         execute(
             "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
@@ -261,7 +263,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     except Exception as e:
         print(f"[studio-chat] INSERT mensaje error job={job_id}: {e}", flush=True)
 
-    # ── 4. Descontar consultas ────────────────────────────────────────────────
+    # ── 5. Descontar consultas ────────────────────────────────────────────────
     try:
         execute(
             "UPDATE usuarios SET "
@@ -273,7 +275,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     except Exception as e:
         print(f"[studio-chat] UPDATE usuarios error job={job_id}: {e}", flush=True)
 
-    # ── 5. Marcar job como terminado — SIEMPRE se ejecuta ────────────────────
+    # ── 6. Marcar job como terminado — SIEMPRE se ejecuta ────────────────────
     meta = _json.dumps({"dashboard": dashboard}, ensure_ascii=False) if dashboard else None
     try:
         execute(
