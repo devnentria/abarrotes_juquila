@@ -544,7 +544,7 @@
     .sc-table-outer   { margin: 6px 0; }
     .sc-table-toolbar { display:flex; justify-content:flex-end; margin-bottom:3px; }
     .sc-table-expand  {
-      background:var(--primary); color:#fff; border:none; border-radius:6px;
+      background:var(--blue-mid); color:#fff; border:none; border-radius:6px;
       width:28px; height:28px; font-size:15px; cursor:pointer;
       display:flex; align-items:center; justify-content:center; opacity:.85;
     }
@@ -552,12 +552,12 @@
     .sc-table-wrap { overflow-x:auto; border-radius:6px; border:1px solid var(--border); }
     .sc-chat-table { width:100%; border-collapse:collapse; font-size:11px; white-space:nowrap; }
     .sc-chat-table th {
-      background:var(--primary); color:#fff; font-weight:600;
+      background:var(--blue-mid); color:#fff; font-weight:600;
       padding:5px 8px; text-align:left; font-size:11px;
     }
     .sc-chat-table td { padding:4px 8px; color:var(--text); border-bottom:1px solid var(--border); }
     .sc-chat-table tr:last-child td { border-bottom:none; }
-    .sc-chat-table tr:nth-child(even) td { background:var(--surface); }
+    .sc-chat-table tr:nth-child(even) td { background:var(--bg); }
 
     /* Modal tabla flotante */
     .sc-tabla-modal-overlay {
@@ -1978,7 +1978,7 @@ async function _scEnviar() {
     _scConvId = data.conversacion_id;
 
     // Mostrar skeleton si parece solicitud de datos visualizables
-    const _dashHint = /dashboard|tablero|gr[aá]fic|chart|visualiza|ventas|inventario|vendedores?|productos?|clientes?|pedidos?/i.test(texto);
+    const _dashHint = /\b(dash\w*|tablero|gr[aá]fic[ao]s?|chart|visualiza[cr]|report[e]?)\b/i.test(texto);
 
     if (data.estado === 'done') {
       _scRemoveTyping();

@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.6.0
+# Versión  : 2.7.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -180,7 +180,9 @@ VENTAS DE UN PRODUCTO ESPECÍFICO:
       AND d.Precio > 1
       AND YEAR(c.Fecha_Documento)=2026 AND MONTH(c.Fecha_Documento)=4
     GROUP BY ROLLUP(p.Descripcion)
-    ORDER BY Piezas DESC
+    ORDER BY GROUPING(p.Descripcion), Piezas DESC
+  ⚠ ORDER BY con ROLLUP: usar SIEMPRE ORDER BY GROUPING(campo), ... — así el '── TOTAL' queda al final.
+     NUNCA ORDER BY solo por Piezas/Total — con ROLLUP eso pone el total al principio.
 
   Si el usuario pregunta explícitamente por "piezas gratis" o "regalías":
     ✅ Quitar AND d.Precio > 1 y filtrar WHERE d.Precio <= 1.
