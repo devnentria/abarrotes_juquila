@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/director.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.0.0
+# Versión  : 1.1.0
 # ============================================================
 """
 Agente Director — enruta la pregunta al especialista correcto.
@@ -34,7 +34,12 @@ Tu ÚNICA tarea es clasificar la pregunta del usuario en UNA de estas áreas:
                mayor existencia, caducidad próxima,
                piezas compradas al proveedor, cuánto se compró de un producto
                (ej: "cuántas piezas del Ozempic se compraron", "compras de enero")
-  pedidos    → pedidos activos, pendientes, antigüedad de pedidos, pedidos por sucursal
+  pedidos    → pedidos activos, pendientes, antigüedad de pedidos, pedidos por sucursal,
+               CANTIDAD o CONTEO de pedidos en un período (cuántos pedidos hubo, número de pedidos),
+               pedidos de un producto específico en un período (histórico de pedidos),
+               pedidos realizados hoy/ayer/este mes/en abril — aunque mencionen un producto
+               ⚠ "cuántos pedidos de X en abril" → pedidos (NO ventas, aunque mencione producto)
+               ⚠ "cuántos pedidos tuvo X cliente" → pedidos (NO clientes)
   medicos    → médicos, doctores, cédulas, duplicados de médicos, asignación a vendedor
   clientes   → información del cliente (datos, lista de precios, vendedor asignado),
                clientes frecuentes, ranking de quién compra más, segmentación de clientes
