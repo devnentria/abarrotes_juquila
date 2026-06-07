@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/ventas.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.7.0
+# Versión  : 2.8.0
 # ============================================================
 """
 Agente Especialista — Ventas.
@@ -164,6 +164,16 @@ VENTAS DE UN PRODUCTO ESPECÍFICO:
 
   ⚠ FUENTE OBLIGATORIA: FT_Pedidos_C + FT_Pedidos_Dia (NO FT_Facturas) — coincide con los reportes del ERP.
      Importe = Cantidad_Ordenada * Precio
+
+  ⚠ CONTAR PEDIDOS vs IMPORTE DE VENTAS — DISTINCIÓN CRÍTICA:
+    · Si la pregunta es por IMPORTE (ventas, monto, cuánto se vendió):
+        → Filtrar: Referencia_Cliente = 'PAGADO' (solo pedidos cobrados)
+    · Si la pregunta es por CANTIDAD DE PEDIDOS (cuántos pedidos, número de pedidos):
+        → NO filtrar por PAGADO — usar solo Estatus <> 'CN'
+        → Esto incluye pedidos activos + pagados, igual que el ERP
+        → Un pedido activo ES un pedido aunque no esté cobrado todavía
+    Ejemplo: "¿Cuántos pedidos de Omnitrope en abril?" → Estatus <> 'CN' (sin PAGADO)
+             "¿Cuánto se vendió de Omnitrope en abril?" → Referencia_Cliente = 'PAGADO'
 
   Consulta estándar para ventas de un producto en un período:
     SELECT ISNULL(p.Descripcion, '── TOTAL') AS Descripcion,
