@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/pedidos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.2.0
+# Versión  : 2.3.0
 # ============================================================
 """
 Agente Especialista — Pedidos.
@@ -39,7 +39,34 @@ VW_Pedidos_Total — vista con importe total por pedido
 
 _REGLAS = """
 REGLAS DE PEDIDOS:
-  · Pedidos activos = Estatus = 'AC'
+
+ESTATUS DE PEDIDOS:
+  · Estatus = 'AC'  → activo/pendiente (aún no surtido/cobrado)
+  · Estatus = 'TR'  → transferido/procesado (surtido)
+  · Estatus = 'CN'  → cancelado
+  · Para pedidos ACTIVOS:     WHERE Estatus = 'AC'
+  · Para TODOS los pedidos (histórico, conteo): WHERE Estatus <> 'CN'
+  ⚠ NUNCA filtrar por Referencia_Cliente = 'PAGADO' en pedidos — ese campo aplica en ventas.
+    Un pedido activo ES un pedido aunque no esté cobrado.
+
+CONTEO HISTÓRICO DE PEDIDOS (cuántos pedidos hubo en un período):
+  Consulta estándar para contar pedidos de un producto en un período:
+    SELECT ISNULL(p.Descripcion,'── TOTAL') AS Producto,
+           COUNT(DISTINCT pc.Cve_Folio) AS Pedidos,
+           SUM(pd.Cantidad_Ordenada)    AS Piezas_Ordenadas
+    FROM FT_Pedidos_C pc
+    JOIN FT_Pedidos_CN_D pd ON pd.Cve_Folio=pc.Cve_Folio AND pd.Cve_Sucursal=pc.Cve_Sucursal AND pd.Cve_Movimiento=pc.Cve_Movimiento
+    JOIN IM_Productos_Gral p ON p.Cve_Producto=pd.Cve_Producto
+    WHERE pc.Estatus <> 'CN'
+      AND pc.Cve_Sucursal <> 99
+      AND p.Descripcion LIKE '%nombre_producto%'
+      AND YEAR(pc.Fecha_Documento)=2026 AND MONTH(pc.Fecha_Documento)=4
+    GROUP BY ROLLUP(p.Descripcion)
+    ORDER BY GROUPING(p.Descripcion), Pedidos DESC
+
+  ⚠ Para conteo sin filtro de producto: omitir JOIN a IM_Productos_Gral y el filtro de Descripcion.
+
+ANTIGÜEDAD Y ACTIVOS:
   · Antigüedad crítica (+30 días): Fecha_Documento < DATEADD(DAY,-30,GETDATE())
   · Antigüedad media (15-30 días): entre DATEADD(DAY,-30,...) y DATEADD(DAY,-15,...)
   · Pedidos del día: CAST(Fecha_Documento AS DATE) = CAST(GETDATE() AS DATE)
