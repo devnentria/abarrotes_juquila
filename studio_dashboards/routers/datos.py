@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/datos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.2.0
+# Versión  : 2.3.0
 # ============================================================
 """
 Router de datos del ERP para el Studio Dashboards.
@@ -116,6 +116,7 @@ _SPECS_TIPO: dict = {
     "clientes_frecuentes":  {"titulo": "Clientes más frecuentes",           "layout": "ranking_hbar"},
     "variacion_vendedores": {"titulo": "Variación de vendedores",           "layout": "dual_compare"},
     "reporte_ventas":       {"titulo": "Dashboard de Ventas",               "layout": "full_report"},
+    "ventas_producto":      {"titulo": "Ventas de producto por sucursal",   "layout": "ranking_hbar"},
     # Inventario
     "reporte_inventario":   {"titulo": "Dashboard de Inventario",           "layout": "inventory_report"},
     "inventario_stock":     {"titulo": "Stock actual por sucursal",         "layout": "kpi_bar"},
@@ -153,9 +154,9 @@ Funciones disponibles:
   ventas_hoy           → Ventas pagadas del día actual. layout: kpi_bar
   ventas_sucursal      → Ventas por sucursal vs período anterior. layout: kpi_bar
   top_vendedores       → Top 10 vendedores por importe. layout: ranking_hbar
-  comparativo_meses    → Ventas mes a mes (últimos 6 meses). layout: trend_area
-  ventas_diario        → Ventas por día (últimos 30 días). layout: trend_area
-  tendencia_anual      → Ventas por mes (últimos 12 meses). layout: trend_area
+  comparativo_meses    → Ventas mes a mes (últimos 6 meses) con proyección del siguiente mes. layout: trend_area
+  ventas_diario        → Ventas por día (últimos 30 días) con proyección. layout: trend_area
+  tendencia_anual      → Ventas por mes (últimos 12 meses) con proyección. layout: trend_area
   pedidos_activos      → Pedidos activos por sucursal. layout: donut_split
   top_productos        → Top 10 productos más vendidos. layout: ranking_hbar
   clientes_frecuentes  → Top 15 clientes por importe comprado. layout: ranking_hbar
@@ -164,6 +165,9 @@ Funciones disponibles:
   inventario_stock     → Stock actual por sucursal: valor en MXN y unidades. layout: kpi_bar
   caducidades          → Productos con lotes próximos a caducar (90 días). layout: ranking_hbar
   stockouts            → Sucursales con más productos sin existencia (stock = 0). layout: ranking_hbar
+  ventas_producto      → Ventas de un producto específico por sucursal. Requiere campo extra "producto". layout: ranking_hbar
+                         Usar cuando el usuario mencione un producto concreto: "ventas de Omnitrope en mayo",
+                         "gráfica de Saizen por sucursal", "cuánto vendimos de Norditropin en enero".
 
 Modos de período disponibles:
   "hoy"    → solo el día actual
@@ -204,6 +208,11 @@ JSON con single_chart (agrega chart_type):
 {"funcion":"<nombre>","modo":"30d","layout":"single_chart","chart_type":"bar","titulo":"<título>"}
 JSON con single_chart + rango custom:
 {"funcion":"<nombre>","modo":"custom","layout":"single_chart","chart_type":"line","titulo":"<título>","fecha_inicio":"YYYY-MM-DD","fecha_fin":"YYYY-MM-DD"}
+
+JSON para ventas_producto (campo extra "producto" obligatorio):
+{"funcion":"ventas_producto","modo":"mes","titulo":"Ventas de Omnitrope por sucursal — Mayo 2026","layout":"ranking_hbar","producto":"OMNITROPE"}
+JSON para ventas_producto con rango custom:
+{"funcion":"ventas_producto","modo":"custom","titulo":"...","layout":"ranking_hbar","producto":"SAIZEN 20","fecha_inicio":"2026-05-01","fecha_fin":"2026-05-31"}
 
 Si no aplica dashboard: {"funcion":"ninguno","modo":"","titulo":"","layout":""}
 """
@@ -926,6 +935,7 @@ def generar_dashboard(body: GenerarBody, usuario=Depends(get_current_user)):
         ff     = clasificacion.get("fecha_fin") or ff
         titulo = clasificacion.get("titulo")
         layout = clasificacion.get("layout")
+        producto = clasificacion.get("producto")
 
     if tipo not in _SPECS_TIPO:
         raise HTTPException(400, f"Tipo '{tipo}' no reconocido.")
@@ -936,7 +946,7 @@ def generar_dashboard(body: GenerarBody, usuario=Depends(get_current_user)):
 
     # Paso 2: Obtener datos del ERP
     try:
-        datos = _fetch_tipo(tipo, modo, fi, ff)
+        datos = _fetch_tipo(tipo, modo, fi, ff, producto=producto)
     except HTTPException:
         raise
     except Exception as e:
@@ -974,7 +984,7 @@ def generar_dashboard(body: GenerarBody, usuario=Depends(get_current_user)):
     })
 
 
-def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
+def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: str = None) -> dict:
     """
     Llama internamente a la función de datos correcta según el tipo.
     fi, ff: fechas ISO 'YYYY-MM-DD' para modo='custom'
@@ -1106,7 +1116,18 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
                          DATENAME(MONTH, c.Fecha_Documento), c.Cve_Folio
             ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
         """)
-        return {"tipo": tipo, "titulo": "Ventas últimos 6 meses", "datos": rows}
+        import calendar as _cal
+        from datetime import date as _d2
+        _hd = _d2.today()
+        _ms = _hd.month % 12 + 1
+        _as = _hd.year + (1 if _ms == 1 else 0)
+        proyeccion = _proyectar([float(r.get("valor") or 0) for r in rows])
+        return {
+            "tipo": tipo, "titulo": "Ventas últimos 6 meses",
+            "proyeccion": proyeccion,
+            "proyeccion_label": _cal.month_abbr[_ms],
+            "datos": rows,
+        }
 
     elif tipo == "pedidos_activos":
         rows = query(f"""
@@ -1124,14 +1145,14 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
             HAVING COUNT(CASE WHEN p.Estatus='AC' THEN 1 END)>0
             ORDER BY valor DESC
         """)
-        # Pedidos cerrados hoy y ayer (para tendencia)
+        # Pedidos generados en los últimos 7 días (incluye activos no pagados)
         tendencia = query(f"""
             SELECT CAST(c.Fecha_Documento AS DATE) AS fecha,
                    COUNT(DISTINCT c.Cve_Folio) AS pedidos,
                    ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor
             FROM FT_Pedidos_C c
             INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-            WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
+            WHERE c.Estatus<>'CN'
               AND CAST(c.Fecha_Documento AS DATE) >= DATEADD(DAY,-6,CAST({hoy()} AS DATE))
               AND c.Cve_Sucursal<>99
             GROUP BY CAST(c.Fecha_Documento AS DATE)
@@ -1161,7 +1182,13 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
             ) t GROUP BY fecha ORDER BY fecha
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
-        return {"tipo": tipo, "titulo": "Ventas diarias — últimos 30 días", "total": total, "datos": rows}
+        proyeccion = _proyectar([float(r.get("valor") or 0) for r in rows])
+        return {
+            "tipo": tipo, "titulo": "Ventas diarias — últimos 30 días",
+            "total": total, "proyeccion": proyeccion,
+            "proyeccion_label": "Próx. día",
+            "datos": rows,
+        }
 
     elif tipo == "tendencia_anual":
         rows = query(f"""
@@ -1178,8 +1205,18 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
                          DATENAME(MONTH, c.Fecha_Documento), c.Cve_Folio
             ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
         """)
+        import calendar as _cal2
+        from datetime import date as _d3
+        _hd2 = _d3.today()
+        _ms2 = _hd2.month % 12 + 1
         total = sum(float(r.get("valor") or 0) for r in rows)
-        return {"tipo": tipo, "titulo": "Tendencia anual de ventas", "total": total, "datos": rows}
+        proyeccion = _proyectar([float(r.get("valor") or 0) for r in rows])
+        return {
+            "tipo": tipo, "titulo": "Tendencia anual de ventas",
+            "total": total, "proyeccion": proyeccion,
+            "proyeccion_label": _cal2.month_abbr[_ms2],
+            "datos": rows,
+        }
 
     elif tipo == "top_productos":
         filtro, _, label = _filtros_periodo(modo, "c.Fecha_Documento", fi, ff)
@@ -1509,6 +1546,37 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None) -> dict:
             "titulo": "Productos sin existencia por sucursal",
             "total":  total,
             "datos":  rows,
+        }
+
+    elif tipo == "ventas_producto":
+        filtro, _, label = _filtros_periodo(modo, "c.Fecha_Documento", fi, ff)
+        like_sql = f"AND p.Descripcion LIKE '%{producto.upper()}%'" if producto else ""
+        rows = query(f"""
+            SELECT s.Nombre AS label,
+                   ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS valor,
+                   SUM(d.Cantidad_Ordenada) AS unidades
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+            JOIN IM_Productos_Gral p ON p.Cve_Producto=d.Cve_Producto
+            JOIN GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal
+            WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
+              AND c.Cve_Sucursal<>99
+              AND d.Precio > 1
+              AND p.Descripcion NOT LIKE '%GRATIS%'
+              {like_sql}
+              AND {filtro}
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            ORDER BY valor DESC
+        """)
+        total = sum(float(r.get("valor") or 0) for r in rows)
+        nombre_prod = producto.upper() if producto else "Producto"
+        return {
+            "tipo":    tipo,
+            "modo":    modo,
+            "titulo":  f"Ventas de {nombre_prod} por sucursal ({label})",
+            "total":   total,
+            "producto": nombre_prod,
+            "datos":   rows,
         }
 
     raise HTTPException(status_code=404, detail=f"Tipo '{tipo}' no existe")
