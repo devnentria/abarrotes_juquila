@@ -1520,7 +1520,7 @@ function renderDrawer() {
               <span>${it.label}</span>
             </button>`;
   }).join('') + `<div style="position:sticky;bottom:0;padding:10px 16px;font-size:11px;color:var(--text-dim);text-align:center;opacity:.55;background:var(--surface);margin-top:auto">
-    Suite Analítica v1.1.3
+    Suite Analítica v1.2.0
   </div>`;
 }
 
@@ -3061,10 +3061,11 @@ function renderLayoutRankingHbar(container, spec) {
   const _fmtVchart = v => _isConteo ? Math.round(v) : v;
 
   // KPI strip
-  const subLabel = tipo === 'top_vendedores' ? 'vendedores' :
+  const subLabel = tipo === 'top_vendedores'  ? 'vendedores' :
                    tipo === 'top_productos'   ? 'productos'  :
                    tipo === 'caducidades'     ? 'lotes'      :
-                   tipo === 'stockouts'       ? 'sucursales' : 'clientes';
+                   tipo === 'stockouts'       ? 'sucursales' :
+                   tipo === 'ventas_producto' ? 'sucursales' : 'clientes';
   const kpiTopSub = _isConteo
     ? (tipo === 'caducidades' ? `${parseFloat(top.unidades || top.valor || 0)} uds` : `${parseFloat(top.valor || 0)} productos`)
     : _formatMXN(parseFloat(top.valor || 0));
@@ -3173,10 +3174,11 @@ function renderLayoutTrendArea(container, spec) {
   const tc     = esDark ? '#94a3b8' : '#6E6E73';
   const gc     = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)';
 
-  const total  = parseFloat(datos.total || lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0));
-  const vals   = lista.map(r => parseFloat(r.valor || 0));
-  const maxVal = vals.length ? Math.max(...vals) : 0;
-  const minVal = vals.length ? Math.min(...vals) : 0;
+  const total      = parseFloat(datos.total || lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0));
+  const proyeccion = parseFloat(datos.proyeccion || 0);
+  const proyLabel  = datos.proyeccion_label || 'Proyección';
+  const vals       = lista.map(r => parseFloat(r.valor || 0));
+  const maxVal     = vals.length ? Math.max(...vals) : 0;
 
   // Growth vs first
   const v0 = vals[0] || 0;
@@ -3205,12 +3207,17 @@ function renderLayoutTrendArea(container, spec) {
         </div>
         <div class="trend-kpi-lbl">Crecimiento período</div>
       </div>
+      ${proyeccion > 0 ? `
+      <div class="trend-kpi dash-animate" style="animation-delay:.18s">
+        <div class="trend-kpi-val" style="color:#7C3AED">${_formatMXN(proyeccion)}</div>
+        <div class="trend-kpi-lbl">Proyección ${proyLabel}</div>
+      </div>` : ''}
     </div>`;
 
   container.innerHTML = `
     ${kpiHtml}
-    <div class="dash-card dash-animate" style="animation-delay:.18s">
-      <div class="dash-card-title">Evolución en el tiempo</div>
+    <div class="dash-card dash-animate" style="animation-delay:.22s">
+      <div class="dash-card-title">Evolución en el tiempo${proyeccion > 0 ? ' <span style="font-size:10px;color:#7C3AED;margin-left:6px">— — línea punteada = proyección</span>' : ''}</div>
       <canvas id="dash-main-chart" style="max-height:340px"></canvas>
     </div>`;
 
@@ -3223,13 +3230,28 @@ function renderLayoutTrendArea(container, spec) {
     return g;
   })();
 
+  // Agregar punto de proyección al final
+  const labelsChart = [...labels, ...(proyeccion > 0 ? [proyLabel] : [])];
+  const valsChart   = [...vals,   ...(proyeccion > 0 ? [null] : [])];
+  const proyDataset = proyeccion > 0 ? [{
+    label: `Proyección ${proyLabel}`,
+    data: [...new Array(vals.length - 1).fill(null), vN, proyeccion],
+    borderColor: '#7C3AED',
+    borderDash: [6, 4],
+    borderWidth: 2,
+    pointRadius: [0, 4],
+    pointBackgroundColor: '#7C3AED',
+    fill: false,
+    tension: 0,
+  }] : [];
+
   _dashCharts['main'] = new Chart(canvas, {
     type: 'line',
     data: {
-      labels,
+      labels: labelsChart,
       datasets: [{
         label: 'Ventas',
-        data: vals,
+        data: valsChart,
         borderColor: '#00897B',
         backgroundColor: gradient,
         fill: true,
@@ -3238,12 +3260,13 @@ function renderLayoutTrendArea(container, spec) {
         pointRadius: 4,
         pointHoverRadius: 6,
         borderWidth: 2.5,
-      }],
+        spanGaps: false,
+      }, ...proyDataset],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: proyeccion > 0 },
         tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.y)}` } },
       },
       scales: {
@@ -4098,7 +4121,7 @@ function renderLayoutSingleChart(container, spec) {
   // Decidir si los valores son dinero (para formatear eje)
   const TIPOS_DINERO = ['ventas_sucursal','ventas_hoy','top_vendedores','clientes_frecuentes',
                         'variacion_vendedores','reporte_ventas','comparativo_meses',
-                        'ventas_diario','tendencia_anual'];
+                        'ventas_diario','tendencia_anual','ventas_producto'];
   const isMoney = TIPOS_DINERO.includes(spec.tipo);
   const fmtVal  = v => isMoney
     ? '$' + Number(v).toLocaleString('es-MX', { maximumFractionDigits: 0 })
@@ -4408,7 +4431,7 @@ function verDashHistorial(idx) {
 function _layoutPorTipo(tipo) {
   const map = {
     ventas_hoy: 'kpi_bar', ventas_sucursal: 'kpi_bar',
-    top_vendedores: 'ranking_hbar', top_productos: 'ranking_hbar', clientes_frecuentes: 'ranking_hbar',
+    top_vendedores: 'ranking_hbar', top_productos: 'ranking_hbar', clientes_frecuentes: 'ranking_hbar', ventas_producto: 'ranking_hbar',
     comparativo_meses: 'trend_area', ventas_diario: 'trend_area', tendencia_anual: 'trend_area',
     pedidos_activos: 'donut_split',
     variacion_vendedores: 'dual_compare',

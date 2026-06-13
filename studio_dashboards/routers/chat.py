@@ -214,7 +214,8 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
             modo      = spec_dash.get("modo", "30d")
             fi        = spec_dash.get("fecha_inicio")
             ff        = spec_dash.get("fecha_fin")
-            datos     = _fetch_tipo(tipo_dash, modo, fi, ff)
+            producto  = spec_dash.get("producto")
+            datos     = _fetch_tipo(tipo_dash, modo, fi, ff, producto=producto)
             narrativa, _ = _narrar(msg, tipo_dash, modo, datos)
             dashboard = {
                 "tipo":         tipo_dash,
