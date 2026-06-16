@@ -42,7 +42,7 @@ REGLAS DE PEDIDOS:
 
 ESTATUS DE PEDIDOS:
   · Estatus = 'AC'  → activo/pendiente (aún no surtido/cobrado)
-  · Estatus = 'TR'  → transferido/procesado (surtido)
+  · Estatus = 'TR'  → transferido/procesado (surtido) — NO significa envío físico entre sucursales
   · Estatus = 'CN'  → cancelado
   · Para pedidos ACTIVOS:     WHERE Estatus = 'AC'
   · Para TODOS los pedidos (histórico, conteo): WHERE Estatus <> 'CN'
