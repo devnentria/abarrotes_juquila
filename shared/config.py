@@ -33,8 +33,8 @@ OPENAI_MODEL:      str = os.getenv("OPENAI_MODEL",       "gpt-4.1-mini")
 IA_FLASH_MODEL:    str = os.getenv("IA_FLASH_MODEL",    "gpt-4.1-mini")
 # Modelo para Studio Dashboards — clasificación + narrativa, barato y rápido
 STUDIO_IA_MODEL:   str = os.getenv("STUDIO_IA_MODEL",   "gpt-5-nano")
-# Modelo para Studio Chat — razonamiento (o4-mini) para respuestas más precisas
-STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "o4-mini")
+# Modelo para Studio Chat — mismo que PWA para garantizar consistencia de datos
+STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "gpt-4.1-mini")
 
 
 # ── Base de datos (SQL Server) ────────────────────────────────────────────────
@@ -75,9 +75,9 @@ TEST_DATE: str = os.getenv("TEST_DATE", "")  # "" = fecha real | "YYYY-MM-DD" = 
 IA_PRECIO_INPUT:  float = float(os.getenv("IA_PRECIO_INPUT",  "0.0000004"))   # gpt-4.1-mini input/token
 IA_PRECIO_OUTPUT: float = float(os.getenv("IA_PRECIO_OUTPUT", "0.0000016"))   # gpt-4.1-mini output/token
 
-# Studio — modelo gpt-5-nano por defecto (más barato, costo se suma por más llamadas)
-STUDIO_PRECIO_INPUT:  float = float(os.getenv("STUDIO_PRECIO_INPUT",  "0.00000005"))  # gpt-5-nano input/token
-STUDIO_PRECIO_OUTPUT: float = float(os.getenv("STUDIO_PRECIO_OUTPUT", "0.0000004"))   # gpt-5-nano output/token
+# Studio chat — modelo gpt-4.1-mini (igual que PWA, para consistencia de datos)
+STUDIO_PRECIO_INPUT:  float = float(os.getenv("STUDIO_PRECIO_INPUT",  "0.0000004"))   # gpt-4.1-mini input/token
+STUDIO_PRECIO_OUTPUT: float = float(os.getenv("STUDIO_PRECIO_OUTPUT", "0.0000016"))   # gpt-4.1-mini output/token
 
 # Ratio Studio: cada consulta en Studio vale 1.5 en cuota de usuario
 # Dashboards complejos usan _RATIO_DASHBOARD = 3 en datos.py

@@ -294,7 +294,7 @@ def pedidos_sucursales():
             s.Cve_Sucursal                                                    AS cve_sucursal,
             s.Nombre                                                          AS sucursal,
             COUNT(CASE WHEN p.Estatus = 'AC' THEN 1 END)                     AS activos,
-            COUNT(CASE WHEN p.Estatus IN ('TR','CN')
+            COUNT(CASE WHEN p.Estatus = 'TR'
                         AND p.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
                   THEN 1 END)                                                 AS completados_30d
         FROM GN_Sucursales s
