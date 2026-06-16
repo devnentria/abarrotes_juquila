@@ -3,7 +3,7 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/clientes.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.2.0
+# Versión  : 2.3.0
 # ============================================================
 """
 Agente Especialista — Clientes.
@@ -39,6 +39,12 @@ FT_Facturas_D — detalle de ventas al cliente
   Importe_Neto (float), Costo (float), Costo_Promedio (float)
   JOIN con FT_Facturas_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
 
+CM_Clientes — catálogo de clientes
+  Cve_Cliente (varchar), Razon_Social (varchar), Cve_Lista_Precios (smallint),
+  Status (char)
+  ⚠ Filtrar Status = 'AC' para clientes activos
+  JOIN con FT_Facturas_C por Cve_Cliente
+
 CM_Consignatarios — direcciones de entrega registradas por cliente
   Cve_Cliente (varchar), Cve_Consignatario (int), Nombre (varchar),
   Calle_No (varchar), Colonia (varchar), Del_Municipio (varchar),
@@ -69,6 +75,13 @@ BÚSQUEDA DE CLIENTE POR NOMBRE — PROTOCOLO DE PARADA:
   ⛔ NUNCA hacer queries adicionales después de mostrar la lista de similares.
   ⛔ NUNCA buscar ventas de clientes que el usuario no confirmó como el correcto.
   La respuesta correcta es: "No existe [nombre]. Clientes similares: [lista]."
+
+EXCLUSIÓN OBLIGATORIA — VENTA DE MOSTRADOR:
+  · "VENTA DE MOSTRADOR" es un cliente genérico para ventas de caja/contado anónimas — NO es un cliente real.
+  · En TODA consulta de top clientes, ranking o mayor comprador:
+    - SIEMPRE hacer JOIN a CM_Clientes cl ON cl.Cve_Cliente=fc.Cve_Cliente
+    - SIEMPRE agregar: AND cl.Razon_Social NOT LIKE '%MOSTRADOR%'
+  ⛔ NUNCA reportar "VENTA DE MOSTRADOR" como cliente — aunque tenga el mayor importe.
 
 CLASIFICACIÓN DE CLIENTES — por CM_Clientes.Cve_Lista_Precios:
   · 0 = Cliente final / Mostrador  (15,033 clientes — mayoría)
