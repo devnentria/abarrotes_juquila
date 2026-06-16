@@ -3,12 +3,12 @@
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/inventario.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.2.0
+# Versión  : 2.3.0
 # ============================================================
 """
 Agente Especialista — Inventario.
 
-Responde preguntas sobre stock, existencias, caducidades
+Responde preguntas sobre stock, existencias
 y productos sin existencia por sucursal.
 """
 from typing import Optional
@@ -33,11 +33,6 @@ IN_Existencias_Alm — existencias actuales por sucursal
   Para existencias con total por sucursal:
     GROUP BY ROLLUP(s.Nombre) → ISNULL(s.Nombre,'── TOTAL') AS Sucursal
 
-IN_Existencias_Lote — existencias por lote (para caducidades)
-  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
-  Cve_Presentacion (varchar), Num_Lote (varchar),
-  Fecha_Caducidad (datetime), Existencia (decimal), Entrada (decimal)
-
 IN_Existencias_Alm_Diario — snapshot histórico diario
   Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
   Cve_Presentacion (varchar), Fecha (datetime),
@@ -46,25 +41,6 @@ IN_Existencias_Alm_Diario — snapshot histórico diario
   ⚠ Cobertura: enero 2024 en adelante · Cve_Producto es VARCHAR — CAST al unir con IM_Productos_Gral
   ⚠ Para fecha específica: registro más cercano anterior con subconsulta MAX(Fecha) <= 'YYYY-MM-DD'
   ⚠ Incluir todas las variantes con LIKE '%nombre%'; mostrar filas separadas distinguiendo promos de productos reales
-
-It_Traspasos_C — encabezado de traspasos entre sucursales
-  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Movimiento (varchar),
-  Cve_Folio (int), Fecha_Documento (datetime),
-  Cve_Sucursal_Destino (smallint), Cve_Almacen_Destino (varchar),
-  Cve_Movimiento_Salida (varchar), Cve_Folio_Salida (int),
-  Cve_Movimiento_Entrada (varchar), Cve_Folio_Entrada (int),
-  Status (char), Cve_Usuario (varchar)
-  ⚠ Filtrar: Status <> 'C' (cancelados)
-
-It_Traspasos_D — detalle de traspasos
-  Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Movimiento (varchar),
-  Cve_Folio (int), Cve_Partida (smallint),
-  Cve_Producto (varchar), Cve_Presentacion (varchar),
-  Cantidad (float), Cantidad_Recibida (float),
-  Costo_Unitario (float), Costo_Ultima_Compra (float),
-  Status (char)
-  JOIN con It_Traspasos_C por: Cve_Folio + Cve_Sucursal + Cve_Almacen + Cve_Movimiento
-  ⚠ Cantidad_Recibida puede diferir de Cantidad (traspasos parciales)
 
 IT_Movimientos_C — cabecera de movimientos de almacén
   Cve_Sucursal (smallint), Cve_Almacen (varchar),
@@ -146,9 +122,6 @@ BÚSQUEDA DE PRODUCTOS — REGLA CRÍTICA:
 REGLAS DE INVENTARIO:
   · Sin existencia:  Existencia <= 0
   · Stock crítico:   Existencia > 0 AND Existencia <= 5
-  · Caducidad urgente: Fecha_Caducidad entre hoy y +30 días
-  · Caducidad a revisar: Fecha_Caducidad entre hoy y +90 días
-  · Caducados: Fecha_Caducidad < CAST(GETDATE() AS DATE)
   · Existencias históricas (en fecha pasada): consultar TODAS las sucursales por default — NUNCA pedir sucursal al usuario.
     Usar IN_Existencias_Alm_Diario con MAX(Fecha) <= 'YYYY-MM-DD' agrupado por sucursal.
   · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir SOLO la fecha, nunca la sucursal.
@@ -186,13 +159,12 @@ PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
   · Si el producto tiene una sola variante: mostrar también el costo unitario promedio del período
 
 TRASPASOS ENTRE SUCURSALES:
-  · Consultar It_Traspasos_C + It_Traspasos_D para movimientos entre almacenes.
-  · Cantidad vs Cantidad_Recibida: diferencia indica traspaso parcial o pendiente de confirmar.
-  · JOIN GN_Sucursales por Cve_Sucursal (origen) y Cve_Sucursal_Destino para nombres.
-  · JOIN IM_Productos_Gral p ON p.Cve_Producto = td.Cve_Producto para descripción del producto.
+  ⛔ Los traspasos entre sucursales se gestionan por WhatsApp — NO están registrados en el ERP.
+  ⛔ NUNCA mencionar que un producto "está en camino" o "fue transferido" entre sucursales.
+  ⛔ Si preguntan por traspasos: informar que no se registran en el sistema.
 
 FORMATO ADICIONAL INVENTARIO:
-  · ⚠ para alertas de caducidad próxima · 🔴 para sin existencia o caducado
+  · 🔴 para sin existencia
   · Existencias históricas: mostrar desglose por sucursal/presentación + total general en negritas
   · ⛔ NUNCA calcular sumas manualmente ni en texto ("la existencia total combinada es X").
     SIEMPRE usar GROUP BY ROLLUP para que SQL genere la fila total:

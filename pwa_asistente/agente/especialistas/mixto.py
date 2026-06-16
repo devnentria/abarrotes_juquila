@@ -33,7 +33,6 @@ FT_Pedidos_D   → Cve_Folio, Cve_Movimiento, Cve_Sucursal, Cve_Producto, Cantid
 
 ── INVENTARIO ──
 IN_Existencias_Alm        → Cve_Sucursal, Cve_Producto, Existencia (Status='AC')
-IN_Existencias_Lote       → Cve_Sucursal, Cve_Producto, Num_Lote, Fecha_Caducidad, Existencia
 IN_Existencias_Alm_Diario → Cve_Sucursal, Cve_Producto (VARCHAR), Fecha, Existencia,
                              Costo_Ultima_Compra, Costo_Promedio
 

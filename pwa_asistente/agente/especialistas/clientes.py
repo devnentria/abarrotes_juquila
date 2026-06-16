@@ -77,10 +77,10 @@ BÚSQUEDA DE CLIENTE POR NOMBRE — PROTOCOLO DE PARADA:
   La respuesta correcta es: "No existe [nombre]. Clientes similares: [lista]."
 
 EXCLUSIÓN OBLIGATORIA — VENTA DE MOSTRADOR:
-  · "VENTA DE MOSTRADOR" es un cliente genérico para ventas de caja/contado anónimas — NO es un cliente real.
+  · "VENTA DE MOSTRADOR" (Cve_Cliente='20000') es un cliente genérico para ventas de caja/contado anónimas — NO es un cliente real.
   · En TODA consulta de top clientes, ranking o mayor comprador:
-    - SIEMPRE hacer JOIN a CM_Clientes cl ON cl.Cve_Cliente=fc.Cve_Cliente
-    - SIEMPRE agregar: AND cl.Razon_Social NOT LIKE '%MOSTRADOR%'
+    - SIEMPRE agregar: AND fc.Cve_Cliente <> '20000'
+    - Y si hay JOIN a CM_Clientes: AND cl.Razon_Social NOT LIKE '%MOSTRADOR%'
   ⛔ NUNCA reportar "VENTA DE MOSTRADOR" como cliente — aunque tenga el mayor importe.
 
 CLASIFICACIÓN DE CLIENTES — por CM_Clientes.Cve_Lista_Precios:

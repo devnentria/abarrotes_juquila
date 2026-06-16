@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/datos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.3.0
+# Versión  : 2.4.0
 # ============================================================
 """
 Router de datos del ERP para el Studio Dashboards.
@@ -120,7 +120,6 @@ _SPECS_TIPO: dict = {
     # Inventario
     "reporte_inventario":   {"titulo": "Dashboard de Inventario",           "layout": "inventory_report"},
     "inventario_stock":     {"titulo": "Stock actual por sucursal",         "layout": "kpi_bar"},
-    "caducidades":          {"titulo": "Productos por caducar (90 días)",   "layout": "ranking_hbar"},
     "stockouts":            {"titulo": "Productos sin existencia",          "layout": "ranking_hbar"},
 }
 
@@ -142,7 +141,6 @@ Ejemplos de solicitudes → función correcta:
   "clientes frecuentes"                        → clientes_frecuentes
   "variación de vendedores"                    → variacion_vendedores
   "inventario"  /  "stock"                     → reporte_inventario
-  "caducidades"                                → caducidades
   "sin existencia"  /  "sin stock"             → stockouts
 
 Usa "ninguno" SOLO para preguntas que NO encajan (ej: precio de un medicamento específico,
@@ -161,9 +159,8 @@ Funciones disponibles:
   top_productos        → Top 10 productos más vendidos. layout: ranking_hbar
   clientes_frecuentes  → Top 15 clientes por importe comprado. layout: ranking_hbar
   variacion_vendedores → Vendedores: período actual vs anterior. layout: dual_compare
-  reporte_inventario   → Dashboard COMPLETO de inventario: stock + caducidades + stockouts. layout: inventory_report
+  reporte_inventario   → Dashboard COMPLETO de inventario: stock + stockouts. layout: inventory_report
   inventario_stock     → Stock actual por sucursal: valor en MXN y unidades. layout: kpi_bar
-  caducidades          → Productos con lotes próximos a caducar (90 días). layout: ranking_hbar
   stockouts            → Sucursales con más productos sin existencia (stock = 0). layout: ranking_hbar
   ventas_producto      → Ventas de un producto específico por sucursal. Requiere campo extra "producto". layout: ranking_hbar
                          Usar cuando el usuario mencione un producto concreto: "ventas de Omnitrope en mayo",
@@ -636,6 +633,7 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
             LEFT JOIN GC_Clientes cl ON cl.Cve_Cliente=t.Cve_Cliente
             GROUP BY t.Cve_Cliente, cl.Nombre_Cliente
             HAVING ISNULL(cl.Nombre_Cliente, t.Cve_Cliente) NOT LIKE '%MOSTRADOR%'
+               AND t.Cve_Cliente <> '20000'
             ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
@@ -780,16 +778,13 @@ def _resumir_datos(tipo: str, datos: dict) -> str:
         # _fetch_tipo devuelve { ..., datos: { inventario_stock, ... } } — desenvolver
         _inner     = datos.get("datos") if isinstance(datos.get("datos"), dict) else datos
         stock_data = _inner.get("inventario_stock", {})
-        cad_data   = _inner.get("caducidades", {})
         out_data   = _inner.get("stockouts", {})
         total_v    = float(stock_data.get("total_valor", 0) or 0)
         total_u    = float(stock_data.get("total_unidades", 0) or 0)
         criticos   = sum(int(r.get("criticos", 0) or 0) for r in stock_data.get("datos", []))
-        n_cad      = len(cad_data.get("datos", []))
         n_out      = int(out_data.get("total", 0) or 0)
         resumen = (f"Inventario total: {_fmt_mxn(total_v)} · {int(total_u):,} unidades. "
                    f"Productos críticos: {criticos}. "
-                   f"Lotes por caducar (90d): {n_cad}. "
                    f"Productos sin stock: {n_out:,}.")
     elif tipo == "inventario_stock":
         total_v = float(datos.get("total_valor", 0) or 0)
@@ -800,16 +795,6 @@ def _resumir_datos(tipo: str, datos: dict) -> str:
                    f"Unidades: {int(total_u):,}. "
                    f"Sucursal con mayor stock: {top.get('label','?')} ({_fmt_mxn(float(top.get('actual', 0) or 0))}). "
                    f"Productos críticos (≤5 piezas): {criticos}.")
-
-    elif tipo == "caducidades":
-        total_uds = sum(float(r.get("unidades", 0) or 0) for r in lista)
-        urgentes  = [r for r in lista if int(r.get("dias", 999) or 999) <= 30]
-        resumen = (f"Lotes próximos a caducar (90 días): {len(lista)}. "
-                   f"Unidades en riesgo: {int(total_uds):,}. "
-                   f"Urgentes (≤30 días): {len(urgentes)}.")
-        if lista:
-            prox = lista[0]
-            resumen += f" Más próximo: {prox.get('label','?')} en {prox.get('dias','?')} días."
 
     elif tipo == "stockouts":
         total_prod = int(sum(float(r.get("valor", 0) or 0) for r in lista))
@@ -1257,6 +1242,7 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             LEFT JOIN GC_Clientes cl ON cl.Cve_Cliente=t.Cve_Cliente
             GROUP BY t.Cve_Cliente, cl.Nombre_Cliente
             HAVING ISNULL(cl.Nombre_Cliente, t.Cve_Cliente) NOT LIKE '%MOSTRADOR%'
+               AND t.Cve_Cliente <> '20000'
             ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
@@ -1366,7 +1352,6 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
 
     elif tipo == "reporte_inventario":
         stock = _fetch_tipo("inventario_stock", modo)
-        cad   = _fetch_tipo("caducidades",      modo)
         out   = _fetch_tipo("stockouts",        modo)
 
         # Tendencia histórica de valor de stock (últimos 4 meses)
@@ -1458,7 +1443,6 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "titulo": "Dashboard de Inventario",
             "datos": {
                 "inventario_stock":  stock,
-                "caducidades":       cad,
                 "stockouts":         out,
                 "tendencia_stock":   tendencia_stock,
                 "rotacion_rows":     rotacion_rows,
@@ -1494,39 +1478,6 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "total_valor":    total_valor,
             "total_unidades": total_unidades,
             "datos":          rows,
-        }
-
-    elif tipo == "caducidades":
-        rows = query(f"""
-            SELECT TOP 20
-                p.Descripcion COLLATE DATABASE_DEFAULT + ' · Lote: ' + ISNULL(l.Num_Lote COLLATE DATABASE_DEFAULT, '—') AS label,
-                ISNULL(l.Existencia, 0) AS unidades,
-                ISNULL(l.Existencia * ISNULL(e.Costo_Promedio, 0), 0)  AS valor,
-                DATEDIFF(DAY, CAST({hoy()} AS DATE),
-                         CAST(l.Fecha_Caducidad AS DATE))               AS dias,
-                CONVERT(varchar(10), l.Fecha_Caducidad, 103)            AS fecha_caducidad,
-                s.Nombre AS sucursal
-            FROM IN_Existencias_Lote l
-            JOIN IM_Productos_Gral p
-              ON p.Cve_Producto = l.Cve_Producto
-            JOIN GN_Sucursales s
-              ON s.Cve_Sucursal = l.Cve_Sucursal
-            LEFT JOIN IN_Existencias_Alm e
-              ON e.Cve_Sucursal = l.Cve_Sucursal
-             AND e.Cve_Producto = l.Cve_Producto
-             AND e.Cve_Almacen  = l.Cve_Almacen
-             AND e.Status = 'AC'
-            WHERE l.Existencia > 0
-              AND l.Fecha_Caducidad IS NOT NULL
-              AND CAST(l.Fecha_Caducidad AS DATE) >= CAST({hoy()} AS DATE)
-              AND CAST(l.Fecha_Caducidad AS DATE) <= DATEADD(DAY, 90, CAST({hoy()} AS DATE))
-              AND s.Cve_Sucursal <> 99
-            ORDER BY l.Fecha_Caducidad ASC
-        """)
-        return {
-            "tipo":   tipo,
-            "titulo": "Productos por caducar — próximos 90 días",
-            "datos":  rows,
         }
 
     elif tipo == "stockouts":
