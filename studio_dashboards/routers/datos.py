@@ -635,6 +635,7 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
             ) t
             LEFT JOIN GC_Clientes cl ON cl.Cve_Cliente=t.Cve_Cliente
             GROUP BY t.Cve_Cliente, cl.Nombre_Cliente
+            HAVING ISNULL(cl.Nombre_Cliente, t.Cve_Cliente) NOT LIKE '%MOSTRADOR%'
             ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
@@ -1254,7 +1255,9 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
                 GROUP BY c.Cve_Cliente, c.Cve_Folio
             ) t
             LEFT JOIN GC_Clientes cl ON cl.Cve_Cliente=t.Cve_Cliente
-            GROUP BY t.Cve_Cliente, cl.Nombre_Cliente ORDER BY valor DESC
+            GROUP BY t.Cve_Cliente, cl.Nombre_Cliente
+            HAVING ISNULL(cl.Nombre_Cliente, t.Cve_Cliente) NOT LIKE '%MOSTRADOR%'
+            ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         return {"tipo": tipo, "modo": modo,
