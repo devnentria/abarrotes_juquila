@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/chat.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 1.1.3
+# Versión  : 1.2.0
 # ============================================================
 """
 Router de Chat — Studio Dashboards.
@@ -11,7 +11,7 @@ Router de Chat — Studio Dashboards.
 Igual que el chat de la PWA pero con:
   - Modelo superior (STUDIO_CHAT_MODEL, default gpt-4.1)
   - Detección automática de solicitudes de dashboard
-  - Cada consulta descuenta 2 del límite (IA_RATIO_STUDIO = 2 por defecto)
+  - Cada consulta descuenta 1.75 del límite (IA_RATIO_STUDIO = 1.75)
 
 Endpoints:
   GET    /api/studio/chat/conversaciones           → Lista conversaciones
@@ -31,10 +31,14 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
+from openai import OpenAI as _OpenAI
 from shared.config import (
+    OPENAI_API_KEY,
     STUDIO_PRECIO_INPUT, STUDIO_PRECIO_OUTPUT, IA_RATIO_STUDIO,
-    STUDIO_CHAT_MODEL,
+    STUDIO_CHAT_MODEL, STUDIO_IA_MODEL,
 )
+
+_ai_client = _OpenAI(api_key=OPENAI_API_KEY)
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente.especialistas import (
@@ -110,8 +114,50 @@ _ESPECIALISTAS = {
     "mixto":      mixto.responder,
 }
 
+_SISTEMA_ANALISTA = """
+Eres un analista de negocio senior de una distribuidora farmacéutica de especialidades.
+Tu asistente técnico ya consultó el ERP y obtuvo los datos exactos.
+
+Tu tarea es enriquecer esa respuesta con análisis ejecutivo profundo:
+- Conserva los datos exactos tal como vienen (tablas, cifras, productos)
+- Añade contexto de negocio: qué significa ese número en términos de operación
+- Identifica patrones, comparaciones o tendencias que se puedan inferir
+- Cierra con una conclusión ejecutiva accionable (qué revisar, qué destacar, qué hacer)
+
+Formato: markdown estructurado con secciones claras. Responde siempre en español.
+No inventes datos que no estén en la respuesta del asistente técnico.
+"""
+
+
+def _enriquecer(pregunta: str, respuesta_agente: str) -> str:
+    """
+    Segunda pasada exclusiva de Studio: enriquece la respuesta técnica del agente
+    con análisis ejecutivo profundo usando STUDIO_IA_MODEL (gpt-5-nano).
+    Si falla, devuelve la respuesta original sin modificar.
+    """
+    try:
+        resp = _ai_client.chat.completions.create(
+            model=STUDIO_IA_MODEL,
+            messages=[
+                {"role": "system", "content": _SISTEMA_ANALISTA},
+                {
+                    "role": "user",
+                    "content": (
+                        f"**Pregunta original del usuario:** {pregunta}\n\n"
+                        f"**Datos obtenidos del ERP:**\n{respuesta_agente}"
+                    ),
+                },
+            ],
+            max_tokens=1200,
+            temperature=0.3,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[studio-chat] _enriquecer error: {e}", flush=True)
+        return respuesta_agente
+
 # Ratio de consultas que descuenta cada mensaje en Studio (1.5 con o4-mini)
-_RATIO = float(IA_RATIO_STUDIO)  # 1.5 — Studio usa o4-mini (razonamiento)
+_RATIO = float(IA_RATIO_STUDIO)  # 1.75 — Studio usa doble IA: agente + analista ejecutivo
 
 router = APIRouter(prefix="/api/studio/chat")
 
@@ -244,14 +290,15 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 msg, historial, model=STUDIO_CHAT_MODEL,
                 precio_input=STUDIO_PRECIO_INPUT, precio_output=STUDIO_PRECIO_OUTPUT,
             )
-            fn              = _ESPECIALISTAS.get(area, mixto.responder)
-            resultado       = fn(msg, historial, model=STUDIO_CHAT_MODEL)
-            respuesta       = resultado.texto
-            costo_usd       = costo_dir + (
+            fn        = _ESPECIALISTAS.get(area, mixto.responder)
+            resultado = fn(msg, historial, model=STUDIO_CHAT_MODEL)
+            costo_usd = costo_dir + (
                 resultado.tokens_prompt     * STUDIO_PRECIO_INPUT
                 + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
-            estado = "done"
+            # Segunda pasada exclusiva de Studio: análisis ejecutivo profundo
+            respuesta = _enriquecer(msg, resultado.texto)
+            estado    = "done"
         except Exception as e:
             print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 

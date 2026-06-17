@@ -306,13 +306,12 @@ VENTAS POR MÉDICO PRESCRIPTOR — relación a través de CM_Clientes.Cve_Ruta:
   ⚠ NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
   ⚠ NUNCA sustituir por vendedores.
 
-TOTALES DE VENTA — REGLA CRÍTICA (para que los números coincidan con el dashboard, sin IVA):
-  ⚠ SIEMPRE usar SUM(fd.Importe_Neto) de FT_Facturas_D para cualquier total de ventas — período, sucursal, ranking o producto.
-  ⚠ NUNCA usar fc.Importe_Total de FT_Facturas_C — ese campo incluye IVA y no coincide con el reporte de ventas.
-  ⚠ SIEMPRE filtrar fc.Cve_Sucursal <> 99 en la query aunque no haya JOIN a GN_Sucursales.
-  · Para todo total de ventas: JOIN FT_Facturas_C fc + FT_Facturas_D fd, luego SUM(fd.Importe_Neto)
-    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
-  · NO filtrar por Cve_Movimiento salvo que se pida explícitamente
+TOTALES DE VENTA — FUENTE ÚNICA OBLIGATORIA:
+  ⚠ SIEMPRE usar FT_Pedidos_C + FT_Pedidos_Dia con Referencia_Cliente='PAGADO' — para TODO tipo de consulta de ventas (período, sucursal, ranking o producto).
+  ⚠ NUNCA usar FT_Facturas para totales o productos — sus importes no coinciden con el ERP de ventas.
+  ⚠ SIEMPRE filtrar Cve_Sucursal <> 99.
+  · Importe = SUM(d.Cantidad_Ordenada * d.Precio) agrupado por folio para evitar duplicados.
+  · NO filtrar por Cve_Movimiento salvo que se pida explícitamente.
 
 MARGEN BRUTO — CÁLCULO OBLIGATORIO:
   · fd.Costo = costo unitario al momento de la venta (fuente histórica real).
@@ -409,18 +408,20 @@ VENTAS POR SUCURSAL ESPECÍFICA — REGLA CRÍTICA:
   Cuando la pregunta menciona una sucursal (ej: "ventas en Puebla", "cómo va CDMX", "Monterrey abril"):
   ⛔ NUNCA devolver ventas de todas las sucursales — el resultado sería incorrecto y confuso.
   ⛔ NUNCA omitir AND s.Nombre LIKE '%nombre_sucursal%' en el WHERE.
-  ✅ SIEMPRE JOIN a GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal + filtrar por s.Nombre.
+  ✅ SIEMPRE JOIN a GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal + filtrar por s.Nombre.
   ✅ El número que reportes debe coincidir SOLO con esa sucursal, no con el total de la empresa.
 
   Consulta estándar para ventas de una sucursal en un período:
-    SELECT s.Nombre AS Sucursal, SUM(fd.Importe_Neto) AS Total,
-           COUNT(DISTINCT fc.Cve_Folio) AS Facturas
-    FROM FT_Facturas_C fc
-    JOIN FT_Facturas_D fd ON fd.Cve_Folio=fc.Cve_Folio AND fd.Cve_Sucursal=fc.Cve_Sucursal AND fd.Cve_Movimiento=fc.Cve_Movimiento
-    JOIN GN_Sucursales s ON s.Cve_Sucursal=fc.Cve_Sucursal
-    WHERE fc.Status = 'AC' AND fc.Cve_Sucursal <> 99
+    SELECT s.Nombre AS Sucursal,
+           ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS Total,
+           COUNT(DISTINCT c.Cve_Folio) AS Pedidos
+    FROM FT_Pedidos_C c
+    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+    JOIN GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal
+    WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+      AND c.Cve_Sucursal <> 99
       AND s.Nombre LIKE '%nombre_sucursal%'
-      AND [filtro de período sobre fc.Fecha_Documento]
+      AND [filtro de período sobre c.Fecha_Documento]
     GROUP BY s.Nombre
 
   PROTOCOLO SI NO ENCUENTRA LA SUCURSAL:

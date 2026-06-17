@@ -81,7 +81,7 @@ STUDIO_PRECIO_OUTPUT: float = float(os.getenv("STUDIO_PRECIO_OUTPUT", "0.0000016
 
 # Ratio Studio: cada consulta en Studio vale 1.5 en cuota de usuario
 # Dashboards complejos usan _RATIO_DASHBOARD = 3 en datos.py
-IA_RATIO_STUDIO: float = float(os.getenv("IA_RATIO_STUDIO", "1.5"))
+IA_RATIO_STUDIO: float = float(os.getenv("IA_RATIO_STUDIO", "1.75"))
 
 # ── JWT ───────────────────────────────────────────────────────────────────────
 # Generar un secret seguro: python -c "import secrets; print(secrets.token_hex(32))"
