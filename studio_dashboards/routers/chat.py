@@ -31,14 +31,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
-from openai import OpenAI as _OpenAI
 from shared.config import (
-    OPENAI_API_KEY,
     STUDIO_PRECIO_INPUT, STUDIO_PRECIO_OUTPUT, IA_RATIO_STUDIO,
-    STUDIO_CHAT_MODEL, STUDIO_IA_MODEL,
+    STUDIO_CHAT_MODEL,
 )
-
-_ai_client = _OpenAI(api_key=OPENAI_API_KEY)
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente.especialistas import (
@@ -114,55 +110,7 @@ _ESPECIALISTAS = {
     "mixto":      mixto.responder,
 }
 
-_SISTEMA_ANALISTA = """
-Eres un analista de negocio senior de una distribuidora farmacéutica de especialidades.
-Tu asistente técnico ya consultó el ERP y obtuvo los datos exactos.
-
-REGLAS ABSOLUTAS — incumplirlas es un error crítico:
-1. REPRODUCE todos los datos exactamente: cifras, totales, filas de tabla — sin omitir ninguna.
-   Si el agente trajo 9 sucursales, muestra las 9. Si trajo un total de $X, ese total no cambia.
-2. NUNCA recalcules totales ni sumes parciales — solo usa los números que ya vienen en los datos.
-3. NUNCA omitas filas, sucursales, productos o registros aunque sean pocos o pequeños.
-4. NUNCA inventes datos, tendencias o comparaciones que no estén explícitamente en los datos.
-
-Tu tarea (solo después de cumplir las reglas anteriores):
-- Añade contexto de negocio: qué implica ese resultado para la operación
-- Identifica patrones o hallazgos relevantes que se observen en los datos mostrados
-- Cierra con una conclusión ejecutiva breve y accionable
-
-Formato: markdown estructurado. Responde siempre en español.
-"""
-
-
-def _enriquecer(pregunta: str, respuesta_agente: str) -> str:
-    """
-    Segunda pasada exclusiva de Studio: enriquece la respuesta técnica del agente
-    con análisis ejecutivo profundo usando STUDIO_IA_MODEL (gpt-5-nano).
-    Si falla, devuelve la respuesta original sin modificar.
-    """
-    try:
-        resp = _ai_client.chat.completions.create(
-            model=STUDIO_IA_MODEL,
-            messages=[
-                {"role": "system", "content": _SISTEMA_ANALISTA},
-                {
-                    "role": "user",
-                    "content": (
-                        f"**Pregunta original del usuario:** {pregunta}\n\n"
-                        f"**Datos obtenidos del ERP:**\n{respuesta_agente}"
-                    ),
-                },
-            ],
-            max_tokens=1800,
-            temperature=0.3,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"[studio-chat] _enriquecer error: {e}", flush=True)
-        return respuesta_agente
-
-# Ratio de consultas que descuenta cada mensaje en Studio (1.5 con o4-mini)
-_RATIO = float(IA_RATIO_STUDIO)  # 1.75 — Studio usa doble IA: agente + analista ejecutivo
+_RATIO = float(IA_RATIO_STUDIO)  # 1.0 — Studio usa el mismo modelo que PWA (gpt-4.1-mini)
 
 router = APIRouter(prefix="/api/studio/chat")
 
@@ -301,8 +249,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 resultado.tokens_prompt     * STUDIO_PRECIO_INPUT
                 + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
-            # Segunda pasada exclusiva de Studio: análisis ejecutivo profundo
-            respuesta = _enriquecer(msg, resultado.texto)
+            respuesta = resultado.texto
             estado    = "done"
         except Exception as e:
             print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
