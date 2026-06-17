@@ -30,11 +30,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from openai import OpenAI as _OpenAI
 from shared.auth import get_current_user
 from shared.config import (
+    OPENAI_API_KEY,
     STUDIO_PRECIO_INPUT, STUDIO_PRECIO_OUTPUT, IA_RATIO_STUDIO,
     STUDIO_CHAT_MODEL,
 )
+
+_ai_client = _OpenAI(api_key=OPENAI_API_KEY)
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente.especialistas import (
@@ -110,7 +114,46 @@ _ESPECIALISTAS = {
     "mixto":      mixto.responder,
 }
 
-_RATIO = float(IA_RATIO_STUDIO)  # 1.0 — Studio usa el mismo modelo que PWA (gpt-4.1-mini)
+_SISTEMA_ANALISTA = """
+Eres un analista de negocio senior de una distribuidora farmacéutica de especialidades.
+Tu asistente técnico ya consultó el ERP y obtuvo los datos exactos.
+
+REGLAS ABSOLUTAS:
+1. Reproduce TODOS los datos exactamente — cifras, totales, filas de tabla, sin omitir ninguna.
+2. NUNCA recalcules totales ni inventes números que no estén en los datos originales.
+3. NUNCA omitas sucursales, productos o registros aunque su valor sea cero.
+
+Tu tarea (después de reproducir los datos):
+- Interpreta qué significan los números en términos de operación del negocio
+- Identifica el hallazgo más relevante (líder, caída, anomalía, oportunidad)
+- Cierra con una conclusión ejecutiva breve y accionable (1-2 líneas)
+
+Formato: markdown con secciones claras. Responde en español.
+"""
+
+
+def _enriquecer(pregunta: str, respuesta_agente: str) -> str:
+    """Segunda pasada de Studio: análisis ejecutivo con STUDIO_CHAT_MODEL (gpt-4.1-mini)."""
+    try:
+        resp = _ai_client.chat.completions.create(
+            model=STUDIO_CHAT_MODEL,
+            messages=[
+                {"role": "system", "content": _SISTEMA_ANALISTA},
+                {"role": "user", "content": (
+                    f"**Pregunta del usuario:** {pregunta}\n\n"
+                    f"**Datos del ERP:**\n{respuesta_agente}"
+                )},
+            ],
+            max_tokens=1500,
+            temperature=0.3,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"[studio-chat] _enriquecer error: {e}", flush=True)
+        return respuesta_agente
+
+
+_RATIO = float(IA_RATIO_STUDIO)  # 1.75 — Studio usa doble gpt-4.1-mini: agente + analista
 
 router = APIRouter(prefix="/api/studio/chat")
 
@@ -249,7 +292,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 resultado.tokens_prompt     * STUDIO_PRECIO_INPUT
                 + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
-            respuesta = resultado.texto
+            respuesta = _enriquecer(msg, resultado.texto)
             estado    = "done"
         except Exception as e:
             print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
