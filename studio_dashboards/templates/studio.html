@@ -3491,9 +3491,9 @@ function renderLayoutFullReport(container, spec) {
       data: {
         labels: sucData.map(r => r.label),
         datasets: [
-          { label: 'Actual',   data: sucData.map(r => parseFloat(r.actual   || 0)),
+          { label: _mLbl.actual,   data: sucData.map(r => parseFloat(r.actual   || 0)),
             backgroundColor: COLORES[0], borderRadius: 5, borderSkipped: false },
-          { label: 'Anterior', data: sucData.map(r => parseFloat(r.anterior || 0)),
+          { label: _mLbl.anterior, data: sucData.map(r => parseFloat(r.anterior || 0)),
             backgroundColor: esDark ? 'rgba(255,255,255,.13)' : 'rgba(0,0,0,.08)',
             borderRadius: 5, borderSkipped: false },
         ],
@@ -3534,20 +3534,27 @@ function renderLayoutFullReport(container, spec) {
     });
   }
 
-  // Chart: Tendencia mensual con proyección
+  // Chart: Tendencia mensual con proyección + banda de confianza ±10%
   if (mesData.length) {
     const mesLabels = mesData.map(r => r.mes_nombre || r.label || '');
     const mesVals   = mesData.map(r => parseFloat(r.valor || 0));
-    // Agregar punto de proyección
     if (proyeccion > 0) {
       mesLabels.push(mesProyeccion + ' ✦');
-      mesVals.push(null);  // null para no unir la línea real
+      mesVals.push(null);
     }
     const proyData = mesData.map(() => null);
+    const bandaSup = mesData.map(() => null);
+    const bandaInf = mesData.map(() => null);
     if (proyeccion > 0 && mesData.length >= 1) {
-      proyData[mesData.length - 1] = mesVals[mesData.length - 1];  // conector
+      const vConect = parseFloat(mesData[mesData.length - 1].valor || 0);
+      proyData[mesData.length - 1] = vConect;
       proyData.push(proyeccion);
+      bandaSup[mesData.length - 1] = vConect;
+      bandaSup.push(proyeccion * 1.10);
+      bandaInf[mesData.length - 1] = vConect;
+      bandaInf.push(proyeccion * 0.90);
     }
+    const _bandaClrFr = esDark ? 'rgba(124,58,237,0.15)' : 'rgba(124,58,237,0.10)';
     _dashCharts['fr-meses'] = new Chart(document.getElementById('fr-meses'), {
       type: 'line',
       data: {
@@ -3561,23 +3568,45 @@ function renderLayoutFullReport(container, spec) {
             fill: true, tension: 0.35, pointRadius: 4, pointHoverRadius: 7,
             borderWidth: 2, spanGaps: false,
           },
-          ...(proyeccion > 0 ? [{
-            label: 'Proyección',
-            data: proyData,
-            borderColor: '#7C3AED',
-            backgroundColor: 'transparent',
-            borderDash: [6, 4], tension: 0.2,
-            pointRadius: proyData.map((v, i) => (i === proyData.length - 1 ? 6 : 0)),
-            pointBackgroundColor: '#7C3AED',
-            borderWidth: 2, spanGaps: true,
-          }] : []),
+          ...(proyeccion > 0 ? [
+            {
+              label: 'Proyección',
+              data: proyData,
+              borderColor: '#7C3AED',
+              backgroundColor: 'transparent',
+              borderDash: [6, 4], tension: 0.2,
+              pointRadius: proyData.map((v, i) => (i === proyData.length - 1 ? 6 : 0)),
+              pointBackgroundColor: '#7C3AED',
+              borderWidth: 2, spanGaps: true,
+            },
+            {
+              label: '_banda_sup',
+              data: bandaSup,
+              borderColor: 'transparent', borderWidth: 0,
+              pointRadius: 0, pointHoverRadius: 0,
+              fill: '+1', backgroundColor: _bandaClrFr, tension: 0.2, spanGaps: true,
+            },
+            {
+              label: '_banda_inf',
+              data: bandaInf,
+              borderColor: 'transparent', borderWidth: 0,
+              pointRadius: 0, pointHoverRadius: 0,
+              fill: false, tension: 0.2, spanGaps: true,
+            },
+          ] : []),
         ],
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: {
-          legend: { labels: { color: tc, font: { size: 11 }, boxWidth: 10 } },
-          tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+          legend: {
+            labels: { color: tc, font: { size: 11 }, boxWidth: 10,
+                      filter: item => !item.text.startsWith('_') },
+          },
+          tooltip: {
+            filter: item => !item.dataset.label.startsWith('_'),
+            callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` },
+          },
         },
         scales: {
           x: { ticks: { color: tc, font: { size: 10 } }, grid: { display: false } },

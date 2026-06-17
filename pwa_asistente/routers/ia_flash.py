@@ -162,8 +162,7 @@ def ia_sucursal(
     if stock_cache is None:
         stock_detalle(cve_sucursal)
         stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
-    sin_stock_list = stock_cache.get("sin_stock",   [])
-    caducidades    = stock_cache.get("caducidades", [])
+    sin_stock_list = stock_cache.get("sin_stock", [])
 
     v          = ventas[0]       if ventas       else {}
     ped        = pedidos[0]      if pedidos      else {}
@@ -173,7 +172,6 @@ def ia_sucursal(
     n_ped      = ped.get("total",      0)
     dias_viejo = viejo.get("dias_antiguo", 0) or 0
     n_sin      = len(sin_stock_list)
-    n_cad      = len(caducidades)
     top_sin    = ", ".join(r["producto"] for r in sin_stock_list[:3]) or "ninguno"
     top_txt    = ", ".join(f"{r['producto']} (${r['importe']:,.0f})" for r in top3) or "sin registros"
 
@@ -184,7 +182,6 @@ def ia_sucursal(
         f"Ventas de ayer: ${importe:,.0f} en {facturas} facturas. "
         f"Pedidos activos: {n_ped} (el más antiguo lleva {dias_viejo} días sin surtir). "
         f"Productos con demanda reciente sin existencia: {n_sin} (los más críticos: {top_sin}). "
-        f"Productos próximos a caducar (90 días): {n_cad}. "
         f"Top productos del mes: {top_txt}. "
         f"Tono directo y profesional. Empieza con el nombre. "
         f"Menciona el dato más alarmante. Sin títulos, sin viñetas, sin saludos extensos."
@@ -230,29 +227,15 @@ def ia_inventario(
     if stock_cache is None:
         stock_detalle(cve_sucursal)
         stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
-    sin_stock_list = stock_cache.get("sin_stock",   [])
-    caducidades    = stock_cache.get("caducidades", [])
+    sin_stock_list = stock_cache.get("sin_stock", [])
 
     n_sin       = len(sin_stock_list)
     n_en_camino = sum(1 for p in sin_stock_list if p.get("en_camino", 0) > 0)
     top_sin_txt = ", ".join(
         p["producto"] for p in sin_stock_list[:3] if p.get("producto")
     ) or "ninguno"
-    cad_txt = ", ".join(
-        f"{r['producto']} (lote {r['lote']}, {r['dias_para_caducar']} días)"
-        for r in caducidades[:3]
-    ) or "ninguna en los próximos 60 días"
 
-    # Lotes ya caducados con existencia — no está en cache del detalle
-    caducados = query(f"""
-        SELECT COUNT(*) AS total
-        FROM IN_Existencias_Lote
-        WHERE Cve_Sucursal    = ?
-          AND Existencia      > 0
-          AND Fecha_Caducidad < {hoy()}
-    """, (cve_sucursal,))
-
-    # Stock crítico solo en productos con ventas recientes — no está en cache del detalle
+    # Stock crítico solo en productos con ventas recientes
     stock_critico = query(f"""
         SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
         FROM IN_Existencias_Alm ea
@@ -272,8 +255,7 @@ def ia_inventario(
           )
     """, (cve_sucursal,))
 
-    n_caducados = caducados[0]["total"]     if caducados     else 0
-    n_critico   = stock_critico[0]["total"] if stock_critico else 0
+    n_critico = stock_critico[0]["total"] if stock_critico else 0
 
     prompt = (
         f"Eres el asistente analítico personal de {nombre}. "
@@ -281,10 +263,8 @@ def ia_inventario(
         f"dirigidas a {nombre}. "
         f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia "
         f"({n_en_camino} de ellos ya tienen piezas en camino por traspaso pendiente), "
-        f"{n_critico} en stock crítico (menos de 5 piezas), "
-        f"{n_caducados} lotes con producto caducado aún en almacén. "
+        f"{n_critico} en stock crítico (menos de 5 piezas). "
         f"Productos más vendidos sin existencia: {top_sin_txt}. "
-        f"Caducidades próximas (60 días): {cad_txt}. "
         f"Tono profesional y urgente si hay riesgo. Empieza con el nombre. "
         f"Destaca el problema más grave. Sin títulos ni viñetas."
     )
