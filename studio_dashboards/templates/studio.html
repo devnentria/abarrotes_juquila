@@ -3233,9 +3233,11 @@ function renderLayoutTrendArea(container, spec) {
   // Agregar punto de proyección al final
   const labelsChart = [...labels, ...(proyeccion > 0 ? [proyLabel] : [])];
   const valsChart   = [...vals,   ...(proyeccion > 0 ? [null] : [])];
-  // Banda de confianza ±10% alrededor de la proyección
-  const _tol       = 0.10;
-  const _bandaClr  = esDark ? 'rgba(124,58,237,0.15)' : 'rgba(124,58,237,0.10)';
+  // Banda de confianza ±15% alrededor de la proyección
+  // índices en datasets[]: 0=Ventas, 1=Proyección, 2=_banda_sup, 3=_banda_inf
+  // _banda_inf usa fill.target:2 (hacia _banda_sup) — más confiable en Chart.js v4
+  const _tol       = 0.15;
+  const _bandaClr  = esDark ? 'rgba(124,58,237,0.20)' : 'rgba(124,58,237,0.14)';
   const _nullsPrev = new Array(vals.length - 1).fill(null);
   const proyDataset = proyeccion > 0 ? [
     {
@@ -3244,7 +3246,7 @@ function renderLayoutTrendArea(container, spec) {
       borderColor: '#7C3AED',
       borderDash: [6, 4],
       borderWidth: 2,
-      pointRadius: [..._nullsPrev.map(() => 0), 0, 4],
+      pointRadius: [..._nullsPrev.map(() => 0), 0, 5],
       pointBackgroundColor: '#7C3AED',
       fill: false,
       tension: 0,
@@ -3252,22 +3254,23 @@ function renderLayoutTrendArea(container, spec) {
     {
       label: '_banda_sup',
       data: [..._nullsPrev, vN, proyeccion * (1 + _tol)],
-      borderColor: 'transparent',
-      borderWidth: 0,
+      borderColor: 'rgba(124,58,237,0.25)',
+      borderWidth: 1,
+      borderDash: [3, 3],
       pointRadius: 0,
       pointHoverRadius: 0,
-      fill: '+1',
-      backgroundColor: _bandaClr,
+      fill: false,
       tension: 0,
     },
     {
       label: '_banda_inf',
       data: [..._nullsPrev, vN, proyeccion * (1 - _tol)],
-      borderColor: 'transparent',
-      borderWidth: 0,
+      borderColor: 'rgba(124,58,237,0.25)',
+      borderWidth: 1,
+      borderDash: [3, 3],
       pointRadius: 0,
       pointHoverRadius: 0,
-      fill: false,
+      fill: { target: 2, above: _bandaClr, below: 'transparent' },
       tension: 0,
     },
   ] : [];
@@ -3550,11 +3553,12 @@ function renderLayoutFullReport(container, spec) {
       proyData[mesData.length - 1] = vConect;
       proyData.push(proyeccion);
       bandaSup[mesData.length - 1] = vConect;
-      bandaSup.push(proyeccion * 1.10);
+      bandaSup.push(proyeccion * 1.15);
       bandaInf[mesData.length - 1] = vConect;
-      bandaInf.push(proyeccion * 0.90);
+      bandaInf.push(proyeccion * 0.85);
     }
-    const _bandaClrFr = esDark ? 'rgba(124,58,237,0.15)' : 'rgba(124,58,237,0.10)';
+    // índices: 0=Ventas mensuales, 1=Proyección, 2=_banda_sup, 3=_banda_inf
+    const _bandaClrFr = esDark ? 'rgba(124,58,237,0.20)' : 'rgba(124,58,237,0.14)';
     _dashCharts['fr-meses'] = new Chart(document.getElementById('fr-meses'), {
       type: 'line',
       data: {
@@ -3582,16 +3586,17 @@ function renderLayoutFullReport(container, spec) {
             {
               label: '_banda_sup',
               data: bandaSup,
-              borderColor: 'transparent', borderWidth: 0,
+              borderColor: 'rgba(124,58,237,0.25)', borderWidth: 1, borderDash: [3, 3],
               pointRadius: 0, pointHoverRadius: 0,
-              fill: '+1', backgroundColor: _bandaClrFr, tension: 0.2, spanGaps: true,
+              fill: false, tension: 0.2, spanGaps: true,
             },
             {
               label: '_banda_inf',
               data: bandaInf,
-              borderColor: 'transparent', borderWidth: 0,
+              borderColor: 'rgba(124,58,237,0.25)', borderWidth: 1, borderDash: [3, 3],
               pointRadius: 0, pointHoverRadius: 0,
-              fill: false, tension: 0.2, spanGaps: true,
+              fill: { target: 2, above: _bandaClrFr, below: 'transparent' },
+              tension: 0.2, spanGaps: true,
             },
           ] : []),
         ],
