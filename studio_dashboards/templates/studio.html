@@ -1036,7 +1036,7 @@
                 <th>Sucursal</th>
                 <th style="text-align:right">Ventas</th>
                 <th style="text-align:right">Facturas</th>
-                <th style="text-align:right">vs período anterior</th>
+                <th id="comp-th-tendencia" style="text-align:right">Tendencia</th>
               </tr>
             </thead>
             <tbody id="comp-tabla-body"></tbody>
@@ -2307,9 +2307,14 @@ function renderTablaComparativo(sucursales, modo) {
   const loading = document.getElementById('comp-loading');
   const wrap    = document.getElementById('comp-tabla-wrap');
   const tbody   = document.getElementById('comp-tabla-body');
+  const thTend  = document.getElementById('comp-th-tendencia');
 
   loading.style.display = 'none';
   wrap.style.display    = 'block';
+
+  const _vsLabel = { hoy: 'Tendencia vs Ayer', '15d': 'Tendencia vs 15d previos',
+                     mes: 'Tendencia vs mes ant.', '30d': 'Tendencia vs 30d ant.' };
+  if (thTend) thTend.textContent = _vsLabel[modo] || 'Tendencia';
 
   tbody.innerHTML = sucursales.map(s => {
     const ventas   = parseFloat(s.ventas_actual || 0);
