@@ -269,6 +269,7 @@ def ventas_sucursales(modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
         ORDER BY ventas_actual DESC
     """)
 
+    rows = [r for r in rows if float(r.get("ventas_actual") or 0) > 0]
     for r in rows:
         actual   = float(r.get("ventas_actual") or 0)
         anterior = float(r.get("ventas_anterior") or 0)
@@ -1055,15 +1056,24 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             WHERE s.Cve_Sucursal<>99
             GROUP BY s.Cve_Sucursal, s.Nombre ORDER BY actual DESC
         """)
+        # Filtrar sucursales sin ventas en el período actual
+        rows = [r for r in rows if float(r.get("actual") or 0) > 0]
         for r in rows:
             actual   = float(r.get("actual") or 0)
             anterior = float(r.get("anterior") or 0)
             r["variacion_pct"] = (
                 round((actual - anterior) / anterior * 100, 1) if anterior > 0 else None
             )
+        _series = {
+            "hoy":  ["Hoy",           "Ayer"],
+            "15d":  ["Últ. 15 días",  "15 días previos"],
+            "mes":  ["Mes actual",    "Mes ant. (comparable)"],
+            "30d":  ["Últ. 30 días",  "30 días anteriores"],
+        }
+        series = _series.get(modo, ["Período actual", "30 días anteriores"])
         return {"tipo": tipo, "modo": modo,
                 "titulo": f"Ventas por sucursal ({label})",
-                "series": ["Período actual", "Período anterior"], "datos": rows}
+                "series": series, "datos": rows}
 
     elif tipo == "top_vendedores":
         filtro, _, label = _filtros_periodo(modo, "c.Fecha_Documento", fi, ff)
@@ -1332,14 +1342,15 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "titulo": "Dashboard de Ventas",
             "datos": {
                 "kpis": {
-                    "total_actual":    total_actual,
-                    "total_anterior":  total_anterior,
-                    "variacion":       variacion,
-                    "n_sucursales":    n_sucursales,
-                    "total_pedidos":   total_pedidos,
-                    "ticket_promedio": ticket_promedio,
-                    "proyeccion":      proyeccion,
-                    "mes_proyeccion":  mes_sig_nombre,
+                    "total_actual":     total_actual,
+                    "total_anterior":   total_anterior,
+                    "variacion":        variacion,
+                    "n_sucursales":     n_sucursales,
+                    "total_pedidos":    total_pedidos,
+                    "ticket_promedio":  ticket_promedio,
+                    "proyeccion":       proyeccion,
+                    "mes_proyeccion":   mes_sig_nombre,
+                    "pedidos_activos":  int(pedid.get("total", 0)),
                 },
                 "ventas_sucursal":  suc,
                 "top_productos":    prod,
