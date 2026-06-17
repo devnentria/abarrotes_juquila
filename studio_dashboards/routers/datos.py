@@ -343,10 +343,13 @@ def kpis_globales(modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
         WHERE Estatus = 'AC' AND Cve_Sucursal <> 99
     """)
 
-    sucursales_row = query("""
-        SELECT COUNT(*) AS total
-        FROM GN_Sucursales
-        WHERE Cve_Sucursal <> 99
+    sucursales_row = query(f"""
+        SELECT COUNT(DISTINCT c.Cve_Sucursal) AS total
+        FROM FT_Pedidos_C c
+        WHERE c.Estatus <> 'CN'
+          AND c.Referencia_Cliente = 'PAGADO'
+          AND c.Cve_Sucursal <> 99
+          AND {filtro}
     """)
 
     v = ventas_row[0] if ventas_row else {}
