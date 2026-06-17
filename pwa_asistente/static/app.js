@@ -438,17 +438,16 @@ function renderSucursalCards(containerId, sucursales, modo) {
   if (!el) return;
 
   el.innerHTML = sucursales.map(s => {
-    const lotesCad  = s.lotes_por_caducar || 0;
-    const sinStock  = s.sin_stock || 0;
-    const claseCad  = lotesCad > 10 ? 'tag-danger' : lotesCad > 0 ? 'tag-warn' : 'tag-success';
+    const sinStock = s.sin_stock || 0;
+    const claseStock = sinStock > 5 ? 'tag-warn' : 'tag-success';
 
     return `
       <div class="card-item sucursal-card" data-cve="${s.cve_sucursal}" data-modo="${modo}">
         <div class="card-row sucursal-header">
           <span class="card-title">${s.sucursal}</span>
           <div style="display:flex;align-items:center;gap:8px">
-            <span class="tag ${claseCad}">
-              ${lotesCad > 0 ? `${fmtNum(lotesCad)} lotes por caducar` : 'Sin caducidades'}
+            <span class="tag ${claseStock}">
+              ${sinStock > 0 ? `${fmtNum(sinStock)} sin existencia` : 'Stock OK'}
             </span>
             <span class="chevron">›</span>
           </div>
@@ -549,26 +548,10 @@ async function cargarResumenSucursal(cve, detalle) {
   detalle.innerHTML = html;
 }
 
-// ── Detalle Inventario: productos sin stock + caducidades ─────────────────────
+// ── Detalle Inventario: top stock + productos sin existencia ──────────────────
 async function cargarStockSucursal(cve, detalle) {
   const data = await authFetch(`/api/stock/${cve}`).then(r => r.json());
   let html = '';
-
-  // ── Caducidades próximas (primero — más urgente) ──────────────
-  if (data.caducidades?.length) {
-    html += `<div class="detalle-seccion">Por caducar · próximos 90 días</div>`;
-    html += data.caducidades.map(l => `
-      <div class="detalle-row">
-        <div style="flex:1;min-width:0">
-          <span class="detalle-nombre">${l.producto || '—'}</span>
-          <span class="detalle-lab">Lote ${l.lote} · ${fmtNum(l.existencia_lote)} pzas</span>
-        </div>
-        ${fmtDias(l.dias_para_caducar)}
-      </div>
-    `).join('');
-  } else {
-    html += `<div class="detalle-ok">✓ Sin lotes por caducar en 90 días</div>`;
-  }
 
   // ── Top productos con más existencia ─────────────────────────
   if (data.top_stock?.length) {

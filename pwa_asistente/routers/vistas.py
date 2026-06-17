@@ -97,7 +97,7 @@ def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
 
 @router.get("/stock")
 def stock():
-    """Card por sucursal con totales de existencia y lotes por caducar."""
+    """Card por sucursal con totales de existencia y productos sin stock."""
     sucursales = query(f"""
         SELECT
             s.Cve_Sucursal  AS cve_sucursal,
@@ -130,17 +130,10 @@ def stock():
                     HAVING SUM(ea2.Existencia) <= 0
                        AND ISNULL(SUM(v2.imp3m), 0) / 3.0 >= 50
                 ) _x
-            ) AS sin_stock,
-            COUNT(DISTINCT CASE
-                WHEN el.Fecha_Caducidad BETWEEN {hoy()} AND DATEADD(DAY, 90, {hoy()})
-                     AND el.Existencia > 0
-                THEN el.Num_Lote END) AS lotes_por_caducar
+            ) AS sin_stock
         FROM GN_Sucursales s
         LEFT JOIN IN_Existencias_Alm ea
                ON ea.Cve_Sucursal = s.Cve_Sucursal AND ea.Status = 'AC'
-        LEFT JOIN IN_Existencias_Lote el
-               ON el.Cve_Sucursal = s.Cve_Sucursal
-              AND el.Cve_Producto  = ea.Cve_Producto
         WHERE s.Cve_Sucursal <> 99
         GROUP BY s.Cve_Sucursal, s.Nombre
         ORDER BY s.Nombre
@@ -152,7 +145,7 @@ def stock():
 
 @router.get("/stock/{cve_sucursal}")
 def stock_detalle(cve_sucursal: int):
-    """Top stock, caducidades próximas y sin existencia por sucursal."""
+    """Top stock y sin existencia por sucursal."""
     _clave = f"stock_detalle_{cve_sucursal}"
     cached = _cache.get(_clave)
     if cached:
@@ -173,21 +166,6 @@ def stock_detalle(cve_sucursal: int):
         ORDER BY SUM(ea.Existencia) DESC
     """, (cve_sucursal,))
 
-    caducidades = query(f"""
-        SELECT TOP 15
-            p.Descripcion      AS producto,
-            el.Num_Lote        AS lote,
-            el.Fecha_Caducidad AS fecha_caducidad,
-            el.Existencia      AS existencia_lote,
-            DATEDIFF(DAY, {hoy()}, el.Fecha_Caducidad) AS dias_para_caducar
-        FROM IN_Existencias_Lote el
-        LEFT JOIN IM_Productos_Gral p ON el.Cve_Producto = p.Cve_Producto
-        WHERE el.Cve_Sucursal    = ?
-          AND el.Existencia      > 0
-          AND el.Fecha_Caducidad IS NOT NULL
-          AND el.Fecha_Caducidad BETWEEN {hoy()} AND DATEADD(DAY, 90, {hoy()})
-        ORDER BY el.Fecha_Caducidad ASC
-    """, (cve_sucursal,))
 
     # Barcode canónico: cada producto queda en un solo grupo (MIN barcode).
     # Variantes promo (mismo barcode, distinto Cve_Producto) se consolidan.
@@ -285,9 +263,8 @@ def stock_detalle(cve_sucursal: int):
         r['m3_label'] = _mes_label(1)
 
     resultado = {
-        "top_stock":   top_stock,
-        "caducidades": caducidades,
-        "sin_stock":   sin_stock,
+        "top_stock": top_stock,
+        "sin_stock": sin_stock,
     }
     _cache.set(_clave, resultado)
     return JSONResponse(resultado)
