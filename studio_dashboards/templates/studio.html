@@ -1923,7 +1923,7 @@ async function _scPollJob(jobId, hasDashHint) {
   try {
     const data = await api(`/api/studio/chat/job/${jobId}`);
     if (data.estado === 'pending') {
-      _scJobTimer = setTimeout(() => _scPollJob(jobId, hasDashHint), 2000);
+      _scJobTimer = setTimeout(() => _scPollJob(jobId, hasDashHint), 500);
       return;
     }
     _scRemoveTyping();
@@ -2001,7 +2001,7 @@ async function _scEnviar() {
       // Pending — mostrar skeleton si es solicitud de dashboard y hacer polling
       if (_dashHint) _scMostrarCargandoDashboard();
       clearTimeout(_scJobTimer);
-      _scJobTimer = setTimeout(() => _scPollJob(data.job_id, _dashHint), 2000);
+      _scJobTimer = setTimeout(() => _scPollJob(data.job_id, _dashHint), 500);
     }
 
     // Refrescar lista de conversaciones
