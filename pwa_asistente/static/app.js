@@ -585,7 +585,6 @@ async function cargarStockSucursal(cve, detalle) {
         <div class="detalle-badge">
           <span>~${fmtMXN_corto(p.prom_importe_mensual)}/mes</span>
           <span class="detalle-badge-meses">${p.m1_label}:${fmtNum(p.m1_uds)} ${p.m2_label}:${fmtNum(p.m2_uds)} ${p.m3_label}:${fmtNum(p.m3_uds)} pzs</span>
-          ${p.en_camino > 0 ? `<span class="detalle-badge-camino">📦 ${fmtNum(p.en_camino)} en camino</span>` : ''}
         </div>
       </div>
     `).join('');

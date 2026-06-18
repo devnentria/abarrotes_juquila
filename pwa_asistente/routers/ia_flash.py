@@ -230,7 +230,6 @@ def ia_inventario(
     sin_stock_list = stock_cache.get("sin_stock", [])
 
     n_sin       = len(sin_stock_list)
-    n_en_camino = sum(1 for p in sin_stock_list if p.get("en_camino", 0) > 0)
     top_sin_txt = ", ".join(
         p["producto"] for p in sin_stock_list[:3] if p.get("producto")
     ) or "ninguno"
@@ -261,8 +260,7 @@ def ia_inventario(
         f"Eres el asistente analítico personal de {nombre}. "
         f"Redacta exactamente 2 oraciones de alerta de inventario para {nombre_suc}, "
         f"dirigidas a {nombre}. "
-        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia "
-        f"({n_en_camino} de ellos ya tienen piezas en camino por traspaso pendiente), "
+        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia, "
         f"{n_critico} en stock crítico (menos de 5 piezas). "
         f"Productos más vendidos sin existencia: {top_sin_txt}. "
         f"Tono profesional y urgente si hay riesgo. Empieza con el nombre. "

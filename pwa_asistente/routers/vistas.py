@@ -183,33 +183,31 @@ def stock_detalle(cve_sucursal: int):
             ISNULL(SUM(v.m1_uds), 0)                        AS m1_uds,
             ISNULL(SUM(v.m2_uds), 0)                        AS m2_uds,
             ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds,
-            0                                               AS en_camino
         FROM cb_canon
         JOIN IM_Productos_Gral p   ON p.Cve_Producto  = cb_canon.Cve_Producto
         JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
                                   AND ea.Cve_Sucursal = ?
                                   AND ea.Status       = 'AC'
         LEFT JOIN (
-            SELECT fd.Cve_Producto,
-                   SUM(fd.Importe_Neto) AS importe,
-                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
-                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-3,{hoy()}))
-                            THEN fd.Cantidad ELSE 0 END) AS m1_uds,
-                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
-                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-2,{hoy()}))
-                            THEN fd.Cantidad ELSE 0 END) AS m2_uds,
-                   SUM(CASE WHEN YEAR(fc.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
-                             AND MONTH(fc.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
-                            THEN fd.Cantidad ELSE 0 END) AS m3_uds
-            FROM FT_Facturas_D fd
-            JOIN FT_Facturas_C fc
-              ON fd.Cve_Folio      = fc.Cve_Folio
-             AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-             AND fd.Cve_Movimiento = fc.Cve_Movimiento
-            WHERE fc.Cve_Sucursal      = ?
-              AND fc.Status           <> 'C'
-              AND fc.Fecha_Documento  >= DATEADD(MONTH, -3, {hoy()})
-            GROUP BY fd.Cve_Producto
+            SELECT d.Cve_Producto,
+                   SUM(d.Cantidad_Ordenada * d.Precio)  AS importe,
+                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-3,{hoy()}))
+                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m1_uds,
+                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-2,{hoy()}))
+                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m2_uds,
+                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
+                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m3_uds
+            FROM FT_Pedidos_C c
+            JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            WHERE c.Cve_Sucursal         = ?
+              AND c.Estatus             <> 'CN'
+              AND c.Referencia_Cliente   = 'PAGADO'
+              AND c.Fecha_Documento     >= DATEADD(MONTH, -3, {hoy()})
+            GROUP BY d.Cve_Producto
         ) v ON v.Cve_Producto = cb_canon.Cve_Producto
         WHERE p.Descripcion IS NOT NULL
         GROUP BY cb_canon.barcode_canon
@@ -228,34 +226,6 @@ def stock_detalle(cve_sucursal: int):
         while m <= 0:
             m += 12
         return _MESES[m]
-
-    # Enriquecer con piezas en camino (consulta separada solo para los productos resultantes)
-    if sin_stock:
-        traspasos_raw = query("""
-            SELECT CAST(t.Cve_Producto AS INT) AS cve_prod, SUM(t.Cantidad) AS en_camino
-            FROM VW_Temp_Transpaso_Pedidos t
-            WHERE t.Cve_Sucursal = ?
-            GROUP BY t.Cve_Producto
-        """, (cve_sucursal,))
-        # También necesitamos mapear descripcion → Cve_Producto para el cruce
-        descs = [r['producto'] for r in sin_stock]
-        traspasos_por_desc = {}
-        if traspasos_raw:
-            desc_map_raw = query(f"""
-                SELECT Cve_Producto, Descripcion
-                FROM IM_Productos_Gral
-                WHERE Descripcion IN ({','.join(['?' for _ in descs])})
-            """, tuple(descs))
-            # Cve_Producto en VW_Temp es int (10102), en IM_Productos_Gral es str ('010102')
-            # Normalizamos ambos a str sin transformación para el match
-            cve_to_camino = {str(t['cve_prod']): t['en_camino'] for t in traspasos_raw}
-            for dm in (desc_map_raw or []):
-                cve_str = str(int(dm['Cve_Producto']))  # '010102' → '10102'
-                camino = cve_to_camino.get(cve_str, 0)
-                if camino:
-                    traspasos_por_desc[dm['Descripcion']] = camino
-        for r in sin_stock:
-            r['en_camino'] = traspasos_por_desc.get(r['producto'], 0)
 
     for r in sin_stock:
         r['m1_label'] = _mes_label(3)
