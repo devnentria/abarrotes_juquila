@@ -109,6 +109,7 @@ def ejecutar(system: str, pregunta: str, historial: list[dict], area: str, model
         for tc in msg.tool_calls:
             try:
                 args  = json.loads(tc.function.arguments)
+                print(f"[agente-sql] {args['sql']}", flush=True)
                 filas = ejecutor.run(args["sql"])
                 contenido = (
                     json.dumps(filas, ensure_ascii=False, default=str)
