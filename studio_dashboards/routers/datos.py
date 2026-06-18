@@ -847,6 +847,263 @@ def productos_prediccion(cve_producto: int):
     })
 
 
+# ── Dashboard de Inventario ───────────────────────────────────────────────────
+
+@router.get("/inventario")
+def inventario_dashboard():
+    """
+    Dashboard de Inventario.
+
+    Retorna:
+      - valor_stock: valor total del inventario (costo × existencia)
+      - unidades_totales: suma de existencias
+      - productos_con_stock: productos con existencia > 0
+      - criticos: productos con existencia total = 0 pero ventas en últimos 90 días
+      - por_sucursal: valor, unidades y productos por sucursal
+      - top_por_valor: top 15 productos por valor en stock
+      - criticos_lista: top 20 críticos ordenados por importe de ventas 90d
+    """
+    _hoy = hoy()
+
+    # ── 1. KPIs globales ──────────────────────────────────────────────────────
+    try:
+        kpi_rows = query(f"""
+            SELECT
+                ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor_stock,
+                ISNULL(SUM(e.Existencia), 0)                               AS unidades_totales,
+                COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos_con_stock
+            FROM IN_Existencias_Alm e
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+        """)
+        kpi = kpi_rows[0] if kpi_rows else {}
+        valor_stock        = float(kpi.get("valor_stock") or 0)
+        unidades_totales   = int(kpi.get("unidades_totales") or 0)
+        productos_con_stock = int(kpi.get("productos_con_stock") or 0)
+    except Exception as e:
+        raise HTTPException(500, f"inventario-kpis: {e}")
+
+    # ── 2. Críticos: sin stock pero con ventas en 90 días ─────────────────────
+    try:
+        criticos_count_rows = query(f"""
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT e.Cve_Producto
+                FROM IN_Existencias_Alm e
+                WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+                GROUP BY e.Cve_Producto
+                HAVING SUM(e.Existencia) <= 0
+            ) sin_stock
+            WHERE sin_stock.Cve_Producto IN (
+                SELECT DISTINCT d.Cve_Producto
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Fecha_Documento >= DATEADD(DAY, -90, {_hoy})
+            )
+        """)
+        criticos = int((criticos_count_rows[0] if criticos_count_rows else {}).get("total") or 0)
+    except Exception as e:
+        raise HTTPException(500, f"inventario-criticos-count: {e}")
+
+    # ── 3. Stock por sucursal ─────────────────────────────────────────────────
+    try:
+        suc_rows = query(f"""
+            SELECT s.Nombre AS sucursal,
+                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor,
+                   ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                   COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos
+            FROM GN_Sucursales s
+            LEFT JOIN IN_Existencias_Alm e
+                ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            WHERE s.Cve_Sucursal <> 99
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            HAVING ISNULL(SUM(e.Existencia), 0) > 0
+            ORDER BY SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)) DESC
+        """)
+        por_sucursal = [
+            {
+                "sucursal":  (r["sucursal"] or "").strip(),
+                "valor":     round(float(r["valor"] or 0), 2),
+                "unidades":  int(r["unidades"] or 0),
+                "productos": int(r["productos"] or 0),
+            }
+            for r in suc_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-sucursal: {e}")
+
+    # ── 4. Top 15 productos por valor en stock ────────────────────────────────
+    try:
+        top_rows = query(f"""
+            SELECT TOP 15
+                MIN(pg.Descripcion)          AS descripcion,
+                SUM(e.Existencia)            AS unidades,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base, 0))   AS precio1,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base2, 0))   AS precio2,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base3, 0))   AS precio3
+            FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            GROUP BY e.Cve_Producto
+            ORDER BY SUM(e.Existencia) DESC
+        """)
+        top_por_valor = [
+            {
+                "descripcion": (r["descripcion"] or "").strip(),
+                "unidades":    int(r["unidades"] or 0),
+                "precio1":     round(float(r["precio1"] or 0), 2),
+                "precio2":     round(float(r["precio2"] or 0), 2),
+                "precio3":     round(float(r["precio3"] or 0), 2),
+            }
+            for r in top_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-top: {e}")
+
+    # ── 5. Lista críticos (top 20 por importe de ventas 90d) ──────────────────
+    try:
+        crit_rows = query(f"""
+            SELECT TOP 20
+                MIN(pg.Descripcion)                  AS descripcion,
+                SUM(v.piezas_90d)                    AS piezas_90d,
+                SUM(v.importe_90d)                   AS importe_90d
+            FROM (
+                SELECT e.Cve_Producto
+                FROM IN_Existencias_Alm e
+                WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+                GROUP BY e.Cve_Producto
+                HAVING SUM(e.Existencia) <= 0
+            ) sin_stock
+            INNER JOIN (
+                SELECT d.Cve_Producto,
+                       SUM(d.Cantidad_Ordenada)            AS piezas_90d,
+                       SUM(d.Cantidad_Ordenada * d.Precio) AS importe_90d
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Fecha_Documento >= DATEADD(DAY, -90, {_hoy})
+                GROUP BY d.Cve_Producto
+            ) v ON v.Cve_Producto = sin_stock.Cve_Producto
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = sin_stock.Cve_Producto
+            GROUP BY sin_stock.Cve_Producto
+            ORDER BY SUM(v.importe_90d) DESC
+        """)
+        criticos_lista = [
+            {
+                "descripcion": (r["descripcion"] or "").strip(),
+                "piezas_90d":  int(r["piezas_90d"] or 0),
+                "importe_90d": round(float(r["importe_90d"] or 0), 2),
+            }
+            for r in crit_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-criticos-lista: {e}")
+
+    # Lista de productos con stock para el selector de consulta histórica
+    try:
+        lista_rows = query(f"""
+            SELECT DISTINCT CAST(e.Cve_Producto AS VARCHAR) AS cve_producto,
+                   MIN(pg.Descripcion) AS descripcion
+            FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            GROUP BY e.Cve_Producto
+            ORDER BY MIN(pg.Descripcion)
+        """)
+        lista_productos = [
+            {"cve_producto": r["cve_producto"], "descripcion": (r["descripcion"] or "").strip()}
+            for r in lista_rows
+        ]
+    except Exception:
+        lista_productos = []
+
+    return JSONResponse({
+        "valor_stock":         round(valor_stock, 2),
+        "unidades_totales":    unidades_totales,
+        "productos_con_stock": productos_con_stock,
+        "criticos":            criticos,
+        "por_sucursal":        por_sucursal,
+        "top_por_valor":       top_por_valor,
+        "criticos_lista":      criticos_lista,
+        "lista_productos":     lista_productos,
+    })
+
+
+@router.get("/inventario/consulta")
+def inventario_consulta(cve_producto: str, fecha: str, cve_sucursal: Optional[int] = None):
+    """
+    Consulta el stock histórico de un producto en una fecha dada.
+    Si no hay dato = no había existencia ese día.
+    Filtra opcionalmente por sucursal.
+    """
+    base_q = ("SELECT cve_sucursal, sucursal, descripcion, existencia, "
+              "precio1, precio2, precio3 "
+              "FROM inventario_historico_productos WHERE cve_producto=? AND fecha=?")
+    if cve_sucursal:
+        rows = fetch_all(base_q + " AND cve_sucursal=? ORDER BY existencia DESC", (cve_producto, fecha, cve_sucursal))
+    else:
+        rows = fetch_all(base_q + " ORDER BY existencia DESC", (cve_producto, fecha))
+
+    if not rows:
+        descripcion = (fetch_one(
+            "SELECT descripcion FROM inventario_historico_productos WHERE cve_producto=? LIMIT 1",
+            (cve_producto,)
+        ) or {}).get("descripcion", f"Producto {cve_producto}")
+        return JSONResponse({
+            "cve_producto": cve_producto, "fecha": fecha,
+            "descripcion": descripcion,
+            "sin_existencia": True, "sucursales": [], "total_existencia": 0,
+        })
+
+    r0 = rows[0]
+    descripcion = (r0.get("descripcion") or f"Producto {cve_producto}").strip()
+    # Los precios son del producto, iguales en todas las sucursales
+    precios = {
+        "precio1": round(float(r0.get("precio1") or 0), 2),
+        "precio2": round(float(r0.get("precio2") or 0), 2),
+        "precio3": round(float(r0.get("precio3") or 0), 2),
+    }
+    sucursales = [
+        {"sucursal":   (r["sucursal"] or str(r["cve_sucursal"])).strip(),
+         "existencia": round(float(r["existencia"] or 0), 2)}
+        for r in rows
+    ]
+    return JSONResponse({
+        "cve_producto":     cve_producto,
+        "fecha":            fecha,
+        "descripcion":      descripcion,
+        "sin_existencia":   False,
+        "precios":          precios,
+        "sucursales":       sucursales,
+        "total_existencia": sum(s["existencia"] for s in sucursales),
+    })
+
+
+@router.get("/inventario/historico")
+def inventario_historico():
+    """
+    Devuelve todo el histórico de snapshots de inventario guardados por el cron.
+    Retorna lista completa de fechas con valor_stock, unidades, criticos, por_sucursal.
+    """
+    rows = fetch_all(
+        "SELECT fecha, valor_stock, unidades, productos_stock, criticos, por_sucursal "
+        "FROM inventario_historico ORDER BY fecha ASC"
+    )
+    historico = []
+    for r in (rows or []):
+        historico.append({
+            "fecha":          r["fecha"],
+            "valor_stock":    round(float(r["valor_stock"] or 0), 2),
+            "unidades":       int(r["unidades"] or 0),
+            "productos_stock": int(r["productos_stock"] or 0),
+            "criticos":       int(r["criticos"] or 0),
+            "por_sucursal":   json.loads(r["por_sucursal"] or "[]"),
+        })
+    return JSONResponse({"historico": historico, "total_dias": len(historico)})
+
+
 # ── KPIs globales ─────────────────────────────────────────────────────────────
 
 @router.get("/kpis")

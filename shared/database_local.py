@@ -182,6 +182,38 @@ def init_db() -> None:
             # Dashboard compartido con PWA
             "ALTER TABLE dashboards ADD COLUMN compartido INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE dashboards ADD COLUMN compartido_en TEXT",
+            # Histórico diario de inventario (snapshot al cierre del día)
+            """CREATE TABLE IF NOT EXISTS inventario_historico (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha           TEXT    NOT NULL,
+                valor_stock     REAL    NOT NULL DEFAULT 0,
+                unidades        INTEGER NOT NULL DEFAULT 0,
+                productos_stock INTEGER NOT NULL DEFAULT 0,
+                criticos        INTEGER NOT NULL DEFAULT 0,
+                por_sucursal    TEXT    NOT NULL DEFAULT '[]',
+                guardado_en     TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(fecha)
+            )""",
+            # Histórico por producto × sucursal (solo con existencia > 0)
+            """CREATE TABLE IF NOT EXISTS inventario_historico_productos (
+                fecha           TEXT    NOT NULL,
+                cve_producto    TEXT    NOT NULL,
+                cve_sucursal    INTEGER NOT NULL,
+                sucursal        TEXT    NOT NULL DEFAULT '',
+                descripcion     TEXT    NOT NULL DEFAULT '',
+                existencia      REAL    NOT NULL DEFAULT 0,
+                costo_promedio  REAL    NOT NULL DEFAULT 0,
+                precio1         REAL    NOT NULL DEFAULT 0,
+                precio2         REAL    NOT NULL DEFAULT 0,
+                precio3         REAL    NOT NULL DEFAULT 0,
+                PRIMARY KEY (fecha, cve_producto, cve_sucursal)
+            )""",
+            "ALTER TABLE inventario_historico_productos ADD COLUMN sucursal TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE inventario_historico_productos ADD COLUMN precio1 REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE inventario_historico_productos ADD COLUMN precio2 REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE inventario_historico_productos ADD COLUMN precio3 REAL NOT NULL DEFAULT 0",
+            "CREATE INDEX IF NOT EXISTS idx_invhp_prod ON inventario_historico_productos(cve_producto)",
+            "CREATE INDEX IF NOT EXISTS idx_invhp_fecha ON inventario_historico_productos(fecha)",
         ]
         for sql in migraciones:
             try:

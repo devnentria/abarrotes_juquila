@@ -176,6 +176,124 @@ def refresh_geocodificacion() -> None:
     log.info(f"--- Geocodificación terminada — {total_nuevos} CPs nuevos guardados ---")
 
 
+def guardar_snapshot_inventario() -> None:
+    """
+    Guarda un snapshot del inventario actual en SQLite.
+    Se ejecuta al cierre del día para tener histórico consultable.
+    """
+    import json
+    log.info("--- Snapshot inventario iniciado ---")
+    hoy_str = date.today().isoformat()
+
+    try:
+        rows_kpi = db_query("""
+            SELECT
+                ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor_stock,
+                ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos_stock
+            FROM IN_Existencias_Alm e
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+        """)
+        kpi = rows_kpi[0] if rows_kpi else {}
+
+        rows_crit = db_query(f"""
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT e.Cve_Producto
+                FROM IN_Existencias_Alm e
+                WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+                GROUP BY e.Cve_Producto
+                HAVING SUM(e.Existencia) <= 0
+            ) sin_stock
+            WHERE sin_stock.Cve_Producto IN (
+                SELECT DISTINCT d.Cve_Producto
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Fecha_Documento >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+            )
+        """)
+        criticos = int((rows_crit[0] if rows_crit else {}).get("total") or 0)
+
+        rows_suc = db_query("""
+            SELECT s.Nombre AS sucursal,
+                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor,
+                   ISNULL(SUM(e.Existencia), 0) AS unidades
+            FROM GN_Sucursales s
+            LEFT JOIN IN_Existencias_Alm e ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            WHERE s.Cve_Sucursal <> 99
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            HAVING ISNULL(SUM(e.Existencia), 0) > 0
+            ORDER BY SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)) DESC
+        """)
+        por_sucursal = [
+            {"sucursal": (r["sucursal"] or "").strip(),
+             "valor": round(float(r["valor"] or 0), 2),
+             "unidades": int(r["unidades"] or 0)}
+            for r in (rows_suc or [])
+        ]
+
+        # Snapshot por producto × sucursal (solo existencia > 0)
+        rows_prod = db_query("""
+            SELECT e.Cve_Sucursal,
+                   MIN(ISNULL(s.Nombre, CAST(e.Cve_Sucursal AS VARCHAR))) AS sucursal,
+                   CAST(e.Cve_Producto AS VARCHAR)  AS cve_producto,
+                   MIN(pg.Descripcion)              AS descripcion,
+                   SUM(e.Existencia)                AS existencia,
+                   MIN(ISNULL(e.Costo_Promedio, 0)) AS costo_promedio,
+                   MIN(ISNULL(pg.Precio_Minimo_Venta_Base, 0))       AS precio1,
+                   MIN(ISNULL(pg.Precio_Minimo_Venta_Base2, 0))       AS precio2,
+                   MIN(ISNULL(pg.Precio_Minimo_Venta_Base3, 0))       AS precio3
+            FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+            LEFT JOIN GN_Sucursales s ON s.Cve_Sucursal = e.Cve_Sucursal
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            GROUP BY e.Cve_Sucursal, e.Cve_Producto
+            HAVING SUM(e.Existencia) > 0
+        """)
+
+        conn = get_connection()
+        # Snapshot global
+        conn.execute("""
+            INSERT OR REPLACE INTO inventario_historico
+                (fecha, valor_stock, unidades, productos_stock, criticos, por_sucursal)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            hoy_str,
+            round(float(kpi.get("valor_stock") or 0), 2),
+            int(kpi.get("unidades") or 0),
+            int(kpi.get("productos_stock") or 0),
+            criticos,
+            json.dumps(por_sucursal),
+        ))
+        # Snapshot por producto (upsert en lote)
+        conn.executemany("""
+            INSERT OR REPLACE INTO inventario_historico_productos
+                (fecha, cve_producto, cve_sucursal, sucursal, descripcion,
+                 existencia, costo_promedio, precio1, precio2, precio3)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            (hoy_str,
+             str(r["cve_producto"]),
+             int(r["Cve_Sucursal"]),
+             (r["sucursal"] or "").strip(),
+             (r["descripcion"] or "").strip(),
+             round(float(r["existencia"] or 0), 2),
+             round(float(r["costo_promedio"] or 0), 4),
+             round(float(r["precio1"] or 0), 4),
+             round(float(r["precio2"] or 0), 4),
+             round(float(r["precio3"] or 0), 4))
+            for r in (rows_prod or [])
+        ])
+        conn.commit()
+        conn.close()
+        log.info(f"--- Snapshot inventario guardado para {hoy_str} ({len(rows_prod or [])} filas de producto) ---")
+
+    except Exception as e:
+        log.error(f"Error en snapshot inventario: {e}")
+
+
 def main() -> None:
     inicio = datetime.now()
     log.info(f"=== Cron refresh iniciado: {inicio.strftime('%Y-%m-%d %H:%M:%S')} ===")
@@ -194,6 +312,12 @@ def main() -> None:
             except Exception as e:
                 log.error(f"Error en sucursal {cve}: {e}")
                 errores.append((cve, str(e)))
+
+    # Snapshot de inventario al cierre del día
+    try:
+        guardar_snapshot_inventario()
+    except Exception as e:
+        log.error(f"Error en snapshot inventario: {e}")
 
     # Geocodificación del mapa — al final para no interferir con el refresh principal
     try:

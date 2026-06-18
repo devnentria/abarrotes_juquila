@@ -134,7 +134,7 @@
     }
 
     /* ── Dashboard ── */
-    .dashboard-section { }
+    .dashboard-section { position: relative; }
     .section-label { font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 14px; }
 
     /* KPI Cards */
@@ -923,16 +923,18 @@
 
       <!-- Breadcrumb de sección (navegación interna) -->
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;font-size:12px;color:var(--text-dim)">
-        <span id="tab-resumen" onclick="_switchTab('resumen')" style="cursor:pointer;font-weight:600;color:var(--blue-mid)">Resumen</span>
+        <span id="tab-resumen" onclick="_switchTab('resumen')" style="cursor:pointer;font-weight:600;color:var(--blue-mid)">Ventas</span>
         <span style="opacity:.4">|</span>
         <span id="tab-zonas" onclick="_switchTab('zonas')" style="cursor:pointer">Zonas</span>
         <span style="opacity:.4">|</span>
         <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
+        <span style="opacity:.4">|</span>
+        <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
       </div>
 
       <!-- Header con toggle de período -->
       <div id="header-periodo" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div class="section-label" style="margin-bottom:0">Resumen ejecutivo</div>
+        <div class="section-label" style="margin-bottom:0">Ventas</div>
         <div class="periodo-toggle" id="periodo-toggle">
           <button class="periodo-btn" data-modo="hoy">Hoy</button>
           <button class="periodo-btn" data-modo="15d">Últ. 15 días</button>
@@ -1286,6 +1288,101 @@
       </div>
 
     </div><!-- /productos-dash-area -->
+
+    <!-- ── Tab: Inventario ── -->
+    <div id="inventario-dash-area" style="display:none">
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-label" style="margin-bottom:0">Inventario</div>
+      </div>
+
+      <!-- Fila KPIs -->
+      <div id="inv-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+      <!-- Fila: Por sucursal + Top por valor -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:10px">Stock por sucursal</div>
+          <div id="inv-suc" style="font-size:12px"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:10px">Top 15 productos por existencia</div>
+          <div id="inv-top" style="font-size:12px"></div>
+        </div>
+      </div>
+
+      <!-- Histórico de valor en stock -->
+      <div class="chart-card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div class="chart-card-title" style="margin-bottom:0">Evolución del valor en stock</div>
+          <span style="font-size:10px;color:var(--text-dim)" id="inv-hist-label">Cargando histórico…</span>
+        </div>
+        <div id="inv-historico-wrap" style="position:relative;height:180px">
+          <canvas id="inv-historico-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Consulta histórica por producto -->
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-card-title" style="margin-bottom:12px">Consulta histórica de stock</div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px">
+          <div style="flex:2;min-width:180px">
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Producto</div>
+            <select id="inv-consulta-prod"
+              style="width:100%;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)">
+              <option value="">— Selecciona un producto —</option>
+            </select>
+          </div>
+          <div style="flex:1;min-width:130px">
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Fecha</div>
+            <input type="date" id="inv-consulta-fecha"
+              style="width:100%;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)"
+              max="">
+          </div>
+          <div style="flex:1;min-width:130px">
+            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Sucursal (opcional)</div>
+            <select id="inv-consulta-suc"
+              style="width:100%;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <button onclick="_invConsultar()"
+            style="padding:7px 18px;background:var(--blue-mid);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
+            Consultar
+          </button>
+        </div>
+        <div id="inv-consulta-result" style="font-size:12px;color:var(--text-dim)">
+          Selecciona un producto y una fecha para consultar el stock histórico.
+        </div>
+      </div>
+
+      <!-- Críticos -->
+      <div class="chart-card">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <div class="chart-card-title" style="margin-bottom:0">Críticos — con demanda pero sin existencia</div>
+          <span style="font-size:10px;color:var(--text-dim)">(ventas últimos 90 días · existencia = 0)</span>
+        </div>
+        <div id="inv-criticos" style="font-size:12px"></div>
+      </div>
+
+    </div><!-- /inventario-dash-area -->
+
+    <!-- ── Overlay "Generando tablero" (cubre cualquier tab) ── -->
+    <div id="tab-generando-overlay" style="display:none;position:absolute;inset:0;background:var(--bg);z-index:10;padding:20px">
+      <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:16px" id="tab-generando-titulo">Generando tablero…</div>
+      <div class="dash-skeleton" style="height:80px;border-radius:10px;margin-bottom:12px"></div>
+      <div style="display:flex;gap:12px;margin-bottom:12px">
+        <div class="dash-skeleton" style="flex:1;height:100px;border-radius:10px"></div>
+        <div class="dash-skeleton" style="flex:1;height:100px;border-radius:10px"></div>
+        <div class="dash-skeleton" style="flex:1;height:100px;border-radius:10px"></div>
+        <div class="dash-skeleton" style="flex:1;height:100px;border-radius:10px"></div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div class="dash-skeleton" style="flex:2;height:200px;border-radius:10px"></div>
+        <div class="dash-skeleton" style="flex:1;height:200px;border-radius:10px"></div>
+      </div>
+      <div style="text-align:center;padding:16px;font-size:12px;color:var(--text-dim)">Analizando datos del ERP…</div>
+    </div>
 
   </div>
 
@@ -2150,6 +2247,15 @@ async function _scEnviar() {
       return;
     }
 
+    // Inventario → navegar directamente sin llamar al backend
+    const _invHint = /\b(inventario|stock|existencia[s]?|almac[eé]n|criticos|críticos|sin.stock|sin.existencia)\b/i.test(texto);
+    if (_invHint) {
+      _scRemoveTyping();
+      _scAddBubble('Te muestro el dashboard de **Inventario** — stock, críticos y valor por sucursal.', 'bot');
+      _switchTab('inventario');
+      return;
+    }
+
     const body = { mensaje: texto };
     if (_scConvId) body.conversacion_id = _scConvId;
 
@@ -2450,41 +2556,64 @@ function renderMapaVentas(puntos) {
 
 function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 
-// ── Tab Resumen / Zonas / Productos ──────────────────────────────────────────
+// ── Tab Resumen / Zonas / Productos / Inventario ─────────────────────────────
 let _currentTab = 'resumen';
+
+const _TAB_NOMBRES = {
+  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario'
+};
+
+function _mostrarOverlayGenerando(tab) {
+  const ov = document.getElementById('tab-generando-overlay');
+  const tit = document.getElementById('tab-generando-titulo');
+  if (!ov) return;
+  if (tit) tit.textContent = `Generando tablero de ${_TAB_NOMBRES[tab] || tab}…`;
+  ov.style.display = '';
+}
+
+function _ocultarOverlayGenerando() {
+  const ov = document.getElementById('tab-generando-overlay');
+  if (ov) ov.style.display = 'none';
+}
 
 function _switchTab(tab) {
   _currentTab = tab;
-  const isResumen   = tab === 'resumen';
-  const isZonas     = tab === 'zonas';
-  const isProductos = tab === 'productos';
+  const isResumen    = tab === 'resumen';
+  const isZonas      = tab === 'zonas';
+  const isProductos  = tab === 'productos';
+  const isInventario = tab === 'inventario';
 
-  // Ocultar dashboard de IA si está visible (es independiente del sistema de tabs)
+  // Ocultar dashboard de IA si está visible
   const iaWrap = document.getElementById('dashboard-ia-wrap');
-  if (iaWrap && !iaWrap.classList.contains('hidden')) {
-    iaWrap.classList.add('hidden');
-  }
+  if (iaWrap && !iaWrap.classList.contains('hidden')) iaWrap.classList.add('hidden');
 
-  document.getElementById('static-dash-area').style.display    = isResumen   ? '' : 'none';
-  document.getElementById('zonas-dash-area').style.display     = isZonas     ? '' : 'none';
-  document.getElementById('productos-dash-area').style.display = isProductos ? '' : 'none';
-  document.getElementById('header-periodo').style.display      = isResumen   ? '' : 'none';
+  document.getElementById('static-dash-area').style.display      = isResumen    ? '' : 'none';
+  document.getElementById('zonas-dash-area').style.display       = isZonas      ? '' : 'none';
+  document.getElementById('productos-dash-area').style.display   = isProductos  ? '' : 'none';
+  document.getElementById('inventario-dash-area').style.display  = isInventario ? '' : 'none';
+  document.getElementById('header-periodo').style.display        = isResumen    ? '' : 'none';
 
   const btnR = document.getElementById('tab-resumen');
   const btnZ = document.getElementById('tab-zonas');
   const btnP = document.getElementById('tab-productos');
+  const btnI = document.getElementById('tab-inventario');
   const _active = 'var(--blue-mid)', _dim = 'var(--text-dim)';
-  if (btnR) { btnR.style.color = isResumen   ? _active : _dim; btnR.style.fontWeight = isResumen   ? '600' : '400'; }
-  if (btnZ) { btnZ.style.color = isZonas     ? _active : _dim; btnZ.style.fontWeight = isZonas     ? '600' : '400'; }
-  if (btnP) { btnP.style.color = isProductos ? _active : _dim; btnP.style.fontWeight = isProductos ? '600' : '400'; }
+  if (btnR) { btnR.style.color = isResumen    ? _active : _dim; btnR.style.fontWeight = isResumen    ? '600' : '400'; }
+  if (btnZ) { btnZ.style.color = isZonas      ? _active : _dim; btnZ.style.fontWeight = isZonas      ? '600' : '400'; }
+  if (btnP) { btnP.style.color = isProductos  ? _active : _dim; btnP.style.fontWeight = isProductos  ? '600' : '400'; }
+  if (btnI) { btnI.style.color = isInventario ? _active : _dim; btnI.style.fontWeight = isInventario ? '600' : '400'; }
 
-  if (isZonas) {
-    if (!_zonasLoaded) cargarZonas();
-    else if (_zonasMapa) setTimeout(() => _zonasMapa.invalidateSize(), 50);
+  if (!isResumen) {
+    // Siempre mostrar overlay "Generando tablero" al navegar a cualquier tab
+    _mostrarOverlayGenerando(tab);
+    _invLoaded   = false;
+    _prodLoaded  = false;
+    _zonasLoaded = false;
   }
-  if (isProductos) {
-    if (!_prodLoaded) cargarProductos();
-  }
+
+  if (isZonas)      cargarZonas();
+  if (isProductos)  cargarProductos();
+  if (isInventario) cargarInventario();
 }
 
 // ── Dashboard Zonas ───────────────────────────────────────────────────────────
@@ -2553,18 +2682,20 @@ function _aplicarZonasData(data) {
 async function cargarZonas() {
   _zonasLoaded = true;
   const labelEl = document.getElementById('zonas-label');
-
-  // Mostrar desde cache mientras llega la respuesta fresca
-  const cached = _zonasLeerCache(_zonasAnio, _zonasMes);
-  if (cached) _aplicarZonasData(cached);
-
-  try {
-    const data = await api(`/api/datos/zonas?anio=${_zonasAnio}&mes=${_zonasMes}`);
-    _zonasGuardarCache(_zonasAnio, _zonasMes, data);
-    _aplicarZonasData(data);
-  } catch {
-    if (!cached && labelEl) labelEl.textContent = '— error —';
+  const [dataResult] = await Promise.allSettled([
+    api(`/api/datos/zonas?anio=${_zonasAnio}&mes=${_zonasMes}`),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+  if (dataResult.status === 'fulfilled') {
+    _zonasGuardarCache(_zonasAnio, _zonasMes, dataResult.value);
+    _aplicarZonasData(dataResult.value);
+  } else {
+    const cached = _zonasLeerCache(_zonasAnio, _zonasMes);
+    if (cached) _aplicarZonasData(cached);
+    else if (labelEl) labelEl.textContent = '— error —';
   }
+  if (_zonasMapa) setTimeout(() => _zonasMapa.invalidateSize(), 50);
 }
 
 function _colorZona(cve, sucursales) {
@@ -2839,15 +2970,18 @@ function _renderProdGainersLosers(prods) {
 
 async function cargarProductos() {
   _prodLoaded = true;
-  const cached = _prodLeerCache(_prodAnio, _prodMes);
-  if (cached) _aplicarProductosData(cached);
-  try {
-    const data = await api(`/api/datos/productos?anio=${_prodAnio}&mes=${_prodMes}`);
-    _prodGuardarCache(_prodAnio, _prodMes, data);
-    _aplicarProductosData(data);
-  } catch {
-    const labelEl = document.getElementById('prod-label');
-    if (!cached && labelEl) labelEl.textContent = '— error —';
+  const [dataResult] = await Promise.allSettled([
+    api(`/api/datos/productos?anio=${_prodAnio}&mes=${_prodMes}`),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+  if (dataResult.status === 'fulfilled') {
+    _prodGuardarCache(_prodAnio, _prodMes, dataResult.value);
+    _aplicarProductosData(dataResult.value);
+  } else {
+    const cached = _prodLeerCache(_prodAnio, _prodMes);
+    if (cached) _aplicarProductosData(cached);
+    else { const el = document.getElementById('prod-label'); if (el) el.textContent = '— error —'; }
   }
 }
 
@@ -5708,6 +5842,243 @@ const iconUsers     = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" h
 const iconStats     = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>`;
 const iconKey       = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>`;
 const iconLogout    = `<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>`;
+
+// ── Dashboard Inventario ───────────────────────────────────────────────────────
+let _invLoaded = false;
+let _invHistChart = null;
+
+async function cargarInventario() {
+  _invLoaded = true;
+  const kpisEl = document.getElementById('inv-kpis');
+  const sucEl  = document.getElementById('inv-suc');
+  const topEl  = document.getElementById('inv-top');
+  const critEl = document.getElementById('inv-criticos');
+
+  const [dataResult] = await Promise.allSettled([
+    api('/api/datos/inventario'),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+  if (dataResult.status === 'fulfilled') {
+    const data = dataResult.value;
+    _renderInvKPIs(data, kpisEl);
+    _renderInvSucursal(data.por_sucursal || [], sucEl);
+    _renderInvTop(data.top_por_valor || [], data.valor_stock || 0, topEl);
+    _renderInvCriticos(data.criticos_lista || [], critEl);
+    _invPoblarConsulta(data.lista_productos || [], data.por_sucursal || []);
+    cargarInvHistorico();
+  } else {
+    const msg = dataResult.reason?.message || 'Error';
+    if (kpisEl) kpisEl.innerHTML = `<div style="color:var(--danger);font-size:12px;grid-column:span 4">${msg}</div>`;
+  }
+}
+
+function _renderInvKPIs(data, el) {
+  if (!el) return;
+  const kpis = [
+    { label: 'Valor en stock',       valor: _formatMXN(data.valor_stock || 0),                           color: 'var(--blue-mid)', sub: 'costo promedio × existencia' },
+    { label: 'Unidades totales',      valor: (data.unidades_totales || 0).toLocaleString('es-MX'),        color: 'var(--blue)',      sub: 'piezas en almacén' },
+    { label: 'Productos con stock',   valor: (data.productos_con_stock || 0).toLocaleString('es-MX'),     color: 'var(--warn)',      sub: 'con existencia > 0' },
+    { label: 'Críticos',              valor: (data.criticos || 0).toLocaleString('es-MX'),                color: 'var(--danger)',    sub: 'venden pero sin existencia' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:20px;font-weight:700;color:${k.color}">${k.valor}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${k.sub}</div>
+    </div>`).join('');
+}
+
+function _renderInvSucursal(sucursales, el) {
+  if (!el) return;
+  if (!sucursales.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  const maxValor = Math.max(...sucursales.map(s => s.valor));
+  el.innerHTML = sucursales.map(s => {
+    const pct = maxValor > 0 ? (s.valor / maxValor * 100).toFixed(0) : 0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:12px;font-weight:500;color:var(--text)">${s.sucursal}</span>
+        <span style="font-size:11px;color:var(--text-dim)">${s.unidades.toLocaleString('es-MX')} pzs</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden">
+          <div style="height:100%;border-radius:3px;background:var(--blue-mid);width:${pct}%"></div>
+        </div>
+        <span style="font-size:11px;color:var(--text);white-space:nowrap;min-width:80px;text-align:right">${_formatMXN(s.valor)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:2px">${s.productos} productos</div>
+    </div>`;
+  }).join('');
+}
+
+function _renderInvTop(productos, totalValor, el) {
+  if (!el) return;
+  if (!productos.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Producto</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Exist.</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">P1</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">P2</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">P3</th>
+    </tr></thead>
+    <tbody>${productos.map((p, i) => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:5px 6px;color:var(--text-dim);font-size:11px">${i+1}</td>
+      <td style="padding:5px 6px;font-size:11px;color:var(--text);max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.descripcion}</td>
+      <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${p.unidades.toLocaleString('es-MX')}</td>
+      <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text)">${_formatMXN(p.precio1)}</td>
+      <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${_formatMXN(p.precio2)}</td>
+      <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${_formatMXN(p.precio3)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function _invPoblarConsulta(listaProductos, porSucursal) {
+  // Fecha máx = ayer (el cron corre al cierre del día)
+  const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
+  const fechaEl = document.getElementById('inv-consulta-fecha');
+  if (fechaEl) {
+    const iso = ayer.toISOString().slice(0,10);
+    fechaEl.max = iso;
+    if (!fechaEl.value) fechaEl.value = iso;
+  }
+  // Productos
+  const prodEl = document.getElementById('inv-consulta-prod');
+  if (prodEl && listaProductos.length) {
+    prodEl.innerHTML = '<option value="">— Selecciona un producto —</option>'
+      + listaProductos.map(p => `<option value="${p.cve_producto}">${p.descripcion}</option>`).join('');
+  }
+  // Sucursales
+  const sucEl = document.getElementById('inv-consulta-suc');
+  if (sucEl && porSucursal.length) {
+    sucEl.innerHTML = '<option value="">Todas</option>'
+      + porSucursal.map(s => `<option value="">${s.sucursal}</option>`).join('');
+  }
+}
+
+async function _invConsultar() {
+  const cve   = document.getElementById('inv-consulta-prod')?.value;
+  const fecha = document.getElementById('inv-consulta-fecha')?.value;
+  const el    = document.getElementById('inv-consulta-result');
+  if (!el) return;
+  if (!cve || !fecha) {
+    el.innerHTML = '<span style="color:var(--warn)">Selecciona producto y fecha.</span>';
+    return;
+  }
+  el.innerHTML = '<span style="color:var(--text-dim)">Consultando…</span>';
+  try {
+    const data = await api(`/api/datos/inventario/consulta?cve_producto=${cve}&fecha=${fecha}`);
+    if (data.sin_existencia) {
+      el.innerHTML = `<div style="padding:12px;background:var(--blue-light);border-radius:8px">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px">${data.descripcion}</div>
+        <div style="color:var(--danger)">Sin existencia registrada el ${fecha}.</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:4px">No había stock este día o aún no hay datos históricos.</div>
+      </div>`;
+      return;
+    }
+    const filas = data.sucursales.map(s => `
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:6px 8px;color:var(--text)">${s.sucursal}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:600;color:var(--blue-mid)">${s.existencia.toLocaleString('es-MX')} pzs</td>
+      </tr>`).join('');
+    const p = data.precios || {};
+    const preciosHtml = `
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        ${[['Precio 1', p.precio1], ['Precio 2', p.precio2], ['Precio 3', p.precio3]].map(([lbl, val]) => `
+          <div style="background:var(--blue-light);border-radius:8px;padding:8px 14px;min-width:100px">
+            <div style="font-size:10px;color:var(--text-dim)">${lbl}</div>
+            <div style="font-size:14px;font-weight:700;color:var(--blue-mid)">${_formatMXN(val || 0)}</div>
+          </div>`).join('')}
+      </div>`;
+    el.innerHTML = `
+      <div style="font-weight:600;color:var(--text);margin-bottom:10px">${data.descripcion} — ${fecha}</div>
+      ${preciosHtml}
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
+          <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Existencia</th>
+        </tr></thead>
+        <tbody>${filas}</tbody>
+        <tfoot><tr>
+          <td style="padding:6px 8px;font-weight:600;color:var(--text);font-size:12px">Total</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:700;color:var(--blue-mid);font-size:13px">${data.total_existencia.toLocaleString('es-MX')} pzs</td>
+        </tr></tfoot>
+      </table>`;
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--danger)">${e?.message || 'Error al consultar'}</span>`;
+  }
+}
+
+async function cargarInvHistorico() {
+  const labelEl = document.getElementById('inv-hist-label');
+  try {
+    const data = await api('/api/datos/inventario/historico');
+    const hist = data.historico || [];
+    if (labelEl) labelEl.textContent = hist.length
+      ? `${hist.length} días registrados · desde ${hist[0].fecha}`
+      : 'Sin datos históricos aún — el cron guardará el primer snapshot esta noche';
+
+    if (!hist.length) return;
+
+    const labels = hist.map(h => h.fecha.slice(5)); // MM-DD
+    const valores = hist.map(h => h.valor_stock);
+
+    const ctx = document.getElementById('inv-historico-chart');
+    if (!ctx) return;
+    if (_invHistChart) { _invHistChart.destroy(); _invHistChart = null; }
+    _invHistChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Valor en stock',
+          data: valores,
+          borderColor: 'var(--blue-mid)',
+          backgroundColor: 'rgba(0,137,123,0.08)',
+          borderWidth: 2,
+          pointRadius: hist.length > 60 ? 0 : 3,
+          fill: true,
+          tension: 0.3,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => '$' + Math.round(ctx.raw).toLocaleString('es-MX') }
+        }},
+        scales: {
+          x: { ticks: { maxTicksLimit: 10, font: { size: 10 } }, grid: { display: false } },
+          y: { ticks: { font: { size: 10 }, callback: v => '$' + Math.round(v/1000) + 'k' }, grid: { color: 'rgba(0,0,0,.05)' } },
+        },
+      },
+    });
+  } catch(e) {
+    if (labelEl) labelEl.textContent = 'Sin datos históricos aún';
+  }
+}
+
+function _renderInvCriticos(lista, el) {
+  if (!el) return;
+  if (!lista.length) {
+    el.innerHTML = '<div style="color:var(--success);padding:12px 0">Sin críticos — todos los productos con demanda tienen existencia.</div>';
+    return;
+  }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Producto</th>
+      <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Piezas vendidas 90d</th>
+      <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe 90d</th>
+    </tr></thead>
+    <tbody>${lista.map((p, i) => `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:6px 8px;color:var(--text-dim);font-size:11px">${i+1}</td>
+      <td style="padding:6px 8px;font-size:12px;color:var(--text);max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.descripcion}</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--warn)">${p.piezas_90d.toLocaleString('es-MX')} pzs</td>
+      <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--danger)">${_formatMXN(p.importe_90d)}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
 </script>
 
 <!-- Modal tabla Studio chat -->
