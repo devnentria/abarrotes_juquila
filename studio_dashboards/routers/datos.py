@@ -14,12 +14,18 @@ Endpoints:
   GET  /api/datos/kpis                 → Totales globales para tarjetas KPI
   GET  /api/datos/ventas-hoy           → Ventas pagadas del día
   GET  /api/datos/plantilla/{tipo}     → Datos de una plantilla predefinida
+  GET  /api/datos/zonas                → Dashboard Zonas: mapa + ventas por sucursal
+  GET  /api/datos/productos            → Dashboard Productos: top + lista para selector
+  GET  /api/datos/productos/prediccion → Predicción de demanda por producto (tratamientos activos)
   POST /api/datos/generar              → Genera dashboard completo con IA (gpt-5-nano)
   POST /api/datos/dashboards           → Guardar un dashboard
   GET  /api/datos/dashboards           → Listar dashboards guardados
   DELETE /api/datos/dashboards/{id}   → Eliminar un dashboard guardado
 """
 import json
+import time
+import threading
+from collections import defaultdict
 from datetime import date as _date
 from typing import Optional
 
@@ -39,6 +45,48 @@ from shared.database_local import execute, fetch_all, fetch_one
 router = APIRouter(prefix="/api/datos", dependencies=[Depends(get_current_user)])
 
 _client = OpenAI(api_key=OPENAI_API_KEY)
+
+# Caché en memoria para el mapa de ventas por CP
+_mapa_cache: dict = {}
+# CPs actualmente siendo geocodificados en background (evita lanzar 2 threads para el mismo mes)
+_geocodificando: set = set()
+
+# ── Inicialización de tabla de caché de coordenadas por CP ───────────────────
+_cp_table_ready = False
+
+
+def _init_cp_coords_table() -> None:
+    """Crea la tabla cp_coords en SQLite si no existe (se llama una sola vez)."""
+    global _cp_table_ready
+    if _cp_table_ready:
+        return
+    execute("""
+        CREATE TABLE IF NOT EXISTS cp_coords (
+            cp        TEXT PRIMARY KEY,
+            lat       REAL NOT NULL,
+            lng       REAL NOT NULL,
+            cached_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    _cp_table_ready = True
+
+
+def _geocode_cp(cp: str):
+    """Geocodifica un CP mexicano via Nominatim. Retorna (lat, lng) o None."""
+    import requests as _req
+    try:
+        r = _req.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"postalcode": cp, "country": "MX", "format": "json", "limit": 1},
+            headers={"User-Agent": "SuiteAnaliticaNentria/1.0"},
+            timeout=5,
+        )
+        data = r.json()
+        if data:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    except Exception:
+        pass
+    return None
 
 
 def _proyectar(valores: list) -> float:
@@ -78,7 +126,7 @@ def _filtros_periodo(modo: str, campo: str, fi: str = None, ff: str = None):
     if modo == "15d":
         return (
             f"{c} >= DATEADD(DAY,-15,{h})",
-            f"{c} >= DATEADD(DAY,-30,{h}) AND {c} < DATEADD(DAY,-15,{h})",
+            f"{c} >= DATEADD(DAY,-15,DATEADD(MONTH,-1,{h})) AND {c} < DATEADD(MONTH,-1,{h})",
             "Últ. 15 días",
         )
     if modo == "mes":
@@ -294,7 +342,9 @@ def pedidos_sucursales():
         SELECT
             s.Cve_Sucursal                                                    AS cve_sucursal,
             s.Nombre                                                          AS sucursal,
-            COUNT(CASE WHEN p.Estatus = 'AC' THEN 1 END)                     AS activos,
+            COUNT(CASE WHEN p.Estatus <> 'CN'
+                        AND p.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
+                  THEN 1 END)                                                  AS activos,
             COUNT(CASE WHEN p.Estatus = 'TR'
                         AND p.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
                   THEN 1 END)                                                 AS completados_30d
@@ -305,6 +355,753 @@ def pedidos_sucursales():
         ORDER BY activos DESC
     """)
     return JSONResponse({"sucursales": rows})
+
+
+# ── Mapa de ventas por código postal ─────────────────────────────────────────
+
+@router.get("/mapa")
+def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
+    """
+    Ventas por código postal (domicilio de entrega) para el mapa de puntos.
+    Parámetros anio+mes seleccionan un mes específico.
+    Meses históricos se cachean para siempre; el mes actual se refresca cada 10 min.
+    Las coordenadas de cada CP se obtienen via Nominatim y se guardan en SQLite.
+
+    Returns:
+        JSON con anio, mes, label y lista de puntos con cp, lat, lng, ventas y pedidos.
+    """
+    _init_cp_coords_table()
+
+    from datetime import date as _date
+    hoy_d  = _date.today()
+    _anio  = anio or hoy_d.year
+    _mes   = mes  or hoy_d.month
+    key    = f"{_anio}-{_mes:02d}"
+    es_actual = (_anio == hoy_d.year and _mes == hoy_d.month)
+
+    entrada = _mapa_cache.get(key)
+    if entrada:
+        # Histórico: cache permanente. Mes actual: TTL 10 min.
+        if not es_actual or (time.time() - entrada["ts"]) < 600:
+            return JSONResponse({"anio": _anio, "mes": _mes,
+                                 "label": entrada["label"], "puntos": entrada["data"]})
+
+    MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+    label = f"{MESES_ES[_mes]} {_anio}"
+
+    try:
+        rows = query(f"""
+            SELECT TOP 150 con.CP,
+                   COUNT(DISTINCT p.Cve_Folio)                                  AS pedidos,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint)  AS ventas
+            FROM FT_Pedidos_C p
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+            WHERE p.Estatus<>'CN'
+              AND p.Referencia_Cliente='PAGADO'
+              AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+              AND YEAR(p.Fecha_Documento)={_anio}
+              AND MONTH(p.Fecha_Documento)={_mes}
+            GROUP BY con.CP
+            ORDER BY ventas DESC
+        """)
+    except Exception:
+        rows = []
+
+    # Obtener CPs únicos con ventas
+    cps_con_ventas = [r["CP"] for r in rows if r.get("CP")]
+
+    # Buscar en caché SQLite
+    coords_cache = {}
+    if cps_con_ventas:
+        cached = fetch_all(
+            f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({','.join(['?']*len(cps_con_ventas))})",
+            cps_con_ventas,
+        )
+        coords_cache = {r["cp"]: (r["lat"], r["lng"]) for r in cached}
+
+    # CPs sin coordenadas en SQLite
+    todos_faltantes = [cp for cp in cps_con_ventas if cp not in coords_cache]
+
+    # Lanzar geocodificación en background si hay faltantes y no está ya corriendo para este mes
+    if todos_faltantes and key not in _geocodificando:
+        def _geocodificar_bg(key_bg, faltantes_bg):
+            _geocodificando.add(key_bg)
+            try:
+                for cp in faltantes_bg:
+                    coords = _geocode_cp(cp)
+                    if coords:
+                        lat, lng = coords
+                        execute(
+                            "INSERT OR REPLACE INTO cp_coords (cp, lat, lng) VALUES (?, ?, ?)",
+                            (cp, lat, lng),
+                        )
+                    time.sleep(1.1)
+                # Invalidar caché en memoria para que la próxima visita vea los nuevos puntos
+                _mapa_cache.pop(key_bg, None)
+            finally:
+                _geocodificando.discard(key_bg)
+        threading.Thread(target=_geocodificar_bg, args=(key, todos_faltantes), daemon=True).start()
+
+    # Construir resultado con lo que ya está en SQLite — respuesta inmediata
+    puntos = []
+    for r in rows:
+        cp = r.get("CP", "")
+        if cp in coords_cache:
+            lat, lng = coords_cache[cp]
+            puntos.append({
+                "cp":      cp,
+                "lat":     lat,
+                "lng":     lng,
+                "ventas":  int(r.get("ventas") or 0),
+                "pedidos": int(r.get("pedidos") or 0),
+            })
+
+    pendientes = len(todos_faltantes)
+    # TTL: 0 (permanente) si ya están todos; 10 min si aún hay pendientes geocodificándose
+    if puntos:
+        _mapa_cache[key] = {"ts": time.time() if pendientes else 0, "label": label, "data": puntos}
+    return JSONResponse({
+        "anio": _anio, "mes": _mes, "label": label, "puntos": puntos,
+        "pendientes": pendientes,
+    })
+
+
+# ── Zonas de ventas por sucursal ──────────────────────────────────────────────
+
+@router.get("/zonas")
+def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
+    """
+    Dashboard de zonas: ventas + productos por sucursal con mapa de puntos.
+
+    Returns:
+        JSON con sucursales (ventas/piezas), top_productos por sucursal,
+        y mapa_puntos (CPs con coords del caché SQLite y color de sucursal).
+    """
+    hoy_d = _date.today()
+    _anio = anio or hoy_d.year
+    _mes  = mes  or hoy_d.month
+
+    MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+    label = f"{MESES_ES[_mes]} {_anio}"
+
+    # 1. Comparativo por sucursal (ventas + piezas)
+    try:
+        comp_rows = query(f"""
+            SELECT s.Cve_Sucursal,
+                   s.Nombre                                                         AS sucursal,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint)      AS ventas,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada,0))          AS bigint)      AS piezas,
+                   COUNT(DISTINCT p.Cve_Folio)                                      AS pedidos
+            FROM GN_Sucursales s
+            LEFT JOIN FT_Pedidos_C p
+              ON p.Cve_Sucursal=s.Cve_Sucursal
+             AND p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO'
+             AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
+            LEFT JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            WHERE s.Cve_Sucursal<>99
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            ORDER BY ventas DESC
+        """)
+    except Exception:
+        comp_rows = []
+
+    sucursales = [
+        {"cve": int(r["Cve_Sucursal"]), "nombre": r["sucursal"],
+         "ventas": int(r["ventas"] or 0), "piezas": int(r["piezas"] or 0),
+         "pedidos": int(r["pedidos"] or 0)}
+        for r in (comp_rows or []) if int(r.get("ventas") or 0) > 0
+    ]
+
+    # 2. Top productos por sucursal agrupados por código de barras
+    try:
+        prod_rows = query(f"""
+            SELECT p.Cve_Sucursal,
+                   MIN(prod.Descripcion)                                            AS producto,
+                   cb.barcode_canon,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint)      AS ventas,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada,0))          AS bigint)      AS piezas
+            FROM FT_Pedidos_C p
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            INNER JOIN (
+                SELECT Cve_Producto, MIN(Codigo_Barras) AS barcode_canon
+                FROM IM_Codigos_Barra GROUP BY Cve_Producto
+            ) cb ON cb.Cve_Producto=d.Cve_Producto
+            INNER JOIN IM_Productos_Gral prod ON prod.Cve_Producto=d.Cve_Producto
+            WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
+              AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
+            GROUP BY p.Cve_Sucursal, cb.barcode_canon
+            ORDER BY p.Cve_Sucursal, ventas DESC
+        """)
+    except Exception:
+        prod_rows = []
+
+    top_por_suc: dict = defaultdict(list)
+    for r in (prod_rows or []):
+        cve = int(r["Cve_Sucursal"])
+        if len(top_por_suc[cve]) < 5:
+            top_por_suc[cve].append({
+                "producto": r["producto"] or "—",
+                "barcode":  r["barcode_canon"] or "",
+                "ventas":   int(r["ventas"] or 0),
+                "piezas":   int(r["piezas"] or 0),
+            })
+
+    # 3. Mapa: top 200 CPs con sucursal dominante, coords del caché SQLite
+    try:
+        mapa_rows = query(f"""
+            SELECT TOP 200 con.CP, p.Cve_Sucursal,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
+                   COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
+            FROM FT_Pedidos_C p
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+            WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+              AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
+            GROUP BY con.CP, p.Cve_Sucursal
+            ORDER BY ventas DESC
+        """)
+    except Exception:
+        mapa_rows = []
+
+    # Sucursal dominante por CP (mayor ventas)
+    cp_data: dict = {}
+    for r in (mapa_rows or []):
+        cp = r.get("CP", "")
+        if not cp:
+            continue
+        v = int(r.get("ventas") or 0)
+        if cp not in cp_data or v > cp_data[cp]["ventas"]:
+            cp_data[cp] = {
+                "cp": cp, "cve_sucursal": int(r["Cve_Sucursal"]),
+                "ventas": v, "pedidos": int(r.get("pedidos") or 0),
+            }
+
+    # Buscar coords en caché SQLite (sin geocodificar — el endpoint /mapa ya lo hace)
+    puntos_mapa = []
+    if cp_data:
+        _init_cp_coords_table()
+        cps = list(cp_data.keys())
+        cached = fetch_all(
+            f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({','.join(['?']*len(cps))})",
+            cps,
+        )
+        coords = {r["cp"]: (r["lat"], r["lng"]) for r in cached}
+        for cp, data in cp_data.items():
+            if cp in coords:
+                lat, lng = coords[cp]
+                puntos_mapa.append({**data, "lat": lat, "lng": lng})
+
+    return JSONResponse({
+        "anio": _anio, "mes": _mes, "label": label,
+        "sucursales":    sucursales,
+        "top_productos": {str(k): v for k, v in top_por_suc.items()},
+        "mapa_puntos":   puntos_mapa,
+    })
+
+
+# ── Dashboard de Productos ────────────────────────────────────────────────────
+
+MESES_ES_P = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+              "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+
+
+@router.get("/productos")
+def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
+    """
+    Dashboard de Productos.
+
+    Retorna:
+      - top_productos: top 20 productos del período (consolidados por Cve_Producto)
+      - lista_productos: lista para el selector de predicción (cve_producto, descripcion)
+      - label: etiqueta del período
+    """
+    hoy_d = _date.today()
+    _anio = anio or hoy_d.year
+    _mes  = mes  or hoy_d.month
+    label = f"{MESES_ES_P[_mes]} {_anio}"
+
+    # Mes anterior para variación
+    _mes_ant = _mes - 1 if _mes > 1 else 12
+    _anio_ant = _anio if _mes > 1 else _anio - 1
+
+    # ── 1. Top 20 productos del período ──────────────────────────────────────
+    try:
+        top_rows = query(f"""
+            SELECT TOP 20
+                d.Cve_Producto,
+                MIN(pg.Descripcion) AS descripcion,
+                SUM(d.Cantidad_Ordenada)            AS piezas,
+                SUM(d.Cantidad_Ordenada * d.Precio) AS importe
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+            WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+              AND c.Cve_Sucursal <> 99
+              AND YEAR(c.Fecha_Documento) = {_anio}
+              AND MONTH(c.Fecha_Documento) = {_mes}
+            GROUP BY d.Cve_Producto
+            ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
+        """)
+    except Exception as _e:
+        raise HTTPException(500, f"productos top_rows error: {_e}")
+
+    # Importe del mismo producto el mes anterior (para variación)
+    try:
+        ant_rows = query(f"""
+            SELECT d.Cve_Producto,
+                   SUM(d.Cantidad_Ordenada * d.Precio) AS importe_ant
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+              AND c.Cve_Sucursal <> 99
+              AND YEAR(c.Fecha_Documento) = {_anio_ant}
+              AND MONTH(c.Fecha_Documento) = {_mes_ant}
+              AND d.Cve_Producto IN ({','.join(str(r['Cve_Producto']) for r in top_rows) or '0'})
+            GROUP BY d.Cve_Producto
+        """)
+        ant_map = {r["Cve_Producto"]: float(r["importe_ant"] or 0) for r in ant_rows}
+    except Exception:
+        ant_map = {}
+
+    total_importe = sum(float(r["importe"] or 0) for r in top_rows)
+
+    top_productos = []
+    for r in top_rows:
+        imp   = float(r["importe"] or 0)
+        imp_a = ant_map.get(r["Cve_Producto"], 0)
+        var   = round((imp - imp_a) / imp_a * 100, 1) if imp_a > 0 else None
+        top_productos.append({
+            "cve_producto": r["Cve_Producto"],
+            "descripcion":  (r["descripcion"] or "").strip(),
+            "piezas":       int(r["piezas"] or 0),
+            "importe":      round(imp, 2),
+            "importe_ant":  round(imp_a, 2),
+            "variacion":    var,
+            "pct_total":    round(imp / total_importe * 100, 1) if total_importe > 0 else 0,
+        })
+
+    # ── 2. Lista de productos para el selector de predicción ─────────────────
+    # Todos los productos con ventas en los últimos 6 meses (activos)
+    try:
+        lista_rows = query(f"""
+            SELECT DISTINCT d.Cve_Producto,
+                   MIN(pg.Descripcion) AS descripcion
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+            WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+              AND c.Cve_Sucursal <> 99
+              AND c.Fecha_Documento >= DATEADD(MONTH, -6, {hoy()})
+            GROUP BY d.Cve_Producto
+            ORDER BY MIN(pg.Descripcion)
+        """)
+        lista_productos = [
+            {"cve_producto": r["Cve_Producto"], "descripcion": (r["descripcion"] or "").strip()}
+            for r in lista_rows
+        ]
+    except Exception as _e:
+        raise HTTPException(500, f"productos lista error: {_e}")
+
+    return JSONResponse({
+        "anio": _anio, "mes": _mes, "label": label,
+        "top_productos":  top_productos,
+        "lista_productos": lista_productos,
+        "total_importe":  round(total_importe, 2),
+    })
+
+
+@router.get("/productos/prediccion")
+def productos_prediccion(cve_producto: int):
+    """
+    Predicción de demanda para un producto específico.
+
+    Modelo:
+      Para cada paciente (Cve_Cliente) que haya comprado el producto en los
+      últimos 90 días (tratamiento activo), calculamos:
+        - meses_transcurridos = meses desde primera compra del producto
+        - meses_restantes = max(0, 24 - meses_transcurridos)   # tratamiento 2 años
+        - promedio_mensual = total_piezas / max(1, meses_con_compra)
+        - contribucion_pred = promedio_mensual × meses_restantes
+
+      La suma de contribuciones da la demanda proyectada del período restante.
+      Adicionalmente se desglosa por sucursal.
+
+    Returns:
+        JSON con resumen, desglose por paciente y por sucursal.
+    """
+    try:
+        prod_row = query(f"""
+            SELECT TOP 1 pg.Descripcion
+            FROM IM_Productos_Gral pg
+            WHERE pg.Cve_Producto = {cve_producto}
+        """)
+        nombre_producto = (prod_row[0]["Descripcion"] or "").strip() if prod_row else f"Producto {cve_producto}"
+    except Exception as e:
+        raise HTTPException(500, f"prediccion-nombre: {e}")
+
+    try:
+        hist_rows = query(f"""
+            SELECT
+                c.Cve_Cliente,
+                c.Cve_Sucursal,
+                MIN(ISNULL(s.Nombre, CAST(c.Cve_Sucursal AS VARCHAR))) AS sucursal,
+                MIN(CONVERT(DATE, c.Fecha_Documento)) AS primera_compra,
+                MAX(CONVERT(DATE, c.Fecha_Documento)) AS ultima_compra,
+                COUNT(DISTINCT YEAR(c.Fecha_Documento) * 100 + MONTH(c.Fecha_Documento))
+                    AS meses_con_compra,
+                SUM(d.Cantidad_Ordenada) AS total_piezas
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            LEFT JOIN GN_Sucursales s ON s.Cve_Sucursal = c.Cve_Sucursal
+            WHERE d.Cve_Producto = {cve_producto}
+              AND c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+              AND c.Cve_Sucursal <> 99
+              AND c.Cve_Cliente IS NOT NULL
+            GROUP BY c.Cve_Cliente, c.Cve_Sucursal
+        """)
+    except Exception as e:
+        raise HTTPException(500, f"prediccion-hist: {e}")
+
+    hoy_d = _date.today()
+    pred_90 = pred_6m = 0.0
+    clientes_activos = 0
+    suc_map: dict = defaultdict(lambda: {"sucursal": "", "clientes": 0, "pred_3m": 0.0, "pred_6m": 0.0})
+    detalle = []
+
+    def _to_date(val):
+        if val is None:
+            return hoy_d
+        if hasattr(val, "date"):
+            return val.date()
+        if isinstance(val, _date):
+            return val
+        return _date.fromisoformat(str(val)[:10])
+
+    for r in hist_rows:
+        # Solo clientes activos: última compra en los últimos 90 días
+        ult  = _to_date(r["ultima_compra"])
+        prim = _to_date(r["primera_compra"])
+        if (hoy_d - ult).days > 90:
+            continue
+
+        meses_transcurridos = max(1, (hoy_d.year - prim.year) * 12 + (hoy_d.month - prim.month))
+        meses_restantes     = max(0, 24 - meses_transcurridos)
+        meses_con_compra    = max(1, int(r["meses_con_compra"] or 1))
+        piezas_total        = float(r["total_piezas"] or 0)
+        prom_mensual        = piezas_total / meses_con_compra
+
+        contrib_3m = prom_mensual * min(3, meses_restantes)
+        contrib_6m = prom_mensual * min(6, meses_restantes)
+
+        pred_90 += contrib_3m
+        pred_6m += contrib_6m
+        clientes_activos += 1
+
+        cve_suc = r["Cve_Sucursal"]
+        suc_map[cve_suc]["sucursal"] = (r["sucursal"] or f"Suc {cve_suc}").strip()
+        suc_map[cve_suc]["clientes"] += 1
+        suc_map[cve_suc]["pred_3m"]  += contrib_3m
+        suc_map[cve_suc]["pred_6m"]  += contrib_6m
+
+        detalle.append({
+            "cliente":           r["Cve_Cliente"],
+            "sucursal":          (r["sucursal"] or "").strip(),
+            "primera_compra":    str(prim),
+            "ultima_compra":     str(ult),
+            "meses_transcurridos": meses_transcurridos,
+            "meses_restantes":   meses_restantes,
+            "prom_mensual":      round(prom_mensual, 1),
+            "pred_3m":           round(contrib_3m, 1),
+            "pred_6m":           round(contrib_6m, 1),
+        })
+
+    por_sucursal = sorted(
+        [{"cve": k, **v, "pred_3m": round(v["pred_3m"], 1), "pred_6m": round(v["pred_6m"], 1)}
+         for k, v in suc_map.items()],
+        key=lambda x: x["pred_6m"], reverse=True,
+    )
+
+    return JSONResponse({
+        "cve_producto":    cve_producto,
+        "producto":        nombre_producto,
+        "clientes_activos": clientes_activos,
+        "pred_3m":         round(pred_90, 1),
+        "pred_6m":         round(pred_6m, 1),
+        "por_sucursal":    por_sucursal,
+        "detalle":         detalle,
+    })
+
+
+# ── Dashboard de Inventario ───────────────────────────────────────────────────
+
+@router.get("/inventario")
+def inventario_dashboard():
+    """
+    Dashboard de Inventario.
+
+    Retorna:
+      - valor_stock: valor total del inventario (costo × existencia)
+      - unidades_totales: suma de existencias
+      - productos_con_stock: productos con existencia > 0
+      - criticos: productos con existencia total = 0 pero ventas en últimos 90 días
+      - por_sucursal: valor, unidades y productos por sucursal
+      - top_por_valor: top 15 productos por valor en stock
+      - criticos_lista: top 20 críticos ordenados por importe de ventas 90d
+    """
+    _hoy = hoy()
+
+    # ── 1. KPIs globales ──────────────────────────────────────────────────────
+    try:
+        kpi_rows = query(f"""
+            SELECT
+                ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor_stock,
+                ISNULL(SUM(e.Existencia), 0)                               AS unidades_totales,
+                COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos_con_stock
+            FROM IN_Existencias_Alm e
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+        """)
+        kpi = kpi_rows[0] if kpi_rows else {}
+        valor_stock        = float(kpi.get("valor_stock") or 0)
+        unidades_totales   = int(kpi.get("unidades_totales") or 0)
+        productos_con_stock = int(kpi.get("productos_con_stock") or 0)
+    except Exception as e:
+        raise HTTPException(500, f"inventario-kpis: {e}")
+
+    # ── 2. Críticos: sin stock pero con ventas en 90 días ─────────────────────
+    try:
+        criticos_count_rows = query(f"""
+            SELECT COUNT(*) AS total
+            FROM (
+                SELECT e.Cve_Producto
+                FROM IN_Existencias_Alm e
+                WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+                GROUP BY e.Cve_Producto
+                HAVING SUM(e.Existencia) <= 0
+            ) sin_stock
+            WHERE sin_stock.Cve_Producto IN (
+                SELECT DISTINCT d.Cve_Producto
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Fecha_Documento >= DATEADD(DAY, -90, {_hoy})
+            )
+        """)
+        criticos = int((criticos_count_rows[0] if criticos_count_rows else {}).get("total") or 0)
+    except Exception as e:
+        raise HTTPException(500, f"inventario-criticos-count: {e}")
+
+    # ── 3. Stock por sucursal ─────────────────────────────────────────────────
+    try:
+        suc_rows = query(f"""
+            SELECT s.Nombre AS sucursal,
+                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor,
+                   ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                   COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos
+            FROM GN_Sucursales s
+            LEFT JOIN IN_Existencias_Alm e
+                ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            WHERE s.Cve_Sucursal <> 99
+            GROUP BY s.Cve_Sucursal, s.Nombre
+            HAVING ISNULL(SUM(e.Existencia), 0) > 0
+            ORDER BY SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)) DESC
+        """)
+        por_sucursal = [
+            {
+                "sucursal":  (r["sucursal"] or "").strip(),
+                "valor":     round(float(r["valor"] or 0), 2),
+                "unidades":  int(r["unidades"] or 0),
+                "productos": int(r["productos"] or 0),
+            }
+            for r in suc_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-sucursal: {e}")
+
+    # ── 4. Top 15 productos por valor en stock ────────────────────────────────
+    try:
+        top_rows = query(f"""
+            SELECT TOP 15
+                MIN(pg.Descripcion)          AS descripcion,
+                SUM(e.Existencia)            AS unidades,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base, 0))   AS precio1,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base2, 0))   AS precio2,
+                MIN(ISNULL(pg.Precio_Minimo_Venta_Base3, 0))   AS precio3
+            FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            GROUP BY e.Cve_Producto
+            ORDER BY SUM(e.Existencia) DESC
+        """)
+        top_por_valor = [
+            {
+                "descripcion": (r["descripcion"] or "").strip(),
+                "unidades":    int(r["unidades"] or 0),
+                "precio1":     round(float(r["precio1"] or 0), 2),
+                "precio2":     round(float(r["precio2"] or 0), 2),
+                "precio3":     round(float(r["precio3"] or 0), 2),
+            }
+            for r in top_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-top: {e}")
+
+    # ── 5. Lista críticos (top 20 por importe de ventas 90d) ──────────────────
+    try:
+        crit_rows = query(f"""
+            SELECT TOP 20
+                MIN(pg.Descripcion)                  AS descripcion,
+                SUM(v.piezas_90d)                    AS piezas_90d,
+                SUM(v.importe_90d)                   AS importe_90d
+            FROM (
+                SELECT e.Cve_Producto
+                FROM IN_Existencias_Alm e
+                WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
+                GROUP BY e.Cve_Producto
+                HAVING SUM(e.Existencia) <= 0
+            ) sin_stock
+            INNER JOIN (
+                SELECT d.Cve_Producto,
+                       SUM(d.Cantidad_Ordenada)            AS piezas_90d,
+                       SUM(d.Cantidad_Ordenada * d.Precio) AS importe_90d
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Fecha_Documento >= DATEADD(DAY, -90, {_hoy})
+                GROUP BY d.Cve_Producto
+            ) v ON v.Cve_Producto = sin_stock.Cve_Producto
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = sin_stock.Cve_Producto
+            GROUP BY sin_stock.Cve_Producto
+            ORDER BY SUM(v.importe_90d) DESC
+        """)
+        criticos_lista = [
+            {
+                "descripcion": (r["descripcion"] or "").strip(),
+                "piezas_90d":  int(r["piezas_90d"] or 0),
+                "importe_90d": round(float(r["importe_90d"] or 0), 2),
+            }
+            for r in crit_rows
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"inventario-criticos-lista: {e}")
+
+    # Lista de productos con stock para el selector de consulta histórica
+    try:
+        lista_rows = query(f"""
+            SELECT DISTINCT CAST(e.Cve_Producto AS VARCHAR) AS cve_producto,
+                   MIN(pg.Descripcion) AS descripcion
+            FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            GROUP BY e.Cve_Producto
+            ORDER BY MIN(pg.Descripcion)
+        """)
+        lista_productos = [
+            {"cve_producto": r["cve_producto"], "descripcion": (r["descripcion"] or "").strip()}
+            for r in lista_rows
+        ]
+    except Exception:
+        lista_productos = []
+
+    return JSONResponse({
+        "valor_stock":         round(valor_stock, 2),
+        "unidades_totales":    unidades_totales,
+        "productos_con_stock": productos_con_stock,
+        "criticos":            criticos,
+        "por_sucursal":        por_sucursal,
+        "top_por_valor":       top_por_valor,
+        "criticos_lista":      criticos_lista,
+        "lista_productos":     lista_productos,
+    })
+
+
+@router.get("/inventario/consulta")
+def inventario_consulta(cve_producto: str, fecha: str, cve_sucursal: Optional[int] = None):
+    """
+    Consulta el stock histórico de un producto en una fecha dada.
+    Si no hay dato = no había existencia ese día.
+    Filtra opcionalmente por sucursal.
+    """
+    base_q = ("SELECT cve_sucursal, sucursal, descripcion, existencia, "
+              "precio1, precio2, precio3 "
+              "FROM inventario_historico_productos WHERE cve_producto=? AND fecha=?")
+    if cve_sucursal:
+        rows = fetch_all(base_q + " AND cve_sucursal=? ORDER BY existencia DESC", (cve_producto, fecha, cve_sucursal))
+    else:
+        rows = fetch_all(base_q + " ORDER BY existencia DESC", (cve_producto, fecha))
+
+    if not rows:
+        descripcion = (fetch_one(
+            "SELECT descripcion FROM inventario_historico_productos WHERE cve_producto=? LIMIT 1",
+            (cve_producto,)
+        ) or {}).get("descripcion", f"Producto {cve_producto}")
+        return JSONResponse({
+            "cve_producto": cve_producto, "fecha": fecha,
+            "descripcion": descripcion,
+            "sin_existencia": True, "sucursales": [], "total_existencia": 0,
+        })
+
+    r0 = rows[0]
+    descripcion = (r0.get("descripcion") or f"Producto {cve_producto}").strip()
+    # Los precios son del producto, iguales en todas las sucursales
+    precios = {
+        "precio1": round(float(r0.get("precio1") or 0), 2),
+        "precio2": round(float(r0.get("precio2") or 0), 2),
+        "precio3": round(float(r0.get("precio3") or 0), 2),
+    }
+    sucursales = [
+        {"sucursal":   (r["sucursal"] or str(r["cve_sucursal"])).strip(),
+         "existencia": round(float(r["existencia"] or 0), 2)}
+        for r in rows
+    ]
+    return JSONResponse({
+        "cve_producto":     cve_producto,
+        "fecha":            fecha,
+        "descripcion":      descripcion,
+        "sin_existencia":   False,
+        "precios":          precios,
+        "sucursales":       sucursales,
+        "total_existencia": sum(s["existencia"] for s in sucursales),
+    })
+
+
+@router.get("/inventario/historico")
+def inventario_historico():
+    """
+    Devuelve todo el histórico de snapshots de inventario guardados por el cron.
+    Retorna lista completa de fechas con valor_stock, unidades, criticos, por_sucursal.
+    """
+    rows = fetch_all(
+        "SELECT fecha, valor_stock, unidades, productos_stock, criticos, por_sucursal "
+        "FROM inventario_historico ORDER BY fecha ASC"
+    )
+    historico = []
+    for r in (rows or []):
+        historico.append({
+            "fecha":          r["fecha"],
+            "valor_stock":    round(float(r["valor_stock"] or 0), 2),
+            "unidades":       int(r["unidades"] or 0),
+            "productos_stock": int(r["productos_stock"] or 0),
+            "criticos":       int(r["criticos"] or 0),
+            "por_sucursal":   json.loads(r["por_sucursal"] or "[]"),
+        })
+    return JSONResponse({"historico": historico, "total_dias": len(historico)})
 
 
 # ── KPIs globales ─────────────────────────────────────────────────────────────
@@ -337,11 +1134,14 @@ def kpis_globales(modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
         ) AS t
     """)
 
-    pedidos_row = query("""
-        SELECT COUNT(*) AS pedidos_activos
-        FROM FT_Pedidos_C
-        WHERE Estatus = 'AC' AND Cve_Sucursal <> 99
-    """)
+    try:
+        pedidos_row = query(f"""
+            SELECT COUNT(DISTINCT c.Cve_Folio) AS pedidos_activos
+            FROM FT_Pedidos_C c
+            WHERE c.Estatus <> 'CN' AND c.Cve_Sucursal <> 99 AND {filtro}
+        """)
+    except Exception:
+        pedidos_row = [{"pedidos_activos": 0}]
 
     sucursales_row = query(f"""
         SELECT COUNT(DISTINCT c.Cve_Sucursal) AS total
@@ -462,11 +1262,11 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
 
     elif tipo == "pedidos_activos":
         rows = query(f"""
-            SELECT s.Nombre AS label, COUNT(CASE WHEN p.Estatus='AC' THEN 1 END) AS valor
+            SELECT s.Nombre AS label, COUNT(CASE WHEN p.Estatus<>'CN' THEN 1 END) AS valor
             FROM GN_Sucursales s
             LEFT JOIN FT_Pedidos_C p ON p.Cve_Sucursal=s.Cve_Sucursal
             WHERE s.Cve_Sucursal<>99
-            GROUP BY s.Cve_Sucursal, s.Nombre HAVING COUNT(CASE WHEN p.Estatus='AC' THEN 1 END)>0
+            GROUP BY s.Cve_Sucursal, s.Nombre HAVING COUNT(CASE WHEN p.Estatus<>'CN' THEN 1 END)>0
             ORDER BY valor DESC
         """)
         total = sum(r.get("valor") or 0 for r in rows)
@@ -518,28 +1318,49 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
                              "datos": rows})
 
     elif tipo == "comparativo_meses":
-        rows = query(f"""
-            SELECT TOP 6
-                YEAR(c.Fecha_Documento) AS anio,
-                MONTH(c.Fecha_Documento) AS mes,
-                DATENAME(MONTH, c.Fecha_Documento) AS mes_nombre,
-                ISNULL(SUM(t.Monto),0) AS valor
-            FROM (
-                SELECT c.Cve_Folio, c.Fecha_Documento,
-                       ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS Monto
-                FROM FT_Pedidos_C c
-                INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-                WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
-                  AND c.Fecha_Documento >= DATEADD(MONTH,-5,{hoy()})
-                GROUP BY c.Cve_Folio, c.Fecha_Documento
-            ) t
-            JOIN FT_Pedidos_C c ON c.Cve_Folio=t.Cve_Folio
-            WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
-              AND c.Fecha_Documento >= DATEADD(MONTH,-5,{hoy()})
-            GROUP BY YEAR(c.Fecha_Documento), MONTH(c.Fecha_Documento), DATENAME(MONTH, c.Fecha_Documento)
-            ORDER BY anio, mes
-        """)
-        return JSONResponse({"tipo": tipo, "titulo": "Ventas últimos 6 meses", "datos": rows})
+        try:
+            from collections import defaultdict
+            from datetime import datetime as _dt
+            _MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                      "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+            daily = query(f"""
+                SELECT fecha, sucursal, SUM(valor) AS valor FROM (
+                    SELECT CAST(c.Fecha_Documento AS DATE) AS fecha,
+                           s.Nombre AS sucursal,
+                           c.Cve_Folio AS folio,
+                           ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor
+                    FROM FT_Pedidos_C c
+                    INNER JOIN FT_Pedidos_Dia d
+                      ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+                    INNER JOIN GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal
+                    WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
+                      AND c.Cve_Sucursal <> 99
+                      AND CAST(c.Fecha_Documento AS DATE) >= DATEADD(MONTH,-5,CAST({hoy()} AS DATE))
+                    GROUP BY CAST(c.Fecha_Documento AS DATE), s.Nombre, c.Cve_Folio
+                ) t GROUP BY fecha, sucursal ORDER BY fecha
+            """)
+            # Agregación por (mes, sucursal) en Python
+            monthly: dict = defaultdict(lambda: defaultdict(float))
+            for r in daily:
+                f = r.get("fecha")
+                if f is None:
+                    continue
+                k = (f.year, f.month) if hasattr(f, "year") else (
+                    _dt.strptime(str(f)[:10], "%Y-%m-%d").year,
+                    _dt.strptime(str(f)[:10], "%Y-%m-%d").month,
+                )
+                suc = r.get("sucursal") or "—"
+                monthly[k][suc] += float(r.get("valor") or 0)
+            rows = []
+            for k, suc_dict in sorted(monthly.items()):
+                for suc, val in sorted(suc_dict.items()):
+                    rows.append({
+                        "anio": k[0], "mes": k[1], "mes_nombre": _MESES[k[1]],
+                        "sucursal": suc, "valor": round(val, 2),
+                    })
+        except Exception:
+            rows = []
+        return JSONResponse({"tipo": tipo, "titulo": "Ventas por sucursal — últimos 6 meses", "datos": rows})
 
     # ── Ventas por día (últimos 30 días) ─────────────────────────────────────
     elif tipo == "ventas_diario":
@@ -560,54 +1381,77 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
         return JSONResponse({"tipo": tipo, "titulo": "Ventas diarias — últimos 30 días",
                              "total": total, "datos": rows})
 
-    # ── Tendencia anual (últimos 12 meses) ────────────────────────────────────
+    # ── Tendencia (hasta 24 meses — mejora con el tiempo) ────────────────────
     elif tipo == "tendencia_anual":
-        rows = query(f"""
-            SELECT anio, mes, mes_nombre, SUM(valor) AS valor, COUNT(folio) AS pedidos FROM (
-                SELECT YEAR(c.Fecha_Documento) AS anio,
-                       MONTH(c.Fecha_Documento) AS mes,
-                       DATENAME(MONTH, c.Fecha_Documento) AS mes_nombre,
-                       c.Cve_Folio AS folio,
-                       ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor
-                FROM FT_Pedidos_C c
-                INNER JOIN FT_Pedidos_Dia d
-                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-                WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
-                  AND c.Fecha_Documento >= DATEADD(MONTH,-11,
-                      DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
-                GROUP BY YEAR(c.Fecha_Documento), MONTH(c.Fecha_Documento),
-                         DATENAME(MONTH, c.Fecha_Documento), c.Cve_Folio
-            ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
-        """)
+        try:
+            from collections import defaultdict
+            from datetime import datetime as _dt
+            _MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                      "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+            daily = query(f"""
+                SELECT fecha, SUM(valor) AS valor, COUNT(folio) AS pedidos FROM (
+                    SELECT CAST(c.Fecha_Documento AS DATE) AS fecha,
+                           c.Cve_Folio AS folio,
+                           ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor
+                    FROM FT_Pedidos_C c
+                    INNER JOIN FT_Pedidos_Dia d
+                      ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
+                    WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
+                      AND CAST(c.Fecha_Documento AS DATE) >= DATEADD(MONTH,-23,CAST({hoy()} AS DATE))
+                    GROUP BY CAST(c.Fecha_Documento AS DATE), c.Cve_Folio
+                ) t GROUP BY fecha ORDER BY fecha
+            """)
+            monthly: dict = defaultdict(lambda: {"valor": 0.0, "pedidos": 0})
+            for r in daily:
+                f = r.get("fecha")
+                if f is None:
+                    continue
+                k = (f.year, f.month) if hasattr(f, "year") else (
+                    _dt.strptime(str(f)[:10], "%Y-%m-%d").year,
+                    _dt.strptime(str(f)[:10], "%Y-%m-%d").month,
+                )
+                monthly[k]["valor"]   += float(r.get("valor") or 0)
+                monthly[k]["pedidos"] += int(r.get("pedidos") or 0)
+            rows = [
+                {"anio": k[0], "mes": k[1], "mes_nombre": _MESES[k[1]],
+                 "valor": round(v["valor"], 2), "pedidos": v["pedidos"]}
+                for k, v in sorted(monthly.items()) if v["valor"] > 0
+            ]
+        except Exception:
+            rows = []
         total = sum(float(r.get("valor") or 0) for r in rows)
-        return JSONResponse({"tipo": tipo, "titulo": "Tendencia anual de ventas",
+        return JSONResponse({"tipo": tipo, "titulo": "Tendencia de ventas — 12 meses + proyección",
                              "total": total, "datos": rows})
 
     # ── Top productos ─────────────────────────────────────────────────────────
     elif tipo == "top_productos":
         if modo == "30d":
             filtro = f"CAST(c.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
+        elif modo == "15d":
+            filtro = f"CAST(c.Fecha_Documento AS DATE) >= DATEADD(DAY,-15,{hoy_fecha})"
+        elif modo == "hoy":
+            filtro = f"CAST(c.Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)"
         else:
             filtro = (f"YEAR(c.Fecha_Documento)=YEAR({hoy()}) "
                       f"AND MONTH(c.Fecha_Documento)=MONTH({hoy()})")
-        rows = query(f"""
-            SELECT TOP 10
-                ISNULL(p.Descripcion, t.Cve_Producto) AS label,
-                t.valor AS valor,
-                t.unidades AS unidades
-            FROM (
-                SELECT d.Cve_Producto,
-                       ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor,
-                       SUM(d.Cantidad_Ordenada) AS unidades
+        try:
+            rows = query(f"""
+                SELECT TOP 10
+                    MIN(pg.Descripcion)                 AS label,
+                    SUM(d.Cantidad_Ordenada * d.Precio) AS valor,
+                    SUM(d.Cantidad_Ordenada)            AS unidades
                 FROM FT_Pedidos_C c
                 INNER JOIN FT_Pedidos_Dia d
-                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-                WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO' AND {filtro}
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+                  AND c.Cve_Sucursal <> 99
+                  AND {filtro}
                 GROUP BY d.Cve_Producto
-            ) t
-            LEFT JOIN IM_Productos_Gral p ON p.Cve_Producto=t.Cve_Producto
-            ORDER BY t.valor DESC
-        """)
+                ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
+            """)
+        except Exception as _e:
+            raise HTTPException(500, f"top_productos SQL error: {_e}")
         total = sum(float(r.get("valor") or 0) for r in rows)
         return JSONResponse({"tipo": tipo, "modo": modo,
                              "titulo": f"Top productos ({'últ. 30 días' if modo=='30d' else 'mes actual'})",
@@ -1220,19 +2064,19 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
     elif tipo == "top_productos":
         filtro, _, label = _filtros_periodo(modo, "c.Fecha_Documento", fi, ff)
         rows = query(f"""
-            SELECT TOP 10 ISNULL(p.Descripcion, t.Cve_Producto) AS label,
-                   t.valor AS valor, t.unidades AS unidades
-            FROM (
-                SELECT d.Cve_Producto,
-                       ISNULL(SUM(d.Cantidad_Ordenada*d.Precio),0) AS valor,
-                       SUM(d.Cantidad_Ordenada) AS unidades
-                FROM FT_Pedidos_C c
-                INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
-                WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO' AND {filtro}
-                GROUP BY d.Cve_Producto
-            ) t
-            LEFT JOIN IM_Productos_Gral p ON p.Cve_Producto=t.Cve_Producto
-            ORDER BY t.valor DESC
+            SELECT TOP 10
+                MIN(pg.Descripcion)                 AS label,
+                SUM(d.Cantidad_Ordenada * d.Precio) AS valor,
+                SUM(d.Cantidad_Ordenada)            AS unidades
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+            WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
+              AND c.Cve_Sucursal <> 99
+              AND {filtro}
+            GROUP BY d.Cve_Producto
+            ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         return {"tipo": tipo, "modo": modo,
