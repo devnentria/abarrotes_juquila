@@ -921,8 +921,17 @@
     <!-- Dashboards -->
     <div class="dashboard-section">
 
+      <!-- Breadcrumb de sección (navegación interna) -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;font-size:12px;color:var(--text-dim)">
+        <span id="tab-resumen" onclick="_switchTab('resumen')" style="cursor:pointer;font-weight:600;color:var(--blue-mid)">Resumen</span>
+        <span style="opacity:.4">|</span>
+        <span id="tab-zonas" onclick="_switchTab('zonas')" style="cursor:pointer">Zonas</span>
+        <span style="opacity:.4">|</span>
+        <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
+      </div>
+
       <!-- Header con toggle de período -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div id="header-periodo" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="section-label" style="margin-bottom:0">Resumen ejecutivo</div>
         <div class="periodo-toggle" id="periodo-toggle">
           <button class="periodo-btn" data-modo="hoy">Hoy</button>
@@ -1161,6 +1170,122 @@
     </div>
 
     </div><!-- /static-dash-area -->
+
+    <!-- ── Dashboard Zonas ───────────────────────────────────────── -->
+    <div id="zonas-dash-area" style="display:none">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-label" style="margin-bottom:0">Zonas de ventas</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="zonas-prev" onclick="_zonasNavMes(-1)"
+            style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:16px;color:var(--text)">‹</button>
+          <span id="zonas-label" style="font-size:13px;font-weight:500;min-width:120px;text-align:center">—</span>
+          <button id="zonas-next" onclick="_zonasNavMes(1)"
+            style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:16px;color:var(--text)">›</button>
+        </div>
+      </div>
+
+      <!-- Fila 1: Mapa + Tabla resumen -->
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:16px;margin-bottom:16px;align-items:stretch">
+
+        <!-- Mapa coloreado por sucursal -->
+        <div class="chart-card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;position:relative;isolation:isolate">
+          <div style="padding:12px 16px 8px;font-weight:600;font-size:13px;color:var(--text);flex-shrink:0">
+            Cobertura geográfica por sucursal
+          </div>
+          <div id="zonas-mapa-leaflet" style="flex:1;min-height:0;position:relative;overflow:hidden"></div>
+        </div>
+
+        <!-- Tabla resumen sucursales -->
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Resumen por sucursal</div>
+          <div id="zonas-tabla-suc" style="font-size:12px"></div>
+        </div>
+
+      </div>
+
+      <!-- Fila 2: Top productos + Comparativo barras -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+        <!-- Top productos por sucursal -->
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Top 5 productos por sucursal</div>
+          <div id="zonas-top-productos" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+
+        <!-- Comparativo ventas + piezas -->
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Ventas y volumen por sucursal</div>
+          <div id="zonas-chart-wrap" class="chart-loading">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
+              <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
+            </svg>
+            Cargando...
+          </div>
+          <canvas id="zonas-chart" style="display:none;max-height:360px"></canvas>
+        </div>
+
+      </div>
+
+    </div><!-- /zonas-dash-area -->
+
+    <!-- ── Dashboard Productos ──────────────────────────────────── -->
+    <div id="productos-dash-area" style="display:none">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="section-label" style="margin-bottom:0">Productos</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="prod-prev" onclick="_prodNavMes(-1)"
+            style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:16px;color:var(--text)">‹</button>
+          <span id="prod-label" style="font-size:13px;font-weight:500;min-width:120px;text-align:center">—</span>
+          <button id="prod-next" onclick="_prodNavMes(1)"
+            style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:16px;color:var(--text)">›</button>
+        </div>
+      </div>
+
+      <!-- Fila 0: KPIs -->
+      <div id="prod-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+      <!-- Fila 1a: Ganadores y perdedores -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div class="chart-card">
+          <div class="chart-card-title" style="color:var(--success);margin-bottom:10px">▲ Mayores crecimientos</div>
+          <div id="prod-gainers" style="font-size:12px"></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-card-title" style="color:var(--danger);margin-bottom:10px">▼ Mayores caídas</div>
+          <div id="prod-losers" style="font-size:12px"></div>
+        </div>
+      </div>
+
+      <!-- Fila 1b: Top 20 productos -->
+      <div class="chart-card" style="margin-bottom:16px">
+        <div class="chart-card-title" style="margin-bottom:12px">Top productos del período</div>
+        <div id="prod-top-tabla" style="font-size:12px"></div>
+      </div>
+
+      <!-- Fila 2: Predicción de demanda -->
+      <div class="chart-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div class="chart-card-title" style="margin-bottom:2px">Predicción de demanda por tratamiento</div>
+            <div style="font-size:11px;color:var(--text-dim)">Pacientes activos (compra en últimos 90 días) · Tratamiento estimado 24 meses</div>
+          </div>
+          <select id="prod-selector"
+            onchange="_prodSeleccionarProducto(this.value)"
+            style="font-size:12px;padding:6px 10px;border:1px solid var(--border);border-radius:8px;
+                   background:var(--card);color:var(--text);cursor:pointer;max-width:280px">
+            <option value="">— Selecciona un producto —</option>
+          </select>
+        </div>
+        <div id="prod-prediccion" style="font-size:12px;color:var(--text-dim);padding:20px 0;text-align:center">
+          Selecciona un producto para ver la proyección de demanda.
+        </div>
+      </div>
+
+    </div><!-- /productos-dash-area -->
 
   </div>
 
@@ -1931,6 +2056,8 @@ function _scVerDashboard(jobId) {
 }
 
 function _scMostrarCargandoDashboard() {
+  // El dashboard de IA siempre aparece en el contexto del tab Resumen
+  if (_currentTab !== 'resumen') _switchTab('resumen');
   document.getElementById('static-dash-area').classList.add('hidden');
   const wrap = document.getElementById('dashboard-ia-wrap');
   if (!wrap) return;
@@ -1998,6 +2125,31 @@ async function _scEnviar() {
   _scAddTyping();
 
   try {
+    // Zonas → navegar directamente sin llamar al backend
+    const _zonasHint = /\b(zona[s]?|cobertura|geogr[aá]f|regi[oó]n|regiones|distribuci[oó]n.*sucursal|sucursal.*distribuci[oó]n|d[oó]nde.*vende|vende.*d[oó]nde)\b/i.test(texto);
+    if (_zonasHint) {
+      _scRemoveTyping();
+      _scAddBubble('Te muestro el dashboard de **Zonas de ventas** — cobertura geográfica por sucursal.', 'bot');
+      _switchTab('zonas');
+      return;
+    }
+    // Productos → navegar directamente sin llamar al backend
+    // Cubre typos comunes: "dahboard", "dashbord", "dasbhord", "tablero", etc.
+    const _hasDashWord = /\b(dash\w*|dah[a-z]*b\w*|das[hb]\w*|tablero|gr[aá]fic[ao]s?|chart|visualiza\w*|report\w*|muéstrame|muestra)\b/i.test(texto);
+    const _hasProdWord = /\bproducto[s]?\b/i.test(texto);
+    // También captura "dame/ver/abre + productos" aunque no diga "dashboard"
+    const _dameProd   = /\b(dame|ver|abre|muestra|pon)\b.{0,30}\bproducto[s]?\b/i.test(texto);
+    const _prodHint = (_hasDashWord && _hasProdWord)
+      || _dameProd
+      || /\bpredicci[oó]n\b.*\b(demanda|producto|venta)\b/i.test(texto)
+      || /\bdemanda\b.*\bproducto[s]?\b/i.test(texto);
+    if (_prodHint) {
+      _scRemoveTyping();
+      _scAddBubble('Te muestro el dashboard de **Productos** — top productos y predicción de demanda por tratamiento.', 'bot');
+      _switchTab('productos');
+      return;
+    }
+
     const body = { mensaje: texto };
     if (_scConvId) body.conversacion_id = _scConvId;
 
@@ -2298,6 +2450,575 @@ function renderMapaVentas(puntos) {
 
 function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 
+// ── Tab Resumen / Zonas / Productos ──────────────────────────────────────────
+let _currentTab = 'resumen';
+
+function _switchTab(tab) {
+  _currentTab = tab;
+  const isResumen   = tab === 'resumen';
+  const isZonas     = tab === 'zonas';
+  const isProductos = tab === 'productos';
+
+  // Ocultar dashboard de IA si está visible (es independiente del sistema de tabs)
+  const iaWrap = document.getElementById('dashboard-ia-wrap');
+  if (iaWrap && !iaWrap.classList.contains('hidden')) {
+    iaWrap.classList.add('hidden');
+  }
+
+  document.getElementById('static-dash-area').style.display    = isResumen   ? '' : 'none';
+  document.getElementById('zonas-dash-area').style.display     = isZonas     ? '' : 'none';
+  document.getElementById('productos-dash-area').style.display = isProductos ? '' : 'none';
+  document.getElementById('header-periodo').style.display      = isResumen   ? '' : 'none';
+
+  const btnR = document.getElementById('tab-resumen');
+  const btnZ = document.getElementById('tab-zonas');
+  const btnP = document.getElementById('tab-productos');
+  const _active = 'var(--blue-mid)', _dim = 'var(--text-dim)';
+  if (btnR) { btnR.style.color = isResumen   ? _active : _dim; btnR.style.fontWeight = isResumen   ? '600' : '400'; }
+  if (btnZ) { btnZ.style.color = isZonas     ? _active : _dim; btnZ.style.fontWeight = isZonas     ? '600' : '400'; }
+  if (btnP) { btnP.style.color = isProductos ? _active : _dim; btnP.style.fontWeight = isProductos ? '600' : '400'; }
+
+  if (isZonas) {
+    if (!_zonasLoaded) cargarZonas();
+    else if (_zonasMapa) setTimeout(() => _zonasMapa.invalidateSize(), 50);
+  }
+  if (isProductos) {
+    if (!_prodLoaded) cargarProductos();
+  }
+}
+
+// ── Dashboard Zonas ───────────────────────────────────────────────────────────
+const COLORES_ZONAS = [
+  '#1A2B5A','#00897B','#EF6C3A','#7C3AED','#DC2626',
+  '#059669','#D97706','#2563EB','#DB2777',
+];
+
+let _zonasAnio    = new Date().getFullYear();
+let _zonasMes     = new Date().getMonth() + 1;
+let _zonasLoaded  = false;
+let _zonasMapa    = null;
+let _zonasCluster = null;
+let _zonasChart   = null;
+
+const _ZONAS_CACHE_KEY = 'zonas_cache';
+const _ZONAS_CACHE_TTL = 10 * 60 * 1000; // 10 min
+
+function _zonasGuardarCache(anio, mes, data) {
+  try {
+    localStorage.setItem(_ZONAS_CACHE_KEY, JSON.stringify({ anio, mes, data, ts: Date.now() }));
+  } catch(_) {}
+}
+
+function _zonasLeerCache(anio, mes) {
+  try {
+    const raw = localStorage.getItem(_ZONAS_CACHE_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (obj.anio !== anio || obj.mes !== mes) return null;
+    if (Date.now() - obj.ts > _ZONAS_CACHE_TTL) return null;
+    return obj.data;
+  } catch(_) { return null; }
+}
+
+const _MESES_ES_Z = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+async function _zonasNavMes(delta) {
+  const prevBtn = document.getElementById('zonas-prev');
+  const nextBtn = document.getElementById('zonas-next');
+  const labelEl = document.getElementById('zonas-label');
+  if (prevBtn) prevBtn.disabled = true;
+  if (nextBtn) nextBtn.disabled = true;
+  if (labelEl) labelEl.textContent = `${_MESES_ES_Z[_zonasMes]} ${_zonasAnio} ···`;
+
+  _zonasMes += delta;
+  if (_zonasMes > 12) { _zonasMes = 1;  _zonasAnio++; }
+  if (_zonasMes < 1)  { _zonasMes = 12; _zonasAnio--; }
+
+  try { await cargarZonas(); } finally {
+    if (prevBtn) prevBtn.disabled = false;
+    if (nextBtn) nextBtn.disabled = false;
+  }
+}
+
+function _aplicarZonasData(data) {
+  const labelEl = document.getElementById('zonas-label');
+  if (labelEl) labelEl.textContent = data.label || '';
+  _renderZonasMapa(data.mapa_puntos || [], data.sucursales || []);
+  _renderZonasTabla(data.sucursales || [], data.top_productos || {});
+  _renderZonasChart(data.sucursales || []);
+  _renderZonasTopProductos(data.sucursales || [], data.top_productos || {});
+}
+
+async function cargarZonas() {
+  _zonasLoaded = true;
+  const labelEl = document.getElementById('zonas-label');
+
+  // Mostrar desde cache mientras llega la respuesta fresca
+  const cached = _zonasLeerCache(_zonasAnio, _zonasMes);
+  if (cached) _aplicarZonasData(cached);
+
+  try {
+    const data = await api(`/api/datos/zonas?anio=${_zonasAnio}&mes=${_zonasMes}`);
+    _zonasGuardarCache(_zonasAnio, _zonasMes, data);
+    _aplicarZonasData(data);
+  } catch {
+    if (!cached && labelEl) labelEl.textContent = '— error —';
+  }
+}
+
+function _colorZona(cve, sucursales) {
+  const idx = sucursales.findIndex(s => s.cve === cve);
+  return COLORES_ZONAS[idx >= 0 ? idx % COLORES_ZONAS.length : 0];
+}
+
+function _renderZonasMapa(puntos, sucursales) {
+  const container = document.getElementById('zonas-mapa-leaflet');
+  if (!container) return;
+
+  if (!_zonasMapa) {
+    _zonasMapa = L.map('zonas-mapa-leaflet', { zoomControl: true, scrollWheelZoom: false })
+      .setView([23.5, -102.5], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© CartoDB', maxZoom: 17,
+    }).addTo(_zonasMapa);
+  }
+  setTimeout(() => _zonasMapa.invalidateSize(), 100);
+
+  if (_zonasCluster) _zonasMapa.removeLayer(_zonasCluster);
+  _zonasCluster = L.markerClusterGroup({
+    maxClusterRadius: 40,
+    iconCreateFunction: function(cluster) {
+      const sz = cluster.getChildCount() < 10 ? 30 : 38;
+      return L.divIcon({
+        html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:rgba(26,43,90,0.8);
+                           border:2px solid #fff;display:flex;align-items:center;justify-content:center;
+                           color:#fff;font-weight:700;font-size:11px">${cluster.getChildCount()}</div>`,
+        className: '', iconSize: [sz, sz], iconAnchor: [sz/2, sz/2],
+      });
+    },
+  });
+
+  puntos.forEach(p => {
+    const color = _colorZona(p.cve_sucursal, sucursales);
+    const suc   = sucursales.find(s => s.cve === p.cve_sucursal);
+    const circle = L.circleMarker([p.lat, p.lng], {
+      radius: 6, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.85,
+    });
+    circle.bindTooltip(
+      `<strong>CP ${p.cp}</strong><br>` +
+      `Sucursal: <strong>${suc ? suc.nombre : p.cve_sucursal}</strong><br>` +
+      `Ventas: <strong>${_formatMXN(p.ventas)}</strong>`,
+      { sticky: true, className: 'mapa-tip' }
+    );
+    _zonasCluster.addLayer(circle);
+  });
+  _zonasMapa.addLayer(_zonasCluster);
+}
+
+function _renderZonasTabla(sucursales, topProductos) {
+  const el = document.getElementById('zonas-tabla-suc');
+  if (!el) return;
+  if (!sucursales.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Sin datos para este mes</div>';
+    return;
+  }
+  const totalVentas = sucursales.reduce((s, r) => s + r.ventas, 0);
+  el.innerHTML = sucursales.map((s, i) => {
+    const color  = COLORES_ZONAS[i % COLORES_ZONAS.length];
+    const pct    = totalVentas > 0 ? ((s.ventas / totalVentas) * 100).toFixed(1) : '0.0';
+    const top    = (topProductos[String(s.cve)] || [])[0];
+    return `
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;padding-bottom:10px;
+                  border-bottom:1px solid var(--border)">
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;margin-top:2px"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--text);font-size:12px">${s.nombre}</div>
+          <div style="color:var(--text-dim);font-size:11px">${_formatMXN(s.ventas)} · ${s.piezas.toLocaleString('es-MX')} pzs · ${pct}%</div>
+          ${top ? `<div style="color:var(--text-dim);font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⭐ ${top.producto}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function _renderZonasTopProductos(sucursales, topProductos) {
+  const el = document.getElementById('zonas-top-productos');
+  if (!el) return;
+  if (!sucursales.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:12px">Sin datos</div>';
+    return;
+  }
+  el.innerHTML = sucursales.map((s, i) => {
+    const color    = COLORES_ZONAS[i % COLORES_ZONAS.length];
+    const prods    = topProductos[String(s.cve)] || [];
+    const maxV     = prods.length ? prods[0].ventas : 1;
+    return `
+      <div style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+          <span style="font-weight:700;font-size:12px;color:var(--text)">${s.nombre}</span>
+        </div>
+        ${prods.length === 0
+          ? '<div style="color:var(--text-dim);font-size:11px;padding-left:14px">Sin ventas</div>'
+          : prods.map(p => {
+              const pct = Math.round((p.ventas / maxV) * 100);
+              return `
+                <div style="padding-left:14px;margin-bottom:5px">
+                  <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text)">
+                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%">${p.producto}</span>
+                    <span style="color:var(--text-dim)">${_formatMXN(p.ventas)}</span>
+                  </div>
+                  <div style="height:4px;background:var(--border);border-radius:2px;margin-top:2px">
+                    <div style="height:100%;width:${pct}%;background:${color};border-radius:2px"></div>
+                  </div>
+                </div>`;
+            }).join('')
+        }
+      </div>`;
+  }).join('');
+}
+
+function _renderZonasChart(sucursales) {
+  const canvas = document.getElementById('zonas-chart');
+  const wrap   = document.getElementById('zonas-chart-wrap');
+  if (!canvas || !wrap) return;
+
+  if (!sucursales.length) {
+    wrap.style.display = 'flex';
+    wrap.innerHTML = '<span style="color:var(--text-dim);font-size:13px">Sin datos</span>';
+    canvas.style.display = 'none';
+    return;
+  }
+
+  wrap.style.display  = 'none';
+  canvas.style.display = 'block';
+
+  if (_zonasChart) { _zonasChart.destroy(); _zonasChart = null; }
+
+  const labels  = sucursales.map(s => s.nombre);
+  const ventas  = sucursales.map(s => s.ventas);
+  const piezas  = sucursales.map(s => s.piezas);
+  const colores = sucursales.map((_, i) => COLORES_ZONAS[i % COLORES_ZONAS.length]);
+  const esDark  = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textCol = esDark ? '#e2e8f0' : '#1D1D1F';
+  const gridCol = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
+
+  _zonasChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Ventas $',
+          data: ventas,
+          backgroundColor: colores.map(c => c + 'CC'),
+          borderColor: colores,
+          borderWidth: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Piezas',
+          data: piezas,
+          backgroundColor: colores.map(c => c + '55'),
+          borderColor: colores,
+          borderWidth: 1,
+          borderDash: [4, 2],
+          yAxisID: 'y2',
+          type: 'line',
+          tension: 0.3,
+          pointRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: textCol, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.datasetIndex === 0
+              ? ` ${_formatMXN(ctx.raw)}`
+              : ` ${ctx.raw.toLocaleString('es-MX')} pzs`,
+          },
+        },
+      },
+      scales: {
+        x:  { ticks: { color: textCol, font: { size: 10 } }, grid: { color: gridCol } },
+        y:  { ticks: { color: textCol, font: { size: 10 }, callback: v => _formatMXN(v) }, grid: { color: gridCol }, position: 'left' },
+        y2: { ticks: { color: textCol, font: { size: 10 } }, grid: { display: false }, position: 'right' },
+      },
+    },
+  });
+}
+
+// ── Dashboard Productos ───────────────────────────────────────────────────────
+let _prodAnio   = new Date().getFullYear();
+let _prodMes    = new Date().getMonth() + 1;
+let _prodLoaded = false;
+
+const _MESES_ES_P = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const _PROD_CACHE_KEY = 'productos_cache';
+const _PROD_CACHE_TTL = 10 * 60 * 1000;
+
+function _prodGuardarCache(anio, mes, data) {
+  try { localStorage.setItem(_PROD_CACHE_KEY, JSON.stringify({ anio, mes, data, ts: Date.now() })); } catch(_) {}
+}
+function _prodLeerCache(anio, mes) {
+  try {
+    const obj = JSON.parse(localStorage.getItem(_PROD_CACHE_KEY) || 'null');
+    if (!obj || obj.anio !== anio || obj.mes !== mes) return null;
+    if (Date.now() - obj.ts > _PROD_CACHE_TTL) return null;
+    return obj.data;
+  } catch(_) { return null; }
+}
+
+async function _prodNavMes(delta) {
+  const prevBtn = document.getElementById('prod-prev');
+  const nextBtn = document.getElementById('prod-next');
+  if (prevBtn) prevBtn.disabled = true;
+  if (nextBtn) nextBtn.disabled = true;
+  _prodMes += delta;
+  if (_prodMes > 12) { _prodMes = 1;  _prodAnio++; }
+  if (_prodMes < 1)  { _prodMes = 12; _prodAnio--; }
+  try { await cargarProductos(); } finally {
+    if (prevBtn) prevBtn.disabled = false;
+    if (nextBtn) nextBtn.disabled = false;
+  }
+}
+
+function _aplicarProductosData(data) {
+  const labelEl = document.getElementById('prod-label');
+  if (labelEl) labelEl.textContent = data.label || '';
+  _renderProdKPIs(data);
+  _renderProdGainersLosers(data.top_productos || []);
+  _renderProdTopTabla(data.top_productos || [], data.total_importe || 0);
+  _poblarProdSelector(data.lista_productos || []);
+}
+
+function _renderProdKPIs(data) {
+  const el = document.getElementById('prod-kpis');
+  if (!el) return;
+  const prods = data.top_productos || [];
+  const totalPiezas = prods.reduce((s, p) => s + (p.piezas || 0), 0);
+  const enCrecimiento = prods.filter(p => (p.variacion || 0) > 0).length;
+  const activos = (data.lista_productos || []).length;
+  const kpis = [
+    { label: 'Ventas del período', valor: _formatMXN(data.total_importe || 0), color: 'var(--blue-mid)' },
+    { label: 'Piezas vendidas',    valor: totalPiezas.toLocaleString('es-MX'), color: 'var(--blue)' },
+    { label: 'Productos activos',  valor: activos.toLocaleString('es-MX'), color: 'var(--warn)' },
+    { label: 'En crecimiento',     valor: `${enCrecimiento} / ${prods.length}`, color: 'var(--success)' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:20px;font-weight:700;color:${k.color}">${k.valor}</div>
+    </div>`).join('');
+}
+
+function _renderProdGainersLosers(prods) {
+  const conVar = prods.filter(p => p.variacion !== null);
+  const gainers = [...conVar].filter(p => p.variacion > 0).sort((a,b) => b.variacion - a.variacion).slice(0,5);
+  const losers  = [...conVar].filter(p => p.variacion < 0).sort((a,b) => a.variacion - b.variacion).slice(0,5);
+
+  const _rowGL = (p, color) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text);max-width:65%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.descripcion}</div>
+      <div style="font-size:12px;font-weight:600;color:${color};white-space:nowrap">${p.variacion > 0 ? '▲' : '▼'} ${Math.abs(p.variacion)}%</div>
+    </div>`;
+
+  const gEl = document.getElementById('prod-gainers');
+  const lEl = document.getElementById('prod-losers');
+  if (gEl) gEl.innerHTML = gainers.length
+    ? gainers.map(p => _rowGL(p, 'var(--success)')).join('')
+    : '<div style="color:var(--text-dim);font-size:11px">Sin datos de comparación</div>';
+  if (lEl) lEl.innerHTML = losers.length
+    ? losers.map(p => _rowGL(p, 'var(--danger)')).join('')
+    : '<div style="color:var(--text-dim);font-size:11px">Sin caídas este período</div>';
+}
+
+async function cargarProductos() {
+  _prodLoaded = true;
+  const cached = _prodLeerCache(_prodAnio, _prodMes);
+  if (cached) _aplicarProductosData(cached);
+  try {
+    const data = await api(`/api/datos/productos?anio=${_prodAnio}&mes=${_prodMes}`);
+    _prodGuardarCache(_prodAnio, _prodMes, data);
+    _aplicarProductosData(data);
+  } catch {
+    const labelEl = document.getElementById('prod-label');
+    if (!cached && labelEl) labelEl.textContent = '— error —';
+  }
+}
+
+function _renderProdTopTabla(productos, totalImporte) {
+  const el = document.getElementById('prod-top-tabla');
+  if (!el) return;
+  if (!productos.length) { el.innerHTML = '<div style="color:var(--text-dim);padding:12px 0">Sin datos para este período</div>'; return; }
+
+  const rows = productos.map((p, i) => {
+    const bar = p.pct_total > 0
+      ? `<div style="height:3px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:2px;width:80px">
+           <div style="height:100%;border-radius:2px;background:var(--blue-mid);width:${Math.min(100, p.pct_total)}%"></div>
+         </div>` : '';
+    const var_html = p.variacion === null ? '<span style="color:var(--text-dim)">—</span>'
+      : p.variacion >= 0
+        ? `<span style="color:var(--success)">▲ ${p.variacion}%</span>`
+        : `<span style="color:var(--danger)">▼ ${Math.abs(p.variacion)}%</span>`;
+    return `<tr>
+      <td style="padding:6px 8px;color:var(--text-dim);font-size:11px;white-space:nowrap">${i+1}</td>
+      <td style="padding:6px 8px">
+        <div style="color:var(--text);font-weight:500;font-size:12px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.descripcion}</div>
+        ${bar}
+      </td>
+      <td style="padding:6px 8px;text-align:right;color:var(--text);font-size:12px;white-space:nowrap">${_formatMXN(p.importe)}</td>
+      <td style="padding:6px 8px;text-align:right;color:var(--text-dim);font-size:11px;white-space:nowrap">${p.piezas.toLocaleString('es-MX')} pzs</td>
+      <td style="padding:6px 8px;text-align:right;font-size:11px">${var_html}</td>
+      <td style="padding:6px 8px;text-align:right;color:var(--text-dim);font-size:11px">${p.pct_total}%</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+        <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Producto</th>
+        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
+        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Piezas</th>
+        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">vs mes ant.</th>
+        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">% total</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function _poblarProdSelector(lista) {
+  const sel = document.getElementById('prod-selector');
+  if (!sel) return;
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— Selecciona un producto —</option>'
+    + lista.map(p => `<option value="${p.cve_producto}">${p.descripcion}</option>`).join('');
+  if (current) sel.value = current;
+}
+
+async function _prodSeleccionarProducto(cveProducto) {
+  const el = document.getElementById('prod-prediccion');
+  if (!el) return;
+  if (!cveProducto) {
+    el.innerHTML = '<div style="color:var(--text-dim);padding:20px 0;text-align:center">Selecciona un producto para ver la proyección de demanda.</div>';
+    return;
+  }
+
+  el.innerHTML = '<div style="color:var(--text-dim);padding:20px 0;text-align:center">Calculando proyección…</div>';
+
+  try {
+    const data = await api(`/api/datos/productos/prediccion?cve_producto=${cveProducto}`);
+    _renderProdPrediccion(data);
+  } catch(err) {
+    const msg = err?.detail || err?.message || String(err);
+    el.innerHTML = `<div style="color:var(--danger);padding:12px 0;font-size:11px">Error: ${msg}</div>`;
+  }
+}
+
+function _renderProdPrediccion(data) {
+  const el = document.getElementById('prod-prediccion');
+  if (!el) return;
+
+  if (!data.clientes_activos) {
+    el.innerHTML = `<div style="color:var(--text-dim);padding:20px 0;text-align:center">
+      Sin pacientes activos en los últimos 90 días para <strong>${data.producto}</strong>.
+    </div>`;
+    return;
+  }
+
+  // KPIs
+  const kpis = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div style="background:var(--blue-light);border-radius:10px;padding:14px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Pacientes activos</div>
+        <div style="font-size:22px;font-weight:700;color:var(--text)">${data.clientes_activos}</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">con compra en últimos 90 días</div>
+      </div>
+      <div style="background:var(--blue-light);border-radius:10px;padding:14px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Demanda proyectada 3 meses</div>
+        <div style="font-size:22px;font-weight:700;color:var(--blue-mid)">${Math.round(data.pred_3m).toLocaleString('es-MX')} pzs</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">basado en ritmo actual de tratamientos</div>
+      </div>
+      <div style="background:var(--blue-light);border-radius:10px;padding:14px">
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Demanda proyectada 6 meses</div>
+        <div style="font-size:22px;font-weight:700;color:var(--warn)">${Math.round(data.pred_6m).toLocaleString('es-MX')} pzs</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">acumulado restante de tratamientos activos</div>
+      </div>
+    </div>`;
+
+  // Desglose por sucursal
+  const sucRows = (data.por_sucursal || []).map(s => `
+    <tr>
+      <td style="padding:5px 8px;color:var(--text)">${s.sucursal}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text-dim)">${s.clientes}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--blue-mid);font-weight:600">${Math.round(s.pred_3m).toLocaleString('es-MX')} pzs</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--warn)">${Math.round(s.pred_6m).toLocaleString('es-MX')} pzs</td>
+    </tr>`).join('');
+
+  const tabla_suc = sucRows ? `
+    <div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">Proyección por sucursal</div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pacientes</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 3m</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 6m</th>
+          </tr>
+        </thead>
+        <tbody>${sucRows}</tbody>
+      </table>
+    </div>` : '';
+
+  // Detalle pacientes (colapsable, top 20)
+  const det = (data.detalle || []).slice(0, 20);
+  const detRows = det.map(d => `
+    <tr>
+      <td style="padding:4px 8px;color:var(--text-dim);font-size:11px">${d.sucursal}</td>
+      <td style="padding:4px 8px;color:var(--text-dim);font-size:11px">${d.primera_compra}</td>
+      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text)">${d.meses_transcurridos}m</td>
+      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text)">${d.meses_restantes}m</td>
+      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text-dim)">${d.prom_mensual} pzs/m</td>
+      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--blue-mid)">${Math.round(d.pred_3m)} pzs</td>
+    </tr>`).join('');
+
+  const tabla_det = detRows ? `
+    <details style="margin-top:4px">
+      <summary style="font-size:11px;font-weight:600;color:var(--text);cursor:pointer;padding:6px 0">
+        Detalle por paciente (top ${det.length})
+      </summary>
+      <table style="width:100%;border-collapse:collapse;margin-top:8px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border)">
+            <th style="padding:3px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
+            <th style="padding:3px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">1ª compra</th>
+            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Meses en tx</th>
+            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Meses rest.</th>
+            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Prom/mes</th>
+            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 3m</th>
+          </tr>
+        </thead>
+        <tbody>${detRows}</tbody>
+      </table>
+      <div style="margin-top:6px;font-size:10px;color:var(--text-dim)">
+        * Solo pacientes con compra en los últimos 90 días. Tratamiento estimado: 24 meses.
+      </div>
+    </details>` : '';
+
+  el.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">${data.producto}</div>
+    ${kpis}
+    ${tabla_suc}
+    ${tabla_det}`;
+}
+
 async function cargarDashboards(modo) {
   _modoActivo = modo;
 
@@ -2469,7 +3190,7 @@ function renderChartPedidos(sucursales) {
   const conPedidos = sucursales.filter(s => s.activos > 0);
   if (!conPedidos.length) {
     wrap.style.display = 'flex';
-    wrap.innerHTML = '<span style="color:var(--text-dim);font-size:13px">Sin pedidos activos</span>';
+    wrap.innerHTML = '<span style="color:var(--text-dim);font-size:13px">Sin pedidos</span>';
     canvas.style.display = 'none';
     return;
   }
@@ -3651,7 +4372,7 @@ function renderLayoutDonutSplit(container, spec) {
   container.innerHTML = `
     <div class="layout-kpi-strip">
       <div class="layout-kpi-mini accent dash-animate">
-        <div class="kpi-label">Total pedidos activos</div>
+        <div class="kpi-label">Total pedidos</div>
         <div class="kpi-value">${total}</div>
       </div>
       <div class="layout-kpi-mini dash-animate" style="animation-delay:.06s">
@@ -4713,7 +5434,7 @@ function renderMiniViz(idx) {
 
   } else if (tipo === 'pedidos_activos') {
     const suc = lista.filter(s => (s.valor || 0) > 0);
-    if (!suc.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin pedidos activos</p>'; return; }
+    if (!suc.length) { preview.innerHTML = '<p class="sb-empty" style="padding:8px 0">Sin pedidos</p>'; return; }
     preview.innerHTML = `<canvas id="${cid}" height="110"></canvas>`;
     _histCharts[idx] = new Chart(document.getElementById(cid), {
       type: 'doughnut',
