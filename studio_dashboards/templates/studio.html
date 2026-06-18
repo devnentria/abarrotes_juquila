@@ -828,6 +828,8 @@
       0%   { background-position: 100% 50%; }
       100% { background-position:   0% 50%; }
     }
+  .mapa-tip { background: var(--card-bg,#fff); border: 1px solid #ddd; border-radius: 8px; padding: 8px 12px; font-size: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+  .leaflet-tooltip { background: var(--card-bg,#fff); }
   </style>
 </head>
 <body>
@@ -1004,7 +1006,7 @@
         <!-- Pedidos activos (doughnut) -->
         <div class="chart-card">
           <div class="chart-card-header">
-            <span class="chart-card-title">Pedidos activos</span>
+            <span class="chart-card-title">Pedidos</span>
           </div>
           <div id="chart-pedidos-wrap" class="chart-loading">
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
@@ -1133,6 +1135,29 @@
         <canvas id="chart-mensual" style="display:none;max-height:220px"></canvas>
       </div>
 
+      <!-- Mapa de ventas por estado -->
+      <div class="chart-card" id="mapa-ventas-card" style="margin-top:16px">
+        <div class="chart-card-header">
+          <span class="chart-card-title">Distribución geográfica de ventas</span>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button id="mapa-prev" onclick="_mapaNavMes(-1)"
+              style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:14px;color:var(--text)">‹</button>
+            <span id="mapa-label" style="font-size:13px;font-weight:500;min-width:120px;text-align:center"></span>
+            <button id="mapa-next" onclick="_mapaNavMes(1)"
+              style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:14px;color:var(--text)">›</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+          <div id="mapa-wrap" style="flex:1;min-width:300px;position:relative">
+            <div id="mapa-leaflet" style="width:100%;height:420px;border-radius:10px;overflow:hidden"></div>
+          </div>
+          <div id="mapa-leyenda" style="min-width:200px;max-width:260px;font-size:12px"></div>
+        </div>
+        <div id="mapa-tooltip" style="position:fixed;background:var(--card-bg);border:1px solid var(--border);
+          border-radius:8px;padding:8px 12px;font-size:12px;pointer-events:none;display:none;
+          box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:9999"></div>
+      </div>
+
     </div>
 
     </div><!-- /static-dash-area -->
@@ -1169,7 +1194,7 @@
         <option value="reporte_ventas">Reporte de ventas</option>
         <option value="ventas_hoy">Ventas de hoy</option>
         <option value="reporte_inventario">Reporte de inventario</option>
-        <option value="pedidos_activos">Pedidos activos</option>
+        <option value="pedidos_activos">Pedidos</option>
       </select>
     </div>
 
@@ -1380,6 +1405,11 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
 <script>
 'use strict';
@@ -2113,6 +2143,161 @@ function _formatMXN(n) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
 }
 
+// ── Mapa de ventas por estado ─────────────────────────────────────────────────
+let _mapaEstados = [];
+let _mapaAnio = new Date().getFullYear();
+let _mapaMes  = new Date().getMonth() + 1; // 1-12
+
+async function _mapaNavMes(delta) {
+  _mapaMes += delta;
+  if (_mapaMes > 12) { _mapaMes = 1;  _mapaAnio++; }
+  if (_mapaMes < 1)  { _mapaMes = 12; _mapaAnio--; }
+  // No ir más allá del mes actual
+  const hoy = new Date();
+  if (_mapaAnio > hoy.getFullYear() || (_mapaAnio === hoy.getFullYear() && _mapaMes > hoy.getMonth() + 1)) {
+    _mapaAnio = hoy.getFullYear(); _mapaMes = hoy.getMonth() + 1;
+  }
+
+  // Feedback inmediato — deshabilitar botones y mostrar "Cargando..."
+  const MESES_ES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                    'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const labelEl = document.getElementById('mapa-label');
+  const prevBtn = document.getElementById('mapa-prev');
+  const nextBtn = document.getElementById('mapa-next');
+  if (labelEl) labelEl.textContent = `${MESES_ES[_mapaMes]} ${_mapaAnio} ···`;
+  if (prevBtn) prevBtn.disabled = true;
+  if (nextBtn) nextBtn.disabled = true;
+
+  try {
+    const data = await api(`/api/datos/mapa?anio=${_mapaAnio}&mes=${_mapaMes}`);
+    if (labelEl) labelEl.textContent = data.label || '';
+    const pendientes = data.pendientes || 0;
+    if (labelEl && pendientes > 0) {
+      labelEl.textContent = `${data.label || ''} · geocodificando ${pendientes} CPs…`;
+    } else if (labelEl) {
+      labelEl.textContent = data.label || '';
+    }
+    if (data.puntos && data.puntos.length) {
+      renderMapaVentas(data.puntos);
+    } else {
+      renderMapaVentas([]);
+      if (labelEl) labelEl.textContent = `${MESES_ES[_mapaMes]} ${_mapaAnio} — sin datos`;
+    }
+  } catch {
+    if (labelEl) labelEl.textContent = `${MESES_ES[_mapaMes]} ${_mapaAnio} — error`;
+  } finally {
+    if (prevBtn) prevBtn.disabled = false;
+    if (nextBtn) nextBtn.disabled = false;
+  }
+}
+
+
+let _mapaLeaflet   = null;
+let _mapaCluster   = null;   // MarkerClusterGroup activo
+
+function renderMapaVentas(puntos) {
+  _mapaEstados = puntos || [];
+  const leyenda = document.getElementById('mapa-leyenda');
+
+  const total     = _mapaEstados.reduce((s, p) => s + (parseInt(p.ventas) || 0), 0);
+  const maxVentas = _mapaEstados.length ? Math.max(..._mapaEstados.map(p => p.ventas)) : 1;
+
+  function interpolarColor(valor) {
+    if (!valor || valor <= 0) return '#1e3a5f';
+    const t = Math.pow(valor / maxVentas, 0.45);
+    const r = Math.round(255 + (30  - 255) * t);
+    const g = Math.round(255 + (58  - 255) * t);
+    const b = Math.round(255 + (95  - 255) * t);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // Inicializar mapa Leaflet (solo una vez)
+  const container = document.getElementById('mapa-leaflet');
+  if (!container) return;
+
+  if (!_mapaLeaflet) {
+    _mapaLeaflet = L.map('mapa-leaflet', { zoomControl: true, scrollWheelZoom: false })
+      .setView([23.5, -102.5], 5);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© CartoDB',
+      maxZoom: 17,
+    }).addTo(_mapaLeaflet);
+  }
+
+  // Eliminar cluster anterior
+  if (_mapaCluster) {
+    _mapaLeaflet.removeLayer(_mapaCluster);
+  }
+
+  // Crear nuevo cluster group
+  _mapaCluster = L.markerClusterGroup({
+    maxClusterRadius: 40,
+    iconCreateFunction: function(cluster) {
+      const count = cluster.getChildCount();
+      const size  = count < 5 ? 32 : count < 20 ? 40 : 50;
+      return L.divIcon({
+        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
+                           background:rgba(0,137,123,0.85);border:2px solid #fff;
+                           display:flex;align-items:center;justify-content:center;
+                           color:#fff;font-weight:700;font-size:${size < 40 ? 11 : 13}px;
+                           box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
+        className: '',
+        iconSize: [size, size],
+        iconAnchor: [size/2, size/2],
+      });
+    },
+  });
+
+  // Dibujar un punto por cada CP con coordenadas
+  puntos.forEach(punto => {
+    const ventas  = punto.ventas  || 0;
+    const pedidos = punto.pedidos || 0;
+    const pct     = total > 0 ? ((ventas / total) * 100).toFixed(1) : '0.0';
+    const color   = interpolarColor(ventas);
+    const radius  = Math.max(5, Math.min(20, 5 + 15 * Math.pow(ventas / maxVentas, 0.4)));
+
+    const circle = L.circleMarker([punto.lat, punto.lng], {
+      radius,
+      fillColor: color,
+      color: '#fff',
+      weight: 0.8,
+      fillOpacity: 0.82,
+    });
+    circle.bindTooltip(
+      `<strong>CP ${punto.cp}</strong><br>` +
+      `Ventas: <strong>${_formatMXN(ventas)}</strong><br>` +
+      `Pedidos: <strong>${pedidos.toLocaleString('es-MX')}</strong><br>` +
+      `Participación: <strong>${pct}%</strong>`,
+      { sticky: true, className: 'mapa-tip' }
+    );
+    _mapaCluster.addLayer(circle);
+  });
+
+  _mapaLeaflet.addLayer(_mapaCluster);
+
+  // Leyenda Top 10
+  const top10 = _mapaEstados.slice(0, 10);
+  if (leyenda) leyenda.innerHTML = !_mapaEstados.length
+    ? '<div style="color:var(--text-dim);font-size:12px">Sin datos para este mes</div>'
+    : `<div style="font-weight:700;margin-bottom:8px;color:var(--text)">Top 10 CPs</div>
+    ${top10.map((p, i) => {
+      const v   = parseInt(p.ventas) || 0;
+      const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0';
+      const col = interpolarColor(v);
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <span style="font-size:10px;color:var(--text-dim);width:14px;text-align:right">${i+1}</span>
+        <span style="width:12px;height:12px;border-radius:50%;background:${col};flex-shrink:0"></span>
+        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">CP ${p.cp}</span>
+        <span style="color:var(--text-dim);font-size:11px">${pct}%</span>
+      </div>`;
+    }).join('')}
+    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px">
+      Total: <strong style="color:var(--text)">${_formatMXN(total)}</strong>
+    </div>`;
+}
+
+function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
+
 async function cargarDashboards(modo) {
   _modoActivo = modo;
 
@@ -2147,7 +2332,30 @@ async function cargarDashboards(modo) {
     renderChartProductos(productosData.datos || []);
     renderChartVendedores(vendedoresData.datos || []);
     renderChartDiario(diariaData.datos || []);
-    renderChartMensual(mensualData.datos || []);
+    renderChartMensual(mensualData);
+
+    // Mapa de ventas por CP — independiente para no afectar el resto si falla
+    api(`/api/datos/mapa?anio=${_mapaAnio}&mes=${_mapaMes}`)
+      .then(mapaData => {
+        const mapaLabelEl = document.getElementById('mapa-label');
+        const pendientes  = mapaData.pendientes || 0;
+        const labelBase   = mapaData.label || '';
+        if (mapaLabelEl) {
+          mapaLabelEl.textContent = pendientes > 0
+            ? `${labelBase} · geocodificando ${pendientes} CPs…`
+            : labelBase;
+        }
+        if (mapaData.puntos && mapaData.puntos.length) {
+          renderMapaVentas(mapaData.puntos);
+        } else {
+          renderMapaVentas([]);
+        }
+      })
+      .catch(() => {
+        const mapaLabelEl = document.getElementById('mapa-label');
+        if (mapaLabelEl) mapaLabelEl.textContent = '—';
+        renderMapaVentas([]);
+      });
 
     // Descontar 1 consulta por carga de datos del ERP (fire-and-forget, sin bloquear UI)
     api('/api/datos/uso-selector', { method: 'POST' }).catch(() => {});
@@ -2347,28 +2555,90 @@ function renderChartTendencia(datos) {
   const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
   const textColor = esDark ? '#94a3b8' : '#6E6E73';
 
-  // datos = [{mes_nombre:'Enero', valor:...}, ...]  (12 meses histórico)
-  const labels  = datos.map(d => (d.mes_nombre || d.mes || d.periodo || d.label || '').slice(0, 3));
-  const valores = datos.map(d => parseFloat(d.total || d.valor || 0));
+  // datos = hasta 48 meses — modelo YoY + tendencia, mejora con el tiempo
+  const labelsAll  = datos.map(d => (d.mes_nombre || d.mes || d.periodo || d.label || '').slice(0, 3));
+  const valoresAll = datos.map(d => parseFloat(d.total || d.valor || 0));
+  const nAll       = valoresAll.length;
 
-  // Regresión lineal simple para proyectar 3 meses más
-  const n = valores.length;
+  // Índice por mes y año: { mesNum: { anio: valor } }
+  const _porMes = {};
+  datos.forEach(d => {
+    const m = d.mes, a = d.anio;
+    if (!m || !a) return;
+    if (!_porMes[m]) _porMes[m] = {};
+    _porMes[m][a] = parseFloat(d.valor || 0);
+  });
+
+  // Tasa YoY: para cada par (año N, año N-1) del mismo mes → ratio de crecimiento
+  const _yoyRates = [];
+  for (const [m, anios] of Object.entries(_porMes)) {
+    const years = Object.keys(anios).map(Number).sort();
+    for (let i = 1; i < years.length; i++) {
+      const prev = anios[years[i - 1]];
+      if (prev > 0) _yoyRates.push(anios[years[i]] / prev - 1);
+    }
+  }
+  const _growthRateRaw = _yoyRates.length > 0
+    ? _yoyRates.reduce((s, r) => s + r, 0) / _yoyRates.length : 0;
+  // Acotar entre -60% y +60% para evitar datos anómalos del inicio del ERP
+  const _growthRate = Math.max(-0.6, Math.min(0.6, _growthRateRaw));
+
+  // Tolerancia = desviación estándar de las tasas YoY (qué tan consistente es el crecimiento)
+  // Con más años → más tasas → banda más precisa. Acotada a ±10%.
+  const _varYoY = _yoyRates.length > 1
+    ? _yoyRates.reduce((s, r) => s + (r - _growthRate) ** 2, 0) / _yoyRates.length : 0.006;
+  const _tol = Math.min(0.05, Math.max(0.02, Math.sqrt(_varYoY)));
+
+  // Regresión lineal de respaldo (para meses sin dato del año anterior)
+  let slopeAll = 0, interceptAll = 0;
+  if (nAll >= 2) {
+    const sumX  = valoresAll.reduce((s, _, i) => s + i, 0);
+    const sumY  = valoresAll.reduce((s, v) => s + v, 0);
+    const sumXY = valoresAll.reduce((s, v, i) => s + i * v, 0);
+    const sumX2 = valoresAll.reduce((s, _, i) => s + i * i, 0);
+    slopeAll     = (nAll * sumXY - sumX * sumY) / (nAll * sumX2 - sumX * sumX) || 0;
+    interceptAll = (sumY - slopeAll * sumX) / nAll;
+  }
+
+  // Mostrar solo los últimos 12 meses
+  const DISPLAY = 12;
+  const labels  = labelsAll.slice(-DISPLAY);
+  const valores = valoresAll.slice(-DISPLAY);
+  const n       = valores.length;
+
+  const MESES      = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const lastMesNum = datos.length ? (datos[datos.length - 1].mes  || 0) : 0;
+  const lastAnio   = datos.length ? (datos[datos.length - 1].anio || 0) : 0;
+
   let proyLabels = [...labels];
   let proyData   = new Array(n).fill(null);
-  if (n >= 2) {
-    const sumX  = valores.reduce((s, _, i) => s + i, 0);
-    const sumY  = valores.reduce((s, v) => s + v, 0);
-    const sumXY = valores.reduce((s, v, i) => s + i * v, 0);
-    const sumX2 = valores.reduce((s, _, i) => s + i * i, 0);
-    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) || 0;
-    const intercept = (sumY - slope * sumX) / n;
-    const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    // El último dato trae el número de mes real (campo `mes` del backend)
-    const lastMesNum = datos.length ? (datos[datos.length - 1].mes || 0) : 0;
-    for (let k = 1; k <= 3; k++) {
-      const nextMes = lastMesNum ? MESES[(lastMesNum - 1 + k) % 12] : `+${k}`;
-      proyLabels.push(nextMes);
-      proyData.push(Math.max(0, Math.round(intercept + slope * (n - 1 + k))));
+
+  for (let k = 1; k <= 3; k++) {
+    const nextMes    = lastMesNum ? MESES[(lastMesNum - 1 + k) % 12] : `+${k}`;
+    const nextMesNum = lastMesNum ? ((lastMesNum - 1 + k) % 12) + 1  : 0;
+    // Buscar el valor del mismo mes en años anteriores (más reciente primero)
+    const mesData    = _porMes[nextMesNum] || {};
+    const prevAnios  = Object.keys(mesData).map(Number).sort((a, b) => b - a);
+    const baseVal    = prevAnios.length > 0 ? mesData[prevAnios[0]] : 0;
+    const proyVal    = baseVal > 0
+      ? Math.max(0, Math.round(baseVal * (1 + _growthRate)))            // YoY
+      : Math.max(0, Math.round(interceptAll + slopeAll * (nAll + k)));  // fallback lineal
+    proyLabels.push(nextMes);
+    proyData.push(proyVal);
+  }
+
+  const _bandaClr  = esDark ? 'rgba(124,58,237,0.28)' : 'rgba(124,58,237,0.18)';
+  const totalLen   = proyLabels.length;
+  proyData[n - 1]  = valores[n - 1]; // punto conector
+
+  const bandaSup = new Array(totalLen).fill(null);
+  const bandaInf = new Array(totalLen).fill(null);
+  bandaSup[n - 1] = valores[n - 1];
+  bandaInf[n - 1] = valores[n - 1];
+  for (let k = 0; k < 3; k++) {
+    if (proyData[n + k] != null) {
+      bandaSup[n + k] = Math.round(proyData[n + k] * (1 + _tol));
+      bandaInf[n + k] = Math.round(proyData[n + k] * (1 - _tol));
     }
   }
 
@@ -2377,10 +2647,36 @@ function renderChartTendencia(datos) {
     type: 'line',
     data: {
       labels: proyLabels,
+      // orden datasets: 0=_banda_sup, 1=_banda_inf (fill→0), 2=Ventas, 3=Proyección
       datasets: [
         {
+          label: '_banda_sup',
+          data: bandaSup,
+          borderColor: 'rgba(124,58,237,0.30)',
+          borderDash: [4, 3],
+          borderWidth: 1,
+          backgroundColor: 'transparent',
+          fill: false,
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+        },
+        {
+          label: '_banda_inf',
+          data: bandaInf,
+          borderColor: 'rgba(124,58,237,0.30)',
+          borderDash: [4, 3],
+          borderWidth: 1,
+          backgroundColor: 'transparent',
+          // fill hacia dataset 0 (_banda_sup): _banda_inf < _banda_sup → región "below"
+          fill: { target: 0, above: 'transparent', below: _bandaClr },
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+        },
+        {
           label: 'Ventas históricas',
-          data: [...valores, null, null, null].slice(0, proyLabels.length),
+          data: [...valores, null, null, null].slice(0, totalLen),
           borderColor: COLORES[0],
           backgroundColor: COLORES[0] + '22',
           fill: true,
@@ -2392,7 +2688,7 @@ function renderChartTendencia(datos) {
           label: 'Proyección',
           data: proyData,
           borderColor: '#EF6C3A',
-          backgroundColor: '#EF6C3A22',
+          backgroundColor: 'transparent',
           borderDash: [6, 4],
           fill: false,
           tension: 0.35,
@@ -2406,8 +2702,14 @@ function renderChartTendencia(datos) {
       maintainAspectRatio: true,
       aspectRatio: 2.8,
       plugins: {
-        legend: { labels: { color: textColor, font: { size: 12 }, boxWidth: 12 } },
+        legend: {
+          labels: {
+            color: textColor, font: { size: 12 }, boxWidth: 12,
+            filter: item => !item.text.startsWith('_'),
+          },
+        },
         tooltip: {
+          filter: item => !item.dataset.label.startsWith('_'),
           callbacks: {
             label: ctx => ctx.parsed.y !== null ? ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` : '',
           },
@@ -2599,7 +2901,7 @@ function renderChartDiario(datos) {
 
 // ── Comparativo mensual (barras agrupadas) ────────────────────────────────────
 let _chartMensual = null;
-function renderChartMensual(datos) {
+function renderChartMensual(mensualData) {
   const canvas = document.getElementById('chart-mensual');
   const wrap   = document.getElementById('chart-mensual-wrap');
   if (!canvas) return;
@@ -2609,50 +2911,60 @@ function renderChartMensual(datos) {
   const textColor = esDark ? '#94a3b8' : '#6E6E73';
   const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
 
-  // datos = [{mes_nombre:'Enero', valor:...}, ...]
-  const labels   = datos.map(d => (d.mes_nombre || d.mes || d.periodo || d.label || '').slice(0, 3));
-  const actual   = datos.map(d => parseFloat(d.total || d.actual || d.valor || 0));
-  const anterior = datos.map(d => parseFloat(d.anterior || 0));
-  const conAnterior = anterior.some(v => v > 0);
+  const datos = (mensualData && mensualData.datos) ? mensualData.datos : (Array.isArray(mensualData) ? mensualData : []);
+
+  // Obtener meses únicos (ordenados) y sucursales únicas
+  const _mesKeys = [];
+  const _mesLabels = [];
+  const _seenMes = new Set();
+  datos.forEach(d => {
+    const k = `${d.anio}-${String(d.mes).padStart(2,'0')}`;
+    if (!_seenMes.has(k)) { _seenMes.add(k); _mesKeys.push(k); _mesLabels.push((d.mes_nombre || '').slice(0,3)); }
+  });
+  const sucursales = [...new Set(datos.map(d => d.sucursal).filter(Boolean))].sort();
 
   if (_chartMensual) _chartMensual.destroy();
+
+  if (!datos.length) {
+    if (wrap) { wrap.innerHTML = '<span style="font-size:12px;color:var(--text-dim)">Sin datos</span>'; wrap.style.display = 'flex'; }
+    canvas.style.display = 'none';
+    return;
+  }
+
+  // Stacked bar por sucursal
+  const datasets = sucursales.map((suc, i) => ({
+    label: suc,
+    data: _mesKeys.map(k => {
+      const row = datos.find(d => `${d.anio}-${String(d.mes).padStart(2,'0')}` === k && d.sucursal === suc);
+      return row ? row.valor : 0;
+    }),
+    backgroundColor: COLORES[i % COLORES.length],
+    borderRadius: i === sucursales.length - 1 ? 4 : 0,
+    borderSkipped: false,
+    stack: 'ventas',
+  }));
+
   _chartMensual = new Chart(canvas, {
     type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Mes actual',
-          data: actual,
-          backgroundColor: COLORES[0],
-          borderRadius: 5,
-          borderSkipped: false,
-        },
-        ...(conAnterior ? [{
-          label: 'Mes anterior',
-          data: anterior,
-          backgroundColor: esDark ? 'rgba(255,255,255,.15)' : 'rgba(0,0,0,.08)',
-          borderRadius: 5,
-          borderSkipped: false,
-        }] : []),
-      ],
-    },
+    data: { labels: _mesLabels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: true,
       aspectRatio: 2.6,
       plugins: {
-        legend: {
-          display: conAnterior,
-          labels: { color: textColor, font: { size: 12 }, boxWidth: 12 },
-        },
+        legend: { display: true, labels: { color: textColor, font: { size: 11 }, boxWidth: 10 } },
         tooltip: {
-          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` },
+          mode: 'index',
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}`,
+            footer: items => ` Total: ${_formatMXN(items.reduce((s,i) => s + i.parsed.y, 0))}`,
+          },
         },
       },
       scales: {
-        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        x: { stacked: true, ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
         y: {
+          stacked: true,
           ticks: { color: textColor, font: { size: 11 }, callback: v => _formatMXN(v) },
           grid: { color: gridColor },
           border: { display: false },
@@ -2803,7 +3115,7 @@ const PLANTILLAS_IA = {
     prompt: 'Analiza la tendencia de ventas mes a mes de los últimos 3 meses. Incluye: hay crecimiento o caída, cuál fue el mejor mes, qué porcentaje de variación hay entre el mes actual y el anterior, y tu conclusión. Usa datos reales del ERP.',
   },
   pedidos_activos: {
-    titulo: 'Pedidos activos',
+    titulo: 'Pedidos',
     prompt: 'Analiza los pedidos activos actuales en el sistema. Incluye: total de pedidos pendientes, en qué sucursal se concentran más, si el volumen es normal o alto comparado con el histórico, y qué acción recomiendas. Usa datos reales del ERP.',
   },
 };
@@ -3446,7 +3758,7 @@ function renderLayoutFullReport(container, spec) {
         <div class="kpi-value">${totalPedidos.toLocaleString('es-MX')}</div>
       </div>
       <div class="layout-kpi-mini" style="border-color:var(--warning);background:var(--warning-bg,rgba(245,158,11,.06))">
-        <div class="kpi-label" style="color:var(--warning,#D97706)">Pedidos activos</div>
+        <div class="kpi-label" style="color:var(--warning,#D97706)">Pedidos</div>
         <div class="kpi-value" style="color:var(--warning,#D97706)">${pedidosActivos.toLocaleString('es-MX')}</div>
       </div>
       <div class="layout-kpi-mini" style="border:1px dashed var(--border)">
