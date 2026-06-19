@@ -41,6 +41,7 @@ from shared.config import (
 _ai_client = _OpenAI(api_key=OPENAI_API_KEY)
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
+from pwa_asistente.agente import grafica as _grafica
 from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto,
 )
@@ -57,12 +58,29 @@ except Exception as _e:
 _pool = ThreadPoolExecutor(max_workers=4)
 
 # Regex para detectar solicitudes EXPLÍCITAS de dashboard en el texto del usuario.
-# Solo coincide cuando el usuario pide un dashboard/gráfica/tablero directamente.
-# Palabras genéricas como "ventas", "inventario" NO deben activar el generador de dashboards.
 _PIDE_DASH = re.compile(
     r"\b(dash\w*|tablero|gr[aá]fic[ao]s?|chart|visualiza[cr]|report[e]?)\b",
     re.IGNORECASE,
 )
+
+# Detecta comparativas específicas que requieren gráfica dinámica.
+# Estas consultas se saltan los dashboards predefinidos directamente.
+_GRAFICA_CUSTOM = re.compile(
+    r"\b(vs\.?|versus|comparar|comparativa\s+de|comparaci[oó]n)\b",
+    re.IGNORECASE,
+)
+
+
+def _datos_tienen_contenido(datos: dict) -> bool:
+    """True si el dict de datos contiene al menos una lista no vacía o un valor numérico >0."""
+    if not datos:
+        return False
+    for v in datos.values():
+        if isinstance(v, list) and len(v) > 0:
+            return True
+        if isinstance(v, (int, float)) and v != 0:
+            return True
+    return False
 
 
 _SALUDO = re.compile(
@@ -243,14 +261,16 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     # sin esa palabra van directamente al agente de texto.
     spec_dash = {}
     tipo_dash = "ninguno"
-    if _DASHBOARD_FN_OK and bool(_PIDE_DASH.search(msg)):
+    es_grafica_custom = bool(_GRAFICA_CUSTOM.search(msg))  # "vs", "comparar", etc.
+    pide_dash = _DASHBOARD_FN_OK and bool(_PIDE_DASH.search(msg)) and not es_grafica_custom
+    if pide_dash:
         try:
             spec_dash = _clasificar(msg)
             tipo_dash = spec_dash.get("funcion", "ninguno")
         except Exception as e:
             print(f"[studio-chat] Clasificar error job={job_id}: {e}", flush=True)
 
-    # ── 2. Generar dashboard si aplica ───────────────────────────────────────
+    # ── 2. Generar dashboard predefinido si aplica ────────────────────────────
     if tipo_dash != "ninguno":
         try:
             modo      = spec_dash.get("modo", "30d")
@@ -258,28 +278,31 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
             ff        = spec_dash.get("fecha_fin")
             producto  = spec_dash.get("producto")
             datos     = _fetch_tipo(tipo_dash, modo, fi, ff, producto=producto)
-            narrativa, _ = _narrar(msg, tipo_dash, modo, datos)
-            dashboard = {
-                "tipo":         tipo_dash,
-                "layout":       spec_dash.get("layout", "kpi_bar"),
-                "chart_type":   spec_dash.get("chart_type", "bar"),
-                "titulo":       spec_dash.get("titulo", "Dashboard"),
-                "modo":         modo,
-                "fecha_inicio": fi,
-                "fecha_fin":    ff,
-                "narrativa":    narrativa,
-                "datos":        datos,
-            }
-            respuesta = narrativa  # El análisis ejecutivo como texto del chat
-            estado    = "done"
-            costo_usd = 0.0
-            print(f"[studio-chat] Dashboard generado tipo={tipo_dash} job={job_id}", flush=True)
+            if not _datos_tienen_contenido(datos):
+                # Datos vacíos — caer al generador dinámico
+                tipo_dash = "ninguno"
+            else:
+                narrativa, _ = _narrar(msg, tipo_dash, modo, datos)
+                dashboard = {
+                    "tipo":         tipo_dash,
+                    "layout":       spec_dash.get("layout", "kpi_bar"),
+                    "chart_type":   spec_dash.get("chart_type", "bar"),
+                    "titulo":       spec_dash.get("titulo", "Dashboard"),
+                    "modo":         modo,
+                    "fecha_inicio": fi,
+                    "fecha_fin":    ff,
+                    "narrativa":    narrativa,
+                    "datos":        datos,
+                }
+                respuesta = narrativa
+                estado    = "done"
+                costo_usd = 0.0
+                print(f"[studio-chat] Dashboard predefinido tipo={tipo_dash} job={job_id}", flush=True)
         except Exception as e:
             print(f"[studio-chat] Dashboard error job={job_id}: {e}", flush=True)
-            # Si el generador falla, dejar que el agente responda con texto
             tipo_dash = "ninguno"
 
-    # ── 3. Respuesta de texto con el agente (si no hay dashboard o falló) ────
+    # ── 3. Respuesta de texto o gráfica dinámica (si no hay dashboard predefinido) ────
     if tipo_dash == "ninguno":
         try:
             area, costo_dir = director.clasificar(
@@ -292,8 +315,22 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
                 resultado.tokens_prompt     * STUDIO_PRECIO_INPUT
                 + resultado.tokens_completion * STUDIO_PRECIO_OUTPUT
             )
-            respuesta = _enriquecer(msg, resultado.texto)
-            estado    = "done"
+
+            # Si el usuario pidió gráfica pero no hay dashboard predefinido (o datos vacíos),
+            # generar Chart.js dinámico — se muestra en el área de dashboards, no en el chat
+            if bool(_PIDE_DASH.search(msg)) or es_grafica_custom:
+                html_chart, tp_g, tc_g = _grafica.generar(resultado.texto, msg)
+                costo_usd += tp_g * STUDIO_PRECIO_INPUT + tc_g * STUDIO_PRECIO_OUTPUT
+                dashboard = {
+                    "tipo":    "chart_dinamico",
+                    "titulo":  "Gráfica generada con IA",
+                    "html":    html_chart,
+                }
+                respuesta = "Análisis generado con datos del ERP en tiempo real."
+            else:
+                respuesta = _enriquecer(msg, resultado.texto)
+
+            estado = "done"
         except Exception as e:
             print(f"[studio-chat] Agente error job={job_id}: {e}", flush=True)
 

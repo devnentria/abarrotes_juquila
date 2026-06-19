@@ -90,6 +90,14 @@ def run(sql: str) -> list[dict]:
     try:
         filas = _query_erp(limpio)
         nombres_cache.registrar_desde_sql(limpio, filas)
+        # Filtrar clientes genéricos de mostrador de cualquier resultado
+        filas = [
+            f for f in filas
+            if not any(
+                isinstance(v, str) and "MOSTRADOR" in v.upper()
+                for v in f.values()
+            )
+        ]
         return filas
     except Exception as e:
         # Si falla por columna inexistente, reconstruir la consulta sin ella y reintentar

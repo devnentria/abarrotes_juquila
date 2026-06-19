@@ -889,15 +889,6 @@
   <!-- ── Contenido ── -->
   <div class="page">
 
-    <!-- Banner instalación móvil (solo si es móvil y no instalada) -->
-    <div class="install-banner hidden" id="install-banner">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
-        <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/>
-      </svg>
-      <p id="install-text">Instala la app en tu celular para una mejor experiencia.</p>
-      <button class="install-close" onclick="document.getElementById('install-banner').classList.add('hidden')">×</button>
-    </div>
-
     <!-- ── Dashboard IA generado ── -->
     <div id="dashboard-ia-wrap" class="hidden">
       <div class="dash-ia-topbar">
@@ -1709,7 +1700,6 @@ let _resetEquipoId = null;
     renderHeader();
     actualizarAvatarHeader();
     renderDrawer();
-    renderBannerInstalacion();
     cargarDashboards('30d');
     cargarVentasHoy();
     cargarDashboardsGuardados();
@@ -2111,6 +2101,7 @@ function _scAddBubble(texto, rol, extra = {}) {
 
   const bubble = document.createElement('div');
   bubble.className = `sc-bubble-content${extra.hasDash ? ' sc-has-dash' : ''}`;
+
   if (rol === 'user') {
     bubble.textContent = texto;
   } else {
@@ -4051,10 +4042,28 @@ function renderDashboard(spec) {
   const wrap = document.getElementById('dashboard-ia-wrap');
   wrap.classList.remove('hidden');
 
-  document.getElementById('dashboard-ia-titulo').textContent = spec.titulo;
+  document.getElementById('dashboard-ia-titulo').textContent = spec.titulo || 'Dashboard';
 
   const contenido = document.getElementById('dashboard-ia-contenido');
   contenido.innerHTML = '';
+
+  // Gráfica dinámica generada por IA — renderizar iframe en área de dashboards
+  if (spec.tipo === 'chart_dinamico') {
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    iframe.srcdoc = spec.html || '';
+    iframe.style.cssText = 'width:100%;border:none;border-radius:12px;min-height:380px;display:block;';
+    iframe.onload = () => {
+      try {
+        const h = iframe.contentDocument?.body?.scrollHeight;
+        if (h && h > 100) iframe.style.height = Math.min(h + 32, 520) + 'px';
+      } catch {}
+    };
+    contenido.appendChild(iframe);
+    document.getElementById('dashboard-ia-narrativa').classList.add('hidden');
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
 
   const renderers = {
     kpi_bar:          renderLayoutKpiBar,

@@ -244,6 +244,14 @@ CLASIFICACIÓN DE CLIENTES — FUENTE CORRECTA:
     JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
     WHERE c.Cve_Lista_Precios = 0  -- 0=final, 1=directa, 2=distribuidor
 
+EXCLUSIÓN OBLIGATORIA — TOP CLIENTES:
+  "VENTA DE MOSTRADOR" es un cliente genérico para ventas de caja/contado anónimas — NO es un cliente real.
+  En TODA consulta de ranking, top o mejores clientes por ventas:
+    ✅ SIEMPRE hacer JOIN a CM_Clientes cl ON CAST(c.Cve_Cliente AS INT) = cl.Cve_Cliente
+    ✅ SIEMPRE filtrar: AND cl.Razon_Social NOT LIKE '%MOSTRADOR%'
+  ⛔ NUNCA reportar "VENTA DE MOSTRADOR" en rankings de clientes — aunque tenga el mayor importe.
+  ⛔ El JOIN a CM_Clientes con ese filtro es OBLIGATORIO en rankings — no es opcional.
+
 BÚSQUEDA POR NOMBRE (protocolo obligatorio cuando busquen una persona):
 
   PASO 1 — Buscar en CM_Clientes WHERE Razon_Social LIKE '%nombre_completo%'
