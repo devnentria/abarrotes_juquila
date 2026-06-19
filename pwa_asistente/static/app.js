@@ -977,14 +977,34 @@ function expandirTabla(id) {
   });
 })();
 
+const _CHART_PREFIX = 'CHART_HTML::';
+
 function appendBubble(text, role) {
   const messages = document.getElementById('chat-messages');
   const wrap     = document.createElement('div');
   wrap.className = `chat-bubble chat-bubble-${role === 'user' ? 'user' : 'bot'}`;
 
-  const content = document.createElement('div');
-  content.innerHTML = renderMarkdown(text);
-  wrap.appendChild(content);
+  if (role !== 'user' && text.startsWith(_CHART_PREFIX)) {
+    // Gráfica dinámica — renderizar en iframe sandbox
+    const html   = text.slice(_CHART_PREFIX.length);
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-scripts');
+    iframe.srcdoc = html;
+    iframe.style.cssText = 'width:100%;border:none;border-radius:8px;min-height:280px;max-height:380px;display:block;';
+    iframe.onload = () => {
+      // Ajustar altura al contenido real del iframe si es posible
+      try {
+        const h = iframe.contentDocument?.body?.scrollHeight;
+        if (h && h > 100) iframe.style.height = Math.min(h + 20, 400) + 'px';
+      } catch {}
+      messages.scrollTop = messages.scrollHeight;
+    };
+    wrap.appendChild(iframe);
+  } else {
+    const content = document.createElement('div');
+    content.innerHTML = renderMarkdown(text);
+    wrap.appendChild(content);
+  }
 
   messages.appendChild(wrap);
   messages.scrollTop = messages.scrollHeight;
