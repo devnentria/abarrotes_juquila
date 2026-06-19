@@ -37,8 +37,17 @@ from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto
 )
 from pwa_asistente.agente.funciones import matcher as _matcher, catalogo as _catalogo
+from pwa_asistente.agente import grafica as _grafica
 
 _pool = ThreadPoolExecutor(max_workers=4)
+
+_RE_GRAFICA = re.compile(
+    r'\b(gr[aá]fic[ao][s]?|chart|visualiza[r]?|barra[s]?\s+de|'
+    r'hazme\s+(un[ao]?\s+)?gr[aá]fic[ao]|dame\s+(un[ao]?\s+)?gr[aá]fic[ao]|'
+    r'muéstrame\s+(un[ao]?\s+)?gr[aá]fic[ao]|muestrame\s+(un[ao]?\s+)?gr[aá]fic[ao]|'
+    r'comparativa\s+visual|pie\s+chart|tendencia\s+visual)\b',
+    re.IGNORECASE,
+)
 
 
 def _intentar_funcion_fija(msg: str) -> tuple:
@@ -172,26 +181,39 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     Ejecuta la consulta del agente en un thread de background y guarda el resultado.
     Se llama desde el pool de threads — no bloquea el request HTTP.
     """
-    costo_usd = 0.0
+    costo_usd       = 0.0
+    consultas_extra = 0
     try:
         respuesta, costo_usd = _intentar_funcion_fija(msg)
         if respuesta:
             area   = "funcion_fija"
             estado = "done"
         else:
+            es_grafica = bool(_RE_GRAFICA.search(msg))
             area, costo_director = director.clasificar(msg, historial)
             fn                   = _ESPECIALISTAS.get(area, mixto.responder)
             resultado            = fn(msg, historial)
-            respuesta            = resultado.texto
+            texto_datos          = resultado.texto
             costo_usd            = costo_director + (
                 resultado.tokens_prompt     * IA_PRECIO_INPUT
                 + resultado.tokens_completion * IA_PRECIO_OUTPUT
             )
+
+            if es_grafica:
+                html_chart, tp_g, tc_g = _grafica.generar(texto_datos, msg)
+                costo_usd += tp_g * IA_PRECIO_INPUT + tc_g * IA_PRECIO_OUTPUT
+                respuesta  = _grafica.CHART_PREFIX + html_chart
+                consultas_extra = 2   # director(1) + especialista(1) + grafica(1) = 3 total
+            else:
+                respuesta       = texto_datos
+                consultas_extra = 0
+
             estado = "done"
     except Exception:
-        respuesta = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
-        area      = "error"
-        estado    = "error"
+        respuesta       = "Ups, parece que no pudimos procesar esta solicitud. Comunícate con tu proveedor."
+        area            = "error"
+        estado          = "error"
+        consultas_extra = 0
 
     execute(
         "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
@@ -200,10 +222,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
 
     execute(
         "UPDATE usuarios SET "
-        "consultas_ia   = consultas_ia + 1, "
-        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1.0, 2), "
+        "consultas_ia   = consultas_ia + 1 + ?, "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1.0 + ?, 2), "
         "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
-        (costo_usd, usuario_id),
+        (consultas_extra, consultas_extra, costo_usd, usuario_id),
     )
 
     execute(
