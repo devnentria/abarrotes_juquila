@@ -2761,34 +2761,37 @@ def medicos_dashboard(modo: str = "30d", mes: str = None):
     """
     _hoy = hoy()
 
-    # ── Filtros de período (idéntica lógica que vendedores_dashboard) ──────────
+    # ── Filtros de período — anterior = período inmediatamente previo ────────────
     if mes:
         try:
             anio_m, num_m = int(mes[:4]), int(mes[5:7])
         except (ValueError, IndexError):
             raise HTTPException(400, "Formato de mes inválido, use YYYY-MM")
+        anio_p = anio_m - 1 if num_m == 1 else anio_m
+        mes_p  = 12        if num_m == 1 else num_m - 1
         fecha_ini   = f"CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE)"
         fecha_fin   = f"EOMONTH(CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE))"
-        fecha_ini_a = f"CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE)"
-        fecha_fin_a = f"EOMONTH(CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE))"
+        fecha_ini_a = f"CAST('{anio_p:04d}-{mes_p:02d}-01' AS DATE)"
+        fecha_fin_a = f"EOMONTH(CAST('{anio_p:04d}-{mes_p:02d}-01' AS DATE))"
     elif modo == "mes":
+        # Actual: del 1 al día de hoy; anterior: mes calendario completo anterior
         fecha_ini   = f"DATEFROMPARTS(YEAR({_hoy}), MONTH({_hoy}), 1)"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(YEAR,-1,{_hoy})), MONTH(DATEADD(YEAR,-1,{_hoy})), 1)"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(MONTH,-1,{_hoy})), MONTH(DATEADD(MONTH,-1,{_hoy})), 1)"
+        fecha_fin_a = f"EOMONTH(DATEADD(MONTH,-1,{_hoy}))"
     elif modo == "hoy":
         fecha_ini = fecha_fin = _hoy
-        fecha_ini_a = fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = fecha_fin_a = f"DATEADD(DAY, -1, {_hoy})"
     elif modo == "15d":
         fecha_ini   = f"DATEADD(DAY, -15, {_hoy})"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEADD(DAY, -15, DATEADD(YEAR, -1, {_hoy}))"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEADD(DAY, -30, {_hoy})"
+        fecha_fin_a = f"DATEADD(DAY, -16, {_hoy})"
     else:  # 30d
         fecha_ini   = f"DATEADD(DAY, -30, {_hoy})"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEADD(DAY, -30, DATEADD(YEAR, -1, {_hoy}))"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEADD(DAY, -60, {_hoy})"
+        fecha_fin_a = f"DATEADD(DAY, -31, {_hoy})"
 
     filtro_base    = "c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO' AND c.Cve_Sucursal <> 99"
     filtro_medico  = "cl.Cve_Ruta IS NOT NULL AND cl.Cve_Ruta <> 0 AND cl.Cve_Ruta <> 1"

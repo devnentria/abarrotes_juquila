@@ -6971,7 +6971,7 @@ function _renderMedDetalle(data) {
       <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Rep</th>
       <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
       <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Clientes</th>
-      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Var. %</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500" title="vs período anterior">Var. %</th>
     </tr></thead>
     <tbody>${lista.map((v, i) => {
       const varCol = v.variacion === null ? 'var(--text-dim)' : v.variacion >= 0 ? 'var(--success)' : 'var(--danger)';
