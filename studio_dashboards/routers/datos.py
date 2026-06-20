@@ -30,8 +30,9 @@ from collections import defaultdict
 from datetime import date as _date
 from typing import Optional
 
+import base64
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -282,6 +283,7 @@ class DashboardGuardar(BaseModel):
     pregunta:   str = ""
     tipo:       str = "texto"
     datos_json: dict = {}
+    pdf_b64:    str  = ""
 
 
 # ── Ventas por sucursal ───────────────────────────────────────────────────────
@@ -2412,7 +2414,8 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
 def listar_dashboards(usuario=Depends(get_current_user)):
     """Lista todos los dashboards guardados, del más reciente al más antiguo."""
     rows = fetch_all(
-        "SELECT id, titulo, pregunta, tipo, datos_json, creado_en "
+        "SELECT id, titulo, pregunta, tipo, datos_json, creado_en, "
+        "       CASE WHEN pdf_b64 <> '' THEN 1 ELSE 0 END AS has_pdf "
         "FROM dashboards WHERE guardado=1 ORDER BY creado_en DESC"
     )
     for r in rows:
@@ -2427,12 +2430,32 @@ def listar_dashboards(usuario=Depends(get_current_user)):
 def guardar_dashboard(body: DashboardGuardar, usuario=Depends(get_current_user)):
     """Guarda un dashboard generado en el historial permanente."""
     nuevo_id = execute(
-        "INSERT INTO dashboards (titulo, pregunta, tipo, datos_json, guardado, creado_por) "
-        "VALUES (?, ?, ?, ?, 1, ?)",
+        "INSERT INTO dashboards (titulo, pregunta, tipo, datos_json, guardado, creado_por, pdf_b64) "
+        "VALUES (?, ?, ?, ?, 1, ?, ?)",
         (body.titulo, body.pregunta, body.tipo,
-         json.dumps(body.datos_json, ensure_ascii=False), usuario["id"])
+         json.dumps(body.datos_json, ensure_ascii=False), usuario["id"], body.pdf_b64)
     )
     return JSONResponse({"id": nuevo_id, "mensaje": "Dashboard guardado"})
+
+
+@router.get("/dashboards/{dashboard_id}/pdf")
+def obtener_pdf_dashboard(dashboard_id: int, usuario=Depends(get_current_user)):
+    """Devuelve el PDF de un dashboard guardado como respuesta binaria."""
+    row = fetch_one(
+        "SELECT pdf_b64 FROM dashboards WHERE id=? AND guardado=1",
+        (dashboard_id,)
+    )
+    if not row or not row.get("pdf_b64"):
+        raise HTTPException(404, "PDF no disponible para este dashboard")
+    try:
+        pdf_bytes = base64.b64decode(row["pdf_b64"])
+    except Exception:
+        raise HTTPException(500, "Error al decodificar el PDF")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="dashboard_{dashboard_id}.pdf"'},
+    )
 
 
 @router.delete("/dashboards/{dashboard_id}")

@@ -577,7 +577,20 @@ html, body {
   background: var(--accent-soft); padding: 2px 7px; border-radius: 10px;
   white-space: nowrap; flex-shrink: 0; text-transform: uppercase; letter-spacing: .04em;
 }
-.dash-pwa-fecha { font-size: 11px; color: var(--text-dim); padding: 0 16px 10px; }
+.dash-pwa-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 16px 10px;
+}
+.dash-pwa-fecha { font-size: 11px; color: var(--text-dim); }
+.dash-pwa-pdf-btn {
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  background: var(--accent-soft); border: none; border-radius: 8px;
+  padding: 4px 10px; cursor: pointer;
+}
+.dash-pwa-pdf-hint {
+  font-size: 11px; color: var(--text-dim); text-align: center;
+  padding: 8px 16px; font-style: italic;
+}
 
 /* Barras CSS (sin Chart.js) */
 .dash-pwa-bars { padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 6px; }

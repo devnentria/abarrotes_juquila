@@ -309,16 +309,41 @@ function renderDashCardPWA(dash) {
     ventas_hoy: 'Hoy', ventas_sucursal: 'Sucursales',
     top_vendedores: 'Vendedores', comparativo_meses: 'Meses',
     pedidos_activos: 'Pedidos', texto_ia: 'IA',
+    chart_dinamico: 'Gráfica IA',
   }[tipo] || tipo;
+
+  // Botón PDF si el dashboard tiene PDF guardado
+  const pdfBtn = dash.has_pdf
+    ? `<button class="dash-pwa-pdf-btn" onclick="verPDFDashboard(${dash.id})" title="Ver PDF">📄 Ver PDF</button>`
+    : '';
 
   return `<div class="dash-pwa-card card-item">
     <div class="dash-pwa-header">
       <span class="dash-pwa-titulo">${dash.titulo}</span>
       <span class="dash-pwa-tipo">${tipoLabel}</span>
     </div>
-    ${vizHtml}
-    <div class="dash-pwa-fecha">${fechaStr}</div>
+    ${vizHtml || (dash.has_pdf ? '<div class="dash-pwa-pdf-hint">Toca "Ver PDF" para visualizar esta gráfica</div>' : '')}
+    <div class="dash-pwa-footer">
+      <span class="dash-pwa-fecha">${fechaStr}</span>
+      ${pdfBtn}
+    </div>
   </div>`;
+}
+
+// ── Ver PDF de un dashboard guardado ─────────────────────────────────────────
+async function verPDFDashboard(id) {
+  try {
+    const res = await authFetch(`/api/dashboards/${id}/pdf`);
+    if (!res.ok) { alert('PDF no disponible'); return; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    // Abrir en nueva pestaña / visor del sistema
+    window.open(url, '_blank');
+    // Liberar la URL después de un tiempo prudencial
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    alert('Error al cargar el PDF');
+  }
 }
 
 // ── Render: Inicio — ventas del mes por sucursal ──────────────────────────────

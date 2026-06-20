@@ -1786,6 +1786,8 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
@@ -4223,9 +4225,151 @@ function guardarDashActivo() {
   }
 }
 
-// ── Exportar PDF ──────────────────────────────────────────────────────────────
-function exportarPDF() {
-  window.print();
+// ── Generador de PDF con logo y metadatos ─────────────────────────────────────
+async function _generarPDFBase64(titulo, pregunta) {
+  const { jsPDF } = window.jspdf;
+
+  // 1. Capturar el área del dashboard con html2canvas
+  const contenido = document.getElementById('dashboard-ia-contenido');
+  if (!contenido) return null;
+
+  let imgData = null;
+  try {
+    const canvas = await html2canvas(contenido, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+    });
+    imgData = canvas.toDataURL('image/png');
+  } catch (e) {
+    console.error('[PDF] html2canvas error:', e);
+    return null;
+  }
+
+  // 2. Crear PDF A4 horizontal
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const PW = doc.internal.pageSize.getWidth();   // 297mm
+  const PH = doc.internal.pageSize.getHeight();  // 210mm
+
+  // 3. Fondo del encabezado
+  doc.setFillColor(26, 43, 90);   // azul marino corporativo
+  doc.rect(0, 0, PW, 28, 'F');
+
+  // 4. Logo (cargarlo desde el servidor)
+  try {
+    const logoResp = await fetch('/static/logo_transparente.png');
+    const logoBuf  = await logoResp.arrayBuffer();
+    const logoB64  = btoa(String.fromCharCode(...new Uint8Array(logoBuf)));
+    doc.addImage('data:image/png;base64,' + logoB64, 'PNG', 8, 4, 40, 20);
+  } catch {}
+
+  // 5. Título en el encabezado
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  const tituloCorto = titulo.length > 70 ? titulo.slice(0, 67) + '…' : titulo;
+  doc.text(tituloCorto, PW / 2, 12, { align: 'center' });
+
+  // 6. Tabla de metadatos bajo el encabezado
+  const ahora    = new Date();
+  const fechaStr = ahora.toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
+  const horaStr  = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+  const genPor   = _usuario ? _usuario.nombre : 'Usuario';
+
+  doc.setFillColor(245, 247, 250);
+  doc.rect(0, 28, PW, 14, 'F');
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+
+  const metaCols = [
+    { label: 'Generado por', valor: genPor },
+    { label: 'Fecha',        valor: fechaStr },
+    { label: 'Hora',         valor: horaStr },
+    { label: 'Sistema',      valor: 'Suite Analítica — Nentria' },
+  ];
+  const colW = PW / metaCols.length;
+  metaCols.forEach((m, i) => {
+    const x = i * colW + colW / 2;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    doc.text(m.label.toUpperCase(), x, 34, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(30, 41, 59);
+    doc.text(m.valor, x, 39, { align: 'center' });
+  });
+
+  // Línea separadora
+  doc.setDrawColor(203, 213, 225);
+  doc.line(8, 42, PW - 8, 42);
+
+  // 7. Pregunta / subtítulo (si existe)
+  let yImg = 46;
+  if (pregunta && pregunta.trim()) {
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.setFont('helvetica', 'italic');
+    const pq = pregunta.length > 120 ? pregunta.slice(0, 117) + '…' : pregunta;
+    doc.text('Consulta: ' + pq, PW / 2, yImg, { align: 'center' });
+    yImg += 6;
+  }
+
+  // 8. Imagen del dashboard
+  if (imgData) {
+    const availH = PH - yImg - 10;
+    const availW = PW - 16;
+    // Mantener proporción
+    const tmpImg = new Image();
+    await new Promise(r => { tmpImg.onload = r; tmpImg.src = imgData; });
+    const ratio  = tmpImg.naturalWidth / tmpImg.naturalHeight;
+    let imgW = availW;
+    let imgH = imgW / ratio;
+    if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
+    const xImg = (PW - imgW) / 2;
+    doc.addImage(imgData, 'PNG', xImg, yImg, imgW, imgH);
+  }
+
+  // 9. Pie de página
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Generado automáticamente por Suite Analítica · Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+
+  return doc.output('datauristring').split(',')[1];  // base64 puro
+}
+
+// ── Exportar PDF (botón PDF manual) ──────────────────────────────────────────
+async function exportarPDF() {
+  const item = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const titulo   = item ? item.titulo   : 'Dashboard';
+  const pregunta = item ? (item.pregunta || '') : '';
+
+  const btn = document.getElementById('header-pdf-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
+
+  try {
+    const b64 = await _generarPDFBase64(titulo, pregunta);
+    if (b64) {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      // Re-generar para la descarga (más simple: usar el mismo b64 como blob)
+      const bytes   = atob(b64);
+      const arr     = new Uint8Array(bytes.length);
+      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+      const blob    = new Blob([arr], { type: 'application/pdf' });
+      const url     = URL.createObjectURL(blob);
+      const a       = document.createElement('a');
+      a.href        = url;
+      a.download    = `${titulo.replace(/[^a-zA-Z0-9]/g,'_').slice(0,40)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      mostrarToast('No se pudo generar el PDF', 'error');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
+  }
 }
 
 // ── Navegador de dashboards guardados en header ───────────────────────────────
@@ -5973,18 +6117,34 @@ function renderMiniViz(idx) {
 async function guardarDashHistorial(idx) {
   const item = _historial[idx];
   if (!item || item.guardado) return;
+
+  // Si no es el dashboard activo visible, mostrarlo primero para capturarlo
+  if (_activeDashIdx !== idx) verDashHistorial(idx);
+
+  // Pequeña pausa para que el DOM se pinte antes de capturar
+  await new Promise(r => setTimeout(r, 300));
+
+  // Generar PDF automáticamente
+  let pdf_b64 = '';
+  try {
+    pdf_b64 = await _generarPDFBase64(item.titulo, item.pregunta || '') || '';
+  } catch (e) {
+    console.warn('[guardar] PDF generation failed:', e);
+  }
+
   try {
     const res = await api('/api/datos/dashboards', {
       method: 'POST',
       body: JSON.stringify({
-        titulo: item.titulo,
-        pregunta: item.pregunta || '',
-        tipo: item.tipo,
+        titulo:     item.titulo,
+        pregunta:   item.pregunta || '',
+        tipo:       item.tipo,
         datos_json: item.datos,
+        pdf_b64,
       }),
     });
     item.guardado = true;
-    item.db_id = res.id;
+    item.db_id    = res.id;
     const card = document.getElementById(`dash-item-${idx}`);
     if (card) {
       const actions = card.querySelector('.dash-hist-actions');
@@ -5995,8 +6155,8 @@ async function guardarDashHistorial(idx) {
       const meta = document.getElementById(`dash-meta-${idx}`);
       if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
     }
-    mostrarToast('Dashboard guardado', 'success');
-    cargarNavDashboards();  // Refrescar selector en header
+    mostrarToast(pdf_b64 ? 'Dashboard guardado con PDF ✓' : 'Dashboard guardado', 'success');
+    cargarNavDashboards();
   } catch (e) {
     mostrarToast('Error al guardar: ' + e.message, 'error');
   }
