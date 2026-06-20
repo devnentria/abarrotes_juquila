@@ -944,6 +944,8 @@
         <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
         <span style="opacity:.4">|</span>
         <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
+        <span style="color:var(--border)">·</span>
+        <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Médicos</span>
       </div>
 
       <!-- Header con toggle de período -->
@@ -1463,6 +1465,66 @@
       </div>
 
     </div><!-- /vendedores-dash-area -->
+
+<!-- ── Dashboard Médicos ───────────────────────────────────────── -->
+<div id="medicos-dash-area" style="display:none">
+
+  <!-- Header con selector de período -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div class="section-label" style="margin-bottom:0">Médicos</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <button id="med-btn-30d" onclick="_medSetModo('30d')"
+        style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--blue-mid);color:#fff;cursor:pointer;font-weight:600">
+        Últ. 30 días
+      </button>
+      <button id="med-btn-mes" onclick="_medSetModo('mes')"
+        style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+        Mes actual
+      </button>
+      <input type="month" id="med-mes-input"
+        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
+        onchange="_medSetMes(this.value)">
+      <span id="med-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
+    </div>
+  </div>
+
+  <!-- Fila KPIs -->
+  <div id="med-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+  <!-- Fila 2: Ranking top 10 médicos + ventas por rep -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 médicos por ventas</div>
+      <div id="med-ranking-wrap" style="position:relative;height:280px">
+        <canvas id="med-ranking-chart"></canvas>
+        <div id="med-ranking-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Ventas por representante</div>
+      <div id="med-rep-wrap" style="position:relative;height:280px">
+        <canvas id="med-rep-chart"></canvas>
+        <div id="med-rep-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fila 3: Tendencia mensual + Detalle tabla -->
+  <div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 médicos (últimos 6 meses)</div>
+      <div id="med-mes-wrap" style="position:relative;height:220px">
+        <canvas id="med-mes-chart"></canvas>
+        <div id="med-mes-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Detalle de médicos</div>
+      <div id="med-detalle" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+</div><!-- /medicos-dash-area -->
 
     <!-- ── Overlay "Generando tablero" (cubre cualquier tab) ── -->
     <div id="tab-generando-overlay" style="display:none;position:absolute;inset:0;background:var(--bg);z-index:10;padding:20px">
@@ -2699,7 +2761,7 @@ function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 let _currentTab = 'resumen';
 
 const _TAB_NOMBRES = {
-  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores'
+  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores', medicos: 'Médicos'
 };
 
 function _mostrarOverlayGenerando(tab) {
@@ -2722,6 +2784,7 @@ function _switchTab(tab) {
   const isProductos   = tab === 'productos';
   const isInventario  = tab === 'inventario';
   const isVendedores  = tab === 'vendedores';
+  const isMedicos     = tab === 'medicos';
 
   // Ocultar dashboard de IA si está visible
   const iaWrap = document.getElementById('dashboard-ia-wrap');
@@ -2732,6 +2795,7 @@ function _switchTab(tab) {
   document.getElementById('productos-dash-area').style.display   = isProductos   ? '' : 'none';
   document.getElementById('inventario-dash-area').style.display  = isInventario  ? '' : 'none';
   document.getElementById('vendedores-dash-area').style.display  = isVendedores  ? '' : 'none';
+  document.getElementById('medicos-dash-area').style.display     = isMedicos     ? '' : 'none';
   document.getElementById('header-periodo').style.display        = isResumen     ? '' : 'none';
 
   const btnR = document.getElementById('tab-resumen');
@@ -2739,12 +2803,14 @@ function _switchTab(tab) {
   const btnP = document.getElementById('tab-productos');
   const btnI = document.getElementById('tab-inventario');
   const btnV = document.getElementById('tab-vendedores');
+  const btnM = document.getElementById('tab-medicos');
   const _active = 'var(--blue-mid)', _dim = 'var(--text-dim)';
   if (btnR) { btnR.style.color = isResumen     ? _active : _dim; btnR.style.fontWeight = isResumen     ? '600' : '400'; }
   if (btnZ) { btnZ.style.color = isZonas       ? _active : _dim; btnZ.style.fontWeight = isZonas       ? '600' : '400'; }
   if (btnP) { btnP.style.color = isProductos   ? _active : _dim; btnP.style.fontWeight = isProductos   ? '600' : '400'; }
   if (btnI) { btnI.style.color = isInventario  ? _active : _dim; btnI.style.fontWeight = isInventario  ? '600' : '400'; }
   if (btnV) { btnV.style.color = isVendedores  ? _active : _dim; btnV.style.fontWeight = isVendedores  ? '600' : '400'; }
+  if (btnM) { btnM.style.color = isMedicos     ? _active : _dim; btnM.style.fontWeight = isMedicos     ? '600' : '400'; }
 
   if (!isResumen) {
     // Siempre mostrar overlay "Generando tablero" al navegar a cualquier tab
@@ -2753,12 +2819,14 @@ function _switchTab(tab) {
     _prodLoaded   = false;
     _zonasLoaded  = false;
     _vendLoaded   = false;
+    _medLoaded    = false;
   }
 
   if (isZonas)      cargarZonas();
   if (isProductos)  cargarProductos();
   if (isInventario) cargarInventario();
   if (isVendedores) cargarVendedores();
+  if (isMedicos)    cargarMedicos();
 }
 
 // ── Dashboard Zonas ───────────────────────────────────────────────────────────
@@ -6280,6 +6348,12 @@ function _renderInvCriticos(lista, el) {
   </table>`;
 }
 
+// ── Dashboard Médicos — estado ────────────────────────────────────────────────
+let _medLoaded  = false;
+let _medModo    = '30d';
+let _medMes     = null;
+let _medCharts  = {};
+
 // ── Dashboard Vendedores ──────────────────────────────────────────────────────
 let _vendLoaded  = false;
 let _vendModo    = '30d';
@@ -6621,6 +6695,215 @@ function _renderVendProdxVend(data) {
       </span>`
     ).join('');
   }
+}
+
+// ── Dashboard Médicos ─────────────────────────────────────────────────────────
+
+function _medSetModo(modo) {
+  _medModo = modo;
+  _medMes  = null;
+  const _actStyle = 'var(--blue-mid)'; const _inactBg = 'var(--surface)'; const _inactTxt = 'var(--text)';
+  const btn30  = document.getElementById('med-btn-30d');
+  const btnMes = document.getElementById('med-btn-mes');
+  const labelEl = document.getElementById('med-label');
+  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg; btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
+  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg; btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  if (labelEl) labelEl.textContent = modo === '30d' ? 'Últimos 30 días' : 'Mes actual';
+  _mostrarOverlayGenerando('medicos');
+  cargarMedicos();
+}
+
+function _medSetMes(valor) {
+  if (!valor) return;
+  _medMes  = valor;
+  _medModo = '';
+  const btn30  = document.getElementById('med-btn-30d');
+  const btnMes = document.getElementById('med-btn-mes');
+  const labelEl = document.getElementById('med-label');
+  const _inactBg = 'var(--surface)'; const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = _inactBg; btn30.style.color  = _inactTxt; }
+  if (btnMes) { btnMes.style.background = _inactBg; btnMes.style.color = _inactTxt; }
+  if (labelEl) labelEl.textContent = valor;
+  _mostrarOverlayGenerando('medicos');
+  cargarMedicos();
+}
+
+async function cargarMedicos() {
+  _medLoaded = true;
+  let url = '/api/datos/medicos';
+  if (_medMes) {
+    url += `?mes=${encodeURIComponent(_medMes)}`;
+  } else {
+    url += `?modo=${encodeURIComponent(_medModo || '30d')}`;
+  }
+
+  const [dataResult] = await Promise.allSettled([
+    api(url),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+
+  if (dataResult.status === 'fulfilled') {
+    const data = dataResult.value;
+    _renderMedKPIs(data);
+    _renderMedRanking(data);
+    _renderMedRep(data);
+    _renderMedMes(data);
+    _renderMedDetalle(data);
+  } else {
+    const kpisEl = document.getElementById('med-kpis');
+    if (kpisEl) kpisEl.innerHTML = `<div style="color:var(--danger);font-size:12px;grid-column:span 4">${dataResult.reason?.message || 'Error al cargar datos'}</div>`;
+  }
+}
+
+function _renderMedKPIs(data) {
+  const el = document.getElementById('med-kpis');
+  if (!el) return;
+  const kpis = [
+    { label: 'Ventas del período',   valor: _formatMXN(data.total_ventas || 0),                         color: 'var(--blue-mid)', sub: 'via médicos prescriptores' },
+    { label: 'Médico líder',         valor: data.lider_nombre || '—',                                    color: 'var(--warn)',     sub: _formatMXN(data.lider_importe || 0) },
+    { label: 'Médicos activos',      valor: (data.medicos_activos || 0).toLocaleString('es-MX'),         color: 'var(--blue)',     sub: 'con ventas en el período' },
+    { label: 'Rep con más médicos',  valor: data.top_rep || '—',                                         color: 'var(--success)',  sub: 'representante más activo' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:18px;font-weight:700;color:${k.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k.valor}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${k.sub}</div>
+    </div>`).join('');
+}
+
+function _renderMedRanking(data) {
+  const canvas = document.getElementById('med-ranking-chart');
+  const nodata = document.getElementById('med-ranking-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.ranking) { _medCharts.ranking.destroy(); delete _medCharts.ranking; }
+  const top10 = (data.ranking || []).slice(0, 10);
+  if (!top10.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  _medCharts.ranking = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: top10.map(v => v.nombre),
+      datasets: [{ label: 'Importe', data: top10.map(v => v.importe),
+        backgroundColor: '#1A2B5A', borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)} · Rep: ${top10[ctx.dataIndex]?.vendedor ?? '—'}` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:11} }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedRep(data) {
+  const canvas = document.getElementById('med-rep-chart');
+  const nodata = document.getElementById('med-rep-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.rep) { _medCharts.rep.destroy(); delete _medCharts.rep; }
+  const lista = (data.por_rep || []).slice(0, 10);
+  if (!lista.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  _medCharts.rep = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: lista.map(v => v.rep),
+      datasets: [{ label: 'Importe', data: lista.map(v => v.importe),
+        backgroundColor: '#00897B', borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)} · ${lista[ctx.dataIndex]?.medicos ?? 0} médicos` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:11} }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedMes(data) {
+  const canvas = document.getElementById('med-mes-chart');
+  const nodata = document.getElementById('med-mes-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.mes) { _medCharts.mes.destroy(); delete _medCharts.mes; }
+  const porMes = data.por_mes || [];
+  if (!porMes.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  const meses    = [...new Set(porMes.map(r => r.mes))].sort();
+  const medNames = [...new Set(porMes.map(r => r.medico))];
+  const datasets = medNames.map((nombre, i) => ({
+    label: nombre,
+    data: meses.map(m => { const row = porMes.find(r => r.mes === m && r.medico === nombre); return row ? row.importe : null; }),
+    borderColor: COLORES[i % COLORES.length],
+    backgroundColor: COLORES[i % COLORES.length] + '22',
+    tension: 0.3, pointRadius: 4, spanGaps: true, fill: false,
+  }));
+  _medCharts.mes = new Chart(canvas, {
+    type: 'line',
+    data: { labels: meses, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: textColor, font:{size:10}, boxWidth:10, padding:8 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10} }, grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedDetalle(data) {
+  const el = document.getElementById('med-detalle');
+  if (!el) return;
+  const lista = data.ranking || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Médico</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Rep</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Clientes</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Var. %</th>
+    </tr></thead>
+    <tbody>${lista.map((v, i) => {
+      const varCol = v.variacion === null ? 'var(--text-dim)' : v.variacion >= 0 ? 'var(--success)' : 'var(--danger)';
+      const varTxt = v.variacion === null ? '—' : (v.variacion >= 0 ? '▲' : '▼') + ' ' + Math.abs(v.variacion) + '%';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 6px;color:var(--text-dim);font-size:11px">${i+1}</td>
+        <td style="padding:5px 6px;font-size:11px;color:var(--text);max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.nombre}</td>
+        <td style="padding:5px 6px;font-size:10px;color:var(--text-dim);max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.vendedor}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;white-space:nowrap">${_formatMXN(v.importe)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${v.clientes}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:600;color:${varCol};white-space:nowrap">${varTxt}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
 }
 </script>
 

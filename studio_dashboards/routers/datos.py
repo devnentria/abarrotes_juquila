@@ -2747,3 +2747,171 @@ def vendedores_dashboard(modo: str = "30d", mes: str = None):
         "detalle":             detalle,
         "prod_por_vendedor":   prod_por_vendedor,
     })
+
+
+@router.get("/medicos")
+def medicos_dashboard(modo: str = "30d", mes: str = None):
+    """
+    Dashboard de Médicos.
+    Ventas atribuidas a médicos vía CM_Clientes.Cve_Ruta → GC_Medicos.Cve_Medico.
+    """
+    _hoy = hoy()
+
+    # ── Filtros de período (idéntica lógica que vendedores_dashboard) ──────────
+    if mes:
+        try:
+            anio_m, num_m = int(mes[:4]), int(mes[5:7])
+        except (ValueError, IndexError):
+            raise HTTPException(400, "Formato de mes inválido, use YYYY-MM")
+        fecha_ini   = f"CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE)"
+        fecha_fin   = f"EOMONTH(CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE))"
+        fecha_ini_a = f"CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE)"
+        fecha_fin_a = f"EOMONTH(CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE))"
+    elif modo == "mes":
+        fecha_ini   = f"DATEFROMPARTS(YEAR({_hoy}), MONTH({_hoy}), 1)"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(YEAR,-1,{_hoy})), MONTH(DATEADD(YEAR,-1,{_hoy})), 1)"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    elif modo == "hoy":
+        fecha_ini = fecha_fin = _hoy
+        fecha_ini_a = fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    elif modo == "15d":
+        fecha_ini   = f"DATEADD(DAY, -15, {_hoy})"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEADD(DAY, -15, DATEADD(YEAR, -1, {_hoy}))"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    else:  # 30d
+        fecha_ini   = f"DATEADD(DAY, -30, {_hoy})"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEADD(DAY, -30, DATEADD(YEAR, -1, {_hoy}))"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+
+    filtro_base    = "c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO' AND c.Cve_Sucursal <> 99"
+    filtro_medico  = "cl.Cve_Ruta IS NOT NULL AND cl.Cve_Ruta <> 0 AND cl.Cve_Ruta <> 1"
+    where_periodo  = f"c.Fecha_Documento >= {fecha_ini} AND c.Fecha_Documento <= {fecha_fin}"
+    where_anterior = f"c.Fecha_Documento >= {fecha_ini_a} AND c.Fecha_Documento <= {fecha_fin_a}"
+    joins_base     = """
+        INNER JOIN FT_Pedidos_Dia d
+            ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+        INNER JOIN CM_Clientes cl ON CAST(c.Cve_Cliente AS INT) = cl.Cve_Cliente
+        INNER JOIN GC_Medicos m ON m.Cve_Medico = cl.Cve_Ruta
+        LEFT JOIN GC_Vendedores v ON v.Cve_Vendedor = m.cve_vendedor
+    """
+
+    # ── 1. Ventas del período por médico ──────────────────────────────────────
+    try:
+        med_rows = query(f"""
+            SELECT
+                m.Cve_Medico                                            AS cve_medico,
+                m.Nombre                                                AS nombre,
+                ISNULL(v.Nombre, 'Sin rep')                             AS vendedor,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)        AS importe,
+                COUNT(DISTINCT c.Cve_Folio)                             AS pedidos,
+                COUNT(DISTINCT c.Cve_Cliente)                           AS clientes
+            FROM FT_Pedidos_C c {joins_base}
+            WHERE {filtro_base} AND {filtro_medico} AND {where_periodo}
+            GROUP BY m.Cve_Medico, m.Nombre, v.Nombre
+            ORDER BY importe DESC
+        """)
+    except Exception as e:
+        raise HTTPException(500, f"medicos-ranking: {e}")
+
+    # ── 2. Período anterior ───────────────────────────────────────────────────
+    try:
+        ant_rows = query(f"""
+            SELECT
+                m.Cve_Medico                                     AS cve_medico,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+            FROM FT_Pedidos_C c {joins_base}
+            WHERE {filtro_base} AND {filtro_medico} AND {where_anterior}
+            GROUP BY m.Cve_Medico
+        """)
+        ant_map = {int(r["cve_medico"]): round(float(r["importe"] or 0), 2) for r in ant_rows}
+    except Exception as e:
+        raise HTTPException(500, f"medicos-anterior: {e}")
+
+    # ── 3. Construir ranking con variación ────────────────────────────────────
+    ranking = []
+    for r in med_rows:
+        importe = round(float(r["importe"] or 0), 2)
+        pedidos = int(r["pedidos"] or 0)
+        clientes = int(r["clientes"] or 0)
+        ant     = ant_map.get(int(r["cve_medico"]), 0.0)
+        variacion = round((importe - ant) / ant * 100, 1) if ant > 0 else None
+        ranking.append({
+            "nombre":    (r["nombre"]   or "").strip(),
+            "vendedor":  (r["vendedor"] or "").strip(),
+            "importe":   importe,
+            "pedidos":   pedidos,
+            "clientes":  clientes,
+            "ticket":    round(importe / pedidos, 2) if pedidos > 0 else 0.0,
+            "variacion": variacion,
+        })
+
+    # ── 4. KPIs ───────────────────────────────────────────────────────────────
+    total_ventas   = round(sum(r["importe"] for r in ranking), 2)
+    medicos_activos = len(ranking)
+    lider           = ranking[0] if ranking else {}
+    lider_nombre    = lider.get("nombre", "—")
+    lider_importe   = lider.get("importe", 0.0)
+
+    # Rep con más médicos activos
+    from collections import Counter as _Counter
+    rep_count = _Counter(r["vendedor"] for r in ranking if r["vendedor"] != "Sin rep")
+    top_rep   = rep_count.most_common(1)[0][0] if rep_count else "—"
+
+    # ── 5. Ventas por representante (agrupa médicos de cada rep) ─────────────
+    try:
+        rep_rows = query(f"""
+            SELECT
+                ISNULL(v.Nombre, 'Sin rep')                             AS rep,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)        AS importe,
+                COUNT(DISTINCT m.Cve_Medico)                            AS medicos
+            FROM FT_Pedidos_C c {joins_base}
+            WHERE {filtro_base} AND {filtro_medico} AND {where_periodo}
+            GROUP BY v.Nombre
+            ORDER BY importe DESC
+        """)
+        por_rep = [
+            {"rep": (r["rep"] or "").strip(), "importe": round(float(r["importe"] or 0), 2), "medicos": int(r["medicos"] or 0)}
+            for r in rep_rows
+        ]
+    except Exception:
+        por_rep = []
+
+    # ── 6. Tendencia mensual top 5 médicos (últimos 6 meses) ─────────────────
+    top5_nombres = [r["nombre"] for r in ranking[:5]]
+    por_mes = []
+    if top5_nombres:
+        try:
+            placeholders = ", ".join(["?" for _ in top5_nombres])
+            mes_rows = query(f"""
+                SELECT
+                    FORMAT(c.Fecha_Documento, 'yyyy-MM') AS mes,
+                    m.Nombre                              AS medico,
+                    ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+                FROM FT_Pedidos_C c {joins_base}
+                WHERE {filtro_base} AND {filtro_medico}
+                  AND c.Fecha_Documento >= DATEADD(MONTH, -6, {_hoy})
+                  AND m.Nombre IN ({placeholders})
+                GROUP BY FORMAT(c.Fecha_Documento, 'yyyy-MM'), m.Nombre
+                ORDER BY mes ASC
+            """, params=top5_nombres)
+            por_mes = [
+                {"mes": r["mes"], "medico": (r["medico"] or "").strip(),
+                 "importe": round(float(r["importe"] or 0), 2)}
+                for r in mes_rows
+            ]
+        except Exception:
+            por_mes = []
+
+    return JSONResponse({
+        "total_ventas":     total_ventas,
+        "lider_nombre":     lider_nombre,
+        "lider_importe":    lider_importe,
+        "medicos_activos":  medicos_activos,
+        "top_rep":          top_rep,
+        "ranking":          ranking,
+        "por_rep":          por_rep,
+        "por_mes":          por_mes,
+    })
