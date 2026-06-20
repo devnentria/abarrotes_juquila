@@ -165,6 +165,27 @@
     }
     .periodo-btn.active { background: var(--card); color: var(--blue-mid); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
 
+    /* Rango de fechas personalizado */
+    .rango-fechas {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 3px 10px 3px 8px;
+    }
+    .rango-fechas input[type="date"] {
+      background: none; border: none; outline: none; font-family: inherit;
+      font-size: 12px; font-weight: 600; color: var(--text-dim); cursor: pointer;
+      padding: 4px 2px;
+    }
+    .rango-fechas input[type="date"]:focus { color: var(--blue-mid); }
+    .rango-fechas span { font-size: 11px; color: var(--text-dim); }
+    .rango-fechas button {
+      background: var(--blue-mid); border: none; color: #fff;
+      font-size: 11px; font-weight: 700; font-family: inherit;
+      padding: 4px 10px; border-radius: 5px; cursor: pointer;
+    }
+    .rango-fechas button:hover { opacity: .85; }
+    [data-theme="dark"] .rango-fechas input[type="date"] { color-scheme: dark; }
+
     /* Chart cards */
     .charts-grid {
       display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px;
@@ -921,16 +942,26 @@
         <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
         <span style="opacity:.4">|</span>
         <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
+        <span style="opacity:.4">|</span>
+        <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
       </div>
 
       <!-- Header con toggle de período -->
       <div id="header-periodo" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="section-label" style="margin-bottom:0">Ventas</div>
-        <div class="periodo-toggle" id="periodo-toggle">
-          <button class="periodo-btn" data-modo="hoy">Hoy</button>
-          <button class="periodo-btn" data-modo="15d">Últ. 15 días</button>
-          <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
-          <button class="periodo-btn" data-modo="mes">Mes actual</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="periodo-toggle" id="periodo-toggle">
+            <button class="periodo-btn" data-modo="hoy">Hoy</button>
+            <button class="periodo-btn" data-modo="15d">Últ. 15 días</button>
+            <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
+            <button class="periodo-btn" data-modo="mes">Mes actual</button>
+          </div>
+          <div class="rango-fechas" title="Rango de fechas personalizado">
+            <input type="date" id="rango-fi" title="Fecha inicio">
+            <span>—</span>
+            <input type="date" id="rango-ff" title="Fecha fin">
+            <button onclick="_aplicarRango()">Aplicar</button>
+          </div>
         </div>
       </div>
 
@@ -1357,6 +1388,67 @@
       </div>
 
     </div><!-- /inventario-dash-area -->
+
+    <!-- ── Tab: Vendedores ── -->
+    <div id="vendedores-dash-area" style="display:none">
+
+      <!-- Header con selector de período -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div class="section-label" style="margin-bottom:0">Vendedores</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <button id="vend-btn-30d" onclick="_vendSetModo('30d')"
+            style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--blue-mid);color:#fff;cursor:pointer;font-weight:600">
+            Últ. 30 días
+          </button>
+          <button id="vend-btn-mes" onclick="_vendSetModo('mes')"
+            style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+            Mes actual
+          </button>
+          <input type="month" id="vend-mes-input"
+            style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
+            onchange="_vendSetMes(this.value)">
+          <span id="vend-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
+        </div>
+      </div>
+
+      <!-- Fila KPIs -->
+      <div id="vend-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+      <!-- Fila 2: Ranking barras + Tabla detalle -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 vendedores</div>
+          <div id="vend-ranking-wrap" style="position:relative;height:280px">
+            <canvas id="vend-ranking-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Detalle de vendedores</div>
+          <div id="vend-detalle" style="font-size:12px;max-height:320px;overflow-y:auto"></div>
+        </div>
+
+      </div>
+
+      <!-- Fila 3: Tendencia mensual top 5 + Top por sucursal -->
+      <div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 vendedores (últimos 6 meses)</div>
+          <div id="vend-mes-wrap" style="position:relative;height:220px">
+            <canvas id="vend-mes-chart"></canvas>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Líder por sucursal</div>
+          <div id="vend-sucursal" style="font-size:12px"></div>
+        </div>
+
+      </div>
+
+    </div><!-- /vendedores-dash-area -->
 
     <!-- ── Overlay "Generando tablero" (cubre cualquier tab) ── -->
     <div id="tab-generando-overlay" style="display:none;position:absolute;inset:0;background:var(--bg);z-index:10;padding:20px">
@@ -2173,7 +2265,19 @@ async function _scPollJob(jobId, hasDashHint) {
     }
     _scRemoveTyping();
     const hasDash = !!(data.dashboard);
-    if (hasDash) {
+    if (hasDash && data.dashboard.tipo === 'switch_tab') {
+      // El backend indica navegar a un tab dedicado
+      const tab  = data.dashboard.tab;
+      const modo = data.dashboard.modo;
+      const fi   = data.dashboard.fecha_inicio;
+      if (tab === 'vendedores') {
+        if (fi) { _vendMes = fi.slice(0,7); _vendModo = ''; }
+        else    { _vendModo = modo || '30d'; _vendMes = null; }
+        const mesInput = document.getElementById('vend-mes-input');
+        if (mesInput && _vendMes) mesInput.value = _vendMes;
+      }
+      _switchTab(tab);
+    } else if (hasDash) {
       _scDashCache[jobId] = data.dashboard;
       renderDashboard(data.dashboard);
       // Agregar al historial para poder guardarlo desde el topbar
@@ -2244,6 +2348,34 @@ async function _scEnviar() {
       _scRemoveTyping();
       _scAddBubble('Te muestro el dashboard de **Inventario** — stock, críticos y valor por sucursal.', 'bot');
       _switchTab('inventario');
+      return;
+    }
+
+    // Vendedores → navegar directamente sin llamar al backend
+    const _vendHint = /\bvend[eo]d[oa]r(es)?\b|\bvendodores?\b|\bvend\.?\b.{0,6}(dashboard|tablero|dash)|equipo.{0,10}venta[s]?|fuerza.{0,10}venta[s]?|ranking.{0,10}venta[s]?|mejor.{0,10}vend/i.test(texto);
+    if (_vendHint) {
+      // Detectar mes mencionado en el texto
+      const _mesesMap = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      if (_mesMatch) {
+        const _numMes = _mesesMap[_mesMatch[1]];
+        const _anioMes = texto.match(/\b(20\d{2})\b/);
+        const _anio = _anioMes ? parseInt(_anioMes[1]) : new Date().getFullYear();
+        _vendMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
+        _vendModo = '';
+        const mesInput = document.getElementById('vend-mes-input');
+        if (mesInput) mesInput.value = _vendMes;
+      } else {
+        _vendModo = '30d';
+        _vendMes  = null;
+      }
+      _scRemoveTyping();
+      const _periodoLabel = _vendMes ? `mes de ${_mesMatch[1]}` : 'últimos 30 días';
+      _scAddBubble(`Te muestro el dashboard de **Vendedores** — ${_periodoLabel}.`, 'bot');
+      _switchTab('vendedores');
       return;
     }
 
@@ -2380,6 +2512,8 @@ document.addEventListener('keydown', e => {
 
 // ── Dashboards ────────────────────────────────────────────────────────────────
 let _modoActivo = '30d';
+let _fi = null;   // fecha inicio del rango personalizado (ISO string YYYY-MM-DD)
+let _ff = null;   // fecha fin del rango personalizado
 let _chartVentas  = null;
 let _chartPedidos = null;
 
@@ -2551,7 +2685,7 @@ function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 let _currentTab = 'resumen';
 
 const _TAB_NOMBRES = {
-  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario'
+  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores'
 };
 
 function _mostrarOverlayGenerando(tab) {
@@ -2569,42 +2703,48 @@ function _ocultarOverlayGenerando() {
 
 function _switchTab(tab) {
   _currentTab = tab;
-  const isResumen    = tab === 'resumen';
-  const isZonas      = tab === 'zonas';
-  const isProductos  = tab === 'productos';
-  const isInventario = tab === 'inventario';
+  const isResumen     = tab === 'resumen';
+  const isZonas       = tab === 'zonas';
+  const isProductos   = tab === 'productos';
+  const isInventario  = tab === 'inventario';
+  const isVendedores  = tab === 'vendedores';
 
   // Ocultar dashboard de IA si está visible
   const iaWrap = document.getElementById('dashboard-ia-wrap');
   if (iaWrap && !iaWrap.classList.contains('hidden')) iaWrap.classList.add('hidden');
 
-  document.getElementById('static-dash-area').style.display      = isResumen    ? '' : 'none';
-  document.getElementById('zonas-dash-area').style.display       = isZonas      ? '' : 'none';
-  document.getElementById('productos-dash-area').style.display   = isProductos  ? '' : 'none';
-  document.getElementById('inventario-dash-area').style.display  = isInventario ? '' : 'none';
-  document.getElementById('header-periodo').style.display        = isResumen    ? '' : 'none';
+  document.getElementById('static-dash-area').style.display      = isResumen     ? '' : 'none';
+  document.getElementById('zonas-dash-area').style.display       = isZonas       ? '' : 'none';
+  document.getElementById('productos-dash-area').style.display   = isProductos   ? '' : 'none';
+  document.getElementById('inventario-dash-area').style.display  = isInventario  ? '' : 'none';
+  document.getElementById('vendedores-dash-area').style.display  = isVendedores  ? '' : 'none';
+  document.getElementById('header-periodo').style.display        = isResumen     ? '' : 'none';
 
   const btnR = document.getElementById('tab-resumen');
   const btnZ = document.getElementById('tab-zonas');
   const btnP = document.getElementById('tab-productos');
   const btnI = document.getElementById('tab-inventario');
+  const btnV = document.getElementById('tab-vendedores');
   const _active = 'var(--blue-mid)', _dim = 'var(--text-dim)';
-  if (btnR) { btnR.style.color = isResumen    ? _active : _dim; btnR.style.fontWeight = isResumen    ? '600' : '400'; }
-  if (btnZ) { btnZ.style.color = isZonas      ? _active : _dim; btnZ.style.fontWeight = isZonas      ? '600' : '400'; }
-  if (btnP) { btnP.style.color = isProductos  ? _active : _dim; btnP.style.fontWeight = isProductos  ? '600' : '400'; }
-  if (btnI) { btnI.style.color = isInventario ? _active : _dim; btnI.style.fontWeight = isInventario ? '600' : '400'; }
+  if (btnR) { btnR.style.color = isResumen     ? _active : _dim; btnR.style.fontWeight = isResumen     ? '600' : '400'; }
+  if (btnZ) { btnZ.style.color = isZonas       ? _active : _dim; btnZ.style.fontWeight = isZonas       ? '600' : '400'; }
+  if (btnP) { btnP.style.color = isProductos   ? _active : _dim; btnP.style.fontWeight = isProductos   ? '600' : '400'; }
+  if (btnI) { btnI.style.color = isInventario  ? _active : _dim; btnI.style.fontWeight = isInventario  ? '600' : '400'; }
+  if (btnV) { btnV.style.color = isVendedores  ? _active : _dim; btnV.style.fontWeight = isVendedores  ? '600' : '400'; }
 
   if (!isResumen) {
     // Siempre mostrar overlay "Generando tablero" al navegar a cualquier tab
     _mostrarOverlayGenerando(tab);
-    _invLoaded   = false;
-    _prodLoaded  = false;
-    _zonasLoaded = false;
+    _invLoaded    = false;
+    _prodLoaded   = false;
+    _zonasLoaded  = false;
+    _vendLoaded   = false;
   }
 
   if (isZonas)      cargarZonas();
   if (isProductos)  cargarProductos();
   if (isInventario) cargarInventario();
+  if (isVendedores) cargarVendedores();
 }
 
 // ── Dashboard Zonas ───────────────────────────────────────────────────────────
@@ -3146,34 +3286,64 @@ function _renderProdPrediccion(data) {
 
 async function cargarDashboards(modo) {
   _modoActivo = modo;
+  // Preset → limpiar rango personalizado
+  _fi = null;
+  _ff = null;
+  const fiEl = document.getElementById('rango-fi');
+  const ffEl = document.getElementById('rango-ff');
+  if (fiEl) fiEl.value = '';
+  if (ffEl) ffEl.value = '';
 
-  // Actualizar toggle
-  document.querySelectorAll('.periodo-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.modo === modo);
-  });
+  _cargarDashboardsConRango(modo, null, null);
+}
+
+function _aplicarRango() {
+  const fi = document.getElementById('rango-fi').value;
+  const ff = document.getElementById('rango-ff').value;
+  if (!fi || !ff) { mostrarToast('Selecciona fecha inicio y fin', 'warn'); return; }
+  if (fi > ff) { mostrarToast('La fecha inicio debe ser anterior a la fecha fin', 'warn'); return; }
+  _fi = fi;
+  _ff = ff;
+  // Desactivar botones preset al usar rango
+  document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
+  _cargarDashboardsConRango('custom', fi, ff);
+}
+
+async function _cargarDashboardsConRango(modo, fi, ff) {
+  const esModoCustom = fi && ff;
+  const paramBase = esModoCustom ? `fi=${fi}&ff=${ff}` : `modo=${modo}`;
+
+  // Actualizar toggle solo para presets
+  if (!esModoCustom) {
+    document.querySelectorAll('.periodo-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.modo === modo);
+    });
+  }
 
   const _modoLabels = { hoy: 'Hoy', '15d': 'Últ. 15 días', '30d': 'Últ. 30 días', mes: 'Mes actual' };
-  const periodoLabel = _modoLabels[modo] || modo;
+  const periodoLabel = esModoCustom
+    ? `${fi.slice(5)} → ${ff.slice(5)}`
+    : (_modoLabels[modo] || modo);
   const compLabel = document.getElementById('comp-periodo-label');
   if (compLabel) compLabel.textContent = periodoLabel;
 
   // Cargar todos los datos en paralelo
   try {
     const [kpisData, ventasData, pedidosData, tendenciaData, productosData, vendedoresData, diariaData, mensualData] = await Promise.all([
-      api(`/api/datos/kpis?modo=${modo}`),
-      api(`/api/datos/ventas?modo=${modo}`),
+      api(`/api/datos/kpis?${paramBase}`),
+      api(`/api/datos/ventas?${paramBase}`),
       api(`/api/datos/pedidos`),
       api('/api/datos/plantilla/tendencia_anual'),
-      api(`/api/datos/plantilla/top_productos?modo=${modo}`),
-      api(`/api/datos/plantilla/top_vendedores?modo=${modo}`),
+      api(`/api/datos/plantilla/top_productos?${paramBase}`),
+      api(`/api/datos/plantilla/top_vendedores?${paramBase}`),
       api('/api/datos/plantilla/ventas_diario'),
       api('/api/datos/plantilla/comparativo_meses'),
     ]);
 
-    renderKPIs(kpisData, modo);
+    renderKPIs(kpisData, esModoCustom ? periodoLabel : modo);
     renderChartVentas(ventasData.sucursales);
     renderChartPedidos(pedidosData.sucursales);
-    renderTablaComparativo(ventasData.sucursales, modo);
+    renderTablaComparativo(ventasData.sucursales, esModoCustom ? periodoLabel : modo);
     renderChartTendencia(tendenciaData.datos || []);
     renderChartProductos(productosData.datos || []);
     renderChartVendedores(vendedoresData.datos || []);
@@ -5779,7 +5949,14 @@ async function enviarSolicitudIA() {
 // Toggle de período + IA sidebar Enter (Ctrl+Enter)
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.periodo-btn').forEach(btn => {
-    btn.addEventListener('click', () => cargarDashboards(btn.dataset.modo));
+    btn.addEventListener('click', () => {
+      // Limpiar rango personalizado al usar preset
+      const fiEl = document.getElementById('rango-fi');
+      const ffEl = document.getElementById('rango-ff');
+      if (fiEl) fiEl.value = '';
+      if (ffEl) ffEl.value = '';
+      cargarDashboards(btn.dataset.modo);
+    });
   });
   const sbInput = document.getElementById('sb-ia-input');
   if (sbInput) {
@@ -6086,6 +6263,255 @@ function _renderInvCriticos(lista, el) {
       <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--warn)">${p.piezas_90d.toLocaleString('es-MX')} pzs</td>
       <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--danger)">${_formatMXN(p.importe_90d)}</td>
     </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ── Dashboard Vendedores ──────────────────────────────────────────────────────
+let _vendLoaded  = false;
+let _vendModo    = '30d';
+let _vendMes     = null;
+let _vendCharts  = {};
+
+function _vendSetModo(modo) {
+  _vendModo = modo;
+  _vendMes  = null;
+  const btn30  = document.getElementById('vend-btn-30d');
+  const btnMes = document.getElementById('vend-btn-mes');
+  const labelEl = document.getElementById('vend-label');
+  const _actStyle = 'var(--blue-mid)';
+  const _inactBg  = 'var(--surface)';
+  const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg;  btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
+  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg;  btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  if (labelEl) {
+    if (modo === '30d') labelEl.textContent = 'Últimos 30 días';
+    else {
+      const hoy = new Date();
+      const mes = hoy.toLocaleString('es-MX', { month: 'long' });
+      labelEl.textContent = `${mes.charAt(0).toUpperCase()}${mes.slice(1)} ${hoy.getFullYear()}`;
+    }
+  }
+  _mostrarOverlayGenerando('vendedores');
+  cargarVendedores();
+}
+
+function _vendSetMes(valor) {
+  if (!valor) return;
+  _vendMes  = valor;
+  _vendModo = '';
+  const btn30  = document.getElementById('vend-btn-30d');
+  const btnMes = document.getElementById('vend-btn-mes');
+  const labelEl = document.getElementById('vend-label');
+  const _inactBg  = 'var(--surface)';
+  const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = _inactBg;  btn30.style.color  = _inactTxt; }
+  if (btnMes) { btnMes.style.background = _inactBg;  btnMes.style.color = _inactTxt; }
+  if (labelEl) labelEl.textContent = valor;
+  _mostrarOverlayGenerando('vendedores');
+  cargarVendedores();
+}
+
+async function cargarVendedores() {
+  _vendLoaded = true;
+  let url = '/api/datos/vendedores';
+  if (_vendMes) {
+    url += `?mes=${encodeURIComponent(_vendMes)}`;
+  } else {
+    url += `?modo=${encodeURIComponent(_vendModo || '30d')}`;
+  }
+
+  const [dataResult] = await Promise.allSettled([
+    api(url),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+
+  if (dataResult.status === 'fulfilled') {
+    const data = dataResult.value;
+    _renderVendKPIs(data);
+    _renderVendRanking(data);
+    _renderVendMes(data);
+    _renderVendSucursal(data);
+    _renderVendDetalle(data);
+  } else {
+    const msg = dataResult.reason?.message || 'Error al cargar datos';
+    const kpisEl = document.getElementById('vend-kpis');
+    if (kpisEl) kpisEl.innerHTML = `<div style="color:var(--danger);font-size:12px;grid-column:span 4">${msg}</div>`;
+  }
+}
+
+function _renderVendKPIs(data) {
+  const el = document.getElementById('vend-kpis');
+  if (!el) return;
+  const kpis = [
+    { label: 'Ventas del período',    valor: _formatMXN(data.total_ventas || 0),                         color: 'var(--blue-mid)', sub: 'importe total' },
+    { label: 'Vendedor líder',        valor: (data.lider_nombre || '—'),                                  color: 'var(--warn)',     sub: _formatMXN(data.lider_importe || 0) },
+    { label: 'Total pedidos',         valor: (data.total_pedidos || 0).toLocaleString('es-MX'),           color: 'var(--blue)',     sub: 'pedidos pagados' },
+    { label: 'Vendedores activos',    valor: (data.vendedores_activos || 0).toLocaleString('es-MX'),      color: 'var(--success)',  sub: 'con ventas en el período' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:18px;font-weight:700;color:${k.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k.valor}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${k.sub}</div>
+    </div>`).join('');
+}
+
+function _renderVendRanking(data) {
+  const canvas = document.getElementById('vend-ranking-chart');
+  if (!canvas) return;
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  const top10 = (data.ranking || []).slice(0, 10);
+  if (_vendCharts.ranking) { _vendCharts.ranking.destroy(); delete _vendCharts.ranking; }
+
+  if (!top10.length) {
+    const wrap = document.getElementById('vend-ranking-wrap');
+    if (wrap) wrap.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>';
+    return;
+  }
+
+  _vendCharts.ranking = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: top10.map(v => v.nombre),
+      datasets: [{
+        label: 'Importe',
+        data: top10.map(v => v.importe),
+        backgroundColor: '#1A2B5A',
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+        y: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function _renderVendMes(data) {
+  const canvas = document.getElementById('vend-mes-chart');
+  if (!canvas) return;
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  if (_vendCharts.mes) { _vendCharts.mes.destroy(); delete _vendCharts.mes; }
+
+  const porMes = data.por_mes || [];
+  if (!porMes.length) {
+    const wrap = document.getElementById('vend-mes-wrap');
+    if (wrap) wrap.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>';
+    return;
+  }
+
+  const meses     = [...new Set(porMes.map(r => r.mes))].sort();
+  const vendNames = [...new Set(porMes.map(r => r.vendedor))];
+
+  const datasets = vendNames.map((nombre, i) => ({
+    label: nombre,
+    data: meses.map(m => {
+      const row = porMes.find(r => r.mes === m && r.vendedor === nombre);
+      return row ? row.importe : null;
+    }),
+    borderColor: COLORES[i % COLORES.length],
+    backgroundColor: COLORES[i % COLORES.length] + '22',
+    tension: 0.3,
+    pointRadius: 4,
+    spanGaps: true,
+  }));
+
+  _vendCharts.mes = new Chart(canvas, {
+    type: 'line',
+    data: { labels: meses, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: textColor, font: { size: 10 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => ctx.parsed.y !== null ? ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` : '' } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function _renderVendSucursal(data) {
+  const el = document.getElementById('vend-sucursal');
+  if (!el) return;
+  const lista = data.por_sucursal || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  const maxImp = Math.max(...lista.map(s => s.importe));
+  el.innerHTML = lista.map(s => {
+    const pct = maxImp > 0 ? (s.importe / maxImp * 100).toFixed(0) : 0;
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+        <span style="font-size:11px;font-weight:600;color:var(--text)">${s.sucursal}</span>
+        <span style="font-size:10px;color:var(--text-dim)">${_formatMXN(s.importe)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--blue-mid);margin-bottom:3px">▸ ${s.vendedor}</div>
+      <div style="height:5px;border-radius:3px;background:var(--border);overflow:hidden">
+        <div style="height:100%;border-radius:3px;background:#1A2B5A;width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _renderVendDetalle(data) {
+  const el = document.getElementById('vend-detalle');
+  if (!el) return;
+  const lista = data.detalle || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Vendedor</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pedidos</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Ticket</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Var. %</th>
+    </tr></thead>
+    <tbody>${lista.map((v, i) => {
+      const varCol = v.variacion === null ? 'var(--text-dim)'
+                   : v.variacion >= 0 ? 'var(--success)' : 'var(--danger)';
+      const varTxt = v.variacion === null ? '—'
+                   : (v.variacion >= 0 ? '▲' : '▼') + ' ' + Math.abs(v.variacion) + '%';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 6px;color:var(--text-dim);font-size:11px">${i+1}</td>
+        <td style="padding:5px 6px;font-size:11px;color:var(--text);max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.nombre}</td>
+        <td style="padding:5px 6px;font-size:10px;color:var(--text-dim);max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.sucursal_principal}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text);white-space:nowrap">${_formatMXN(v.importe)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${v.pedidos}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim);white-space:nowrap">${_formatMXN(v.ticket_promedio)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:600;color:${varCol};white-space:nowrap">${varTxt}</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 </script>
