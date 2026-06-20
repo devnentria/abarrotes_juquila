@@ -2351,6 +2351,11 @@ async function _scPollJob(jobId, hasDashHint) {
         else    { _vendModo = modo || '30d'; _vendMes = null; }
         const mesInput = document.getElementById('vend-mes-input');
         if (mesInput && _vendMes) mesInput.value = _vendMes;
+      } else if (tab === 'medicos') {
+        if (fi) { _medMes = fi.slice(0,7); _medModo = ''; }
+        else    { _medModo = modo || '30d'; _medMes = null; }
+        const mesInput = document.getElementById('med-mes-input');
+        if (mesInput && _medMes) mesInput.value = _medMes;
       }
       _switchTab(tab);
     } else if (hasDash) {
@@ -2424,6 +2429,33 @@ async function _scEnviar() {
       _scRemoveTyping();
       _scAddBubble('Te muestro el dashboard de **Inventario** — stock, críticos y valor por sucursal.', 'bot');
       _switchTab('inventario');
+      return;
+    }
+
+    // Médicos → navegar directamente sin llamar al backend
+    const _medHint = /\bm[eé]dic[oa]s?\b|\bprescriptor(es)?\b|\bm[eé]d\.?\b.{0,6}(dashboard|tablero|dash)/i.test(texto);
+    if (_medHint) {
+      const _mesesMap = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      if (_mesMatch) {
+        const _numMes  = _mesesMap[_mesMatch[1]];
+        const _anioMes = texto.match(/\b(20\d{2})\b/);
+        const _anio    = _anioMes ? parseInt(_anioMes[1]) : new Date().getFullYear();
+        _medMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
+        _medModo = '';
+        const mesInput = document.getElementById('med-mes-input');
+        if (mesInput) mesInput.value = _medMes;
+      } else {
+        _medModo = '30d';
+        _medMes  = null;
+      }
+      _scRemoveTyping();
+      const _periodoLabel = _medMes ? `mes de ${_mesMatch[1]}` : 'últimos 30 días';
+      _scAddBubble(`Te muestro el dashboard de **Médicos** — ${_periodoLabel}.`, 'bot');
+      _switchTab('medicos');
       return;
     }
 

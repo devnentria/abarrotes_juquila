@@ -170,6 +170,8 @@ _SPECS_TIPO: dict = {
     "reporte_inventario":   {"titulo": "Dashboard de Inventario",           "layout": "inventory_report"},
     "inventario_stock":     {"titulo": "Stock actual por sucursal",         "layout": "kpi_bar"},
     "stockouts":            {"titulo": "Productos sin existencia",          "layout": "ranking_hbar"},
+    # Médicos
+    "medicos_dashboard":    {"titulo": "Dashboard de Médicos",              "layout": "tab_medicos"},
 }
 
 _SISTEMA_CLASIFICADOR = """
@@ -183,6 +185,7 @@ Ejemplos de solicitudes → función correcta:
   "dame ventas"  /  "muéstrame ventas"         → reporte_ventas
   "gráfica de sucursales"  /  "ventas por sucursal"  /  "comparativa de sucursales" → ventas_sucursal + single_chart
   "top vendedores"  /  "mejores vendedores"    → top_vendedores
+  "dashboard de médicos"  /  "médicos"  /  "prescriptores"  → medicos_dashboard
   "gráfica de línea de ventas por mes"         → comparativo_meses + single_chart + chart_type:line
   "tendencia anual"                            → tendencia_anual
   "dona de pedidos"  /  "pedidos activos"      → pedidos_activos
@@ -211,6 +214,7 @@ Funciones disponibles:
   reporte_inventario   → Dashboard COMPLETO de inventario: stock + stockouts. layout: inventory_report
   inventario_stock     → Stock actual por sucursal: valor en MXN y unidades. layout: kpi_bar
   stockouts            → Sucursales con más productos sin existencia (stock = 0). layout: ranking_hbar
+  medicos_dashboard    → Dashboard de Médicos: ranking de médicos por ventas, tendencia mensual, ventas por rep. layout: tab_medicos
   ventas_producto      → Ventas de un producto específico por sucursal. Requiere campo extra "producto". layout: ranking_hbar
                          Usar cuando el usuario mencione un producto concreto: "ventas de Omnitrope en mayo",
                          "gráfica de Saizen por sucursal", "cuánto vendimos de Norditropin en enero".
