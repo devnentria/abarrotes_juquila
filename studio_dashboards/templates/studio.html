@@ -165,6 +165,27 @@
     }
     .periodo-btn.active { background: var(--card); color: var(--blue-mid); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
 
+    /* Rango de fechas personalizado */
+    .rango-fechas {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 3px 10px 3px 8px;
+    }
+    .rango-fechas input[type="date"] {
+      background: none; border: none; outline: none; font-family: inherit;
+      font-size: 12px; font-weight: 600; color: var(--text-dim); cursor: pointer;
+      padding: 4px 2px;
+    }
+    .rango-fechas input[type="date"]:focus { color: var(--blue-mid); }
+    .rango-fechas span { font-size: 11px; color: var(--text-dim); }
+    .rango-fechas button {
+      background: var(--blue-mid); border: none; color: #fff;
+      font-size: 11px; font-weight: 700; font-family: inherit;
+      padding: 4px 10px; border-radius: 5px; cursor: pointer;
+    }
+    .rango-fechas button:hover { opacity: .85; }
+    [data-theme="dark"] .rango-fechas input[type="date"] { color-scheme: dark; }
+
     /* Chart cards */
     .charts-grid {
       display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 24px;
@@ -921,16 +942,28 @@
         <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
         <span style="opacity:.4">|</span>
         <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
+        <span style="opacity:.4">|</span>
+        <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
+        <span style="color:var(--border)">·</span>
+        <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Médicos</span>
       </div>
 
       <!-- Header con toggle de período -->
       <div id="header-periodo" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="section-label" style="margin-bottom:0">Ventas</div>
-        <div class="periodo-toggle" id="periodo-toggle">
-          <button class="periodo-btn" data-modo="hoy">Hoy</button>
-          <button class="periodo-btn" data-modo="15d">Últ. 15 días</button>
-          <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
-          <button class="periodo-btn" data-modo="mes">Mes actual</button>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div class="periodo-toggle" id="periodo-toggle">
+            <button class="periodo-btn" data-modo="hoy">Hoy</button>
+            <button class="periodo-btn" data-modo="15d">Últ. 15 días</button>
+            <button class="periodo-btn active" data-modo="30d">Últ. 30 días</button>
+            <button class="periodo-btn" data-modo="mes">Mes actual</button>
+          </div>
+          <div class="rango-fechas" title="Rango de fechas personalizado">
+            <input type="date" id="rango-fi" title="Fecha inicio">
+            <span>—</span>
+            <input type="date" id="rango-ff" title="Fecha fin">
+            <button onclick="_aplicarRango()">Aplicar</button>
+          </div>
         </div>
       </div>
 
@@ -1358,6 +1391,141 @@
 
     </div><!-- /inventario-dash-area -->
 
+    <!-- ── Tab: Vendedores ── -->
+    <div id="vendedores-dash-area" style="display:none">
+
+      <!-- Header con selector de período -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+        <div class="section-label" style="margin-bottom:0">Vendedores</div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <button id="vend-btn-30d" onclick="_vendSetModo('30d')"
+            style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--blue-mid);color:#fff;cursor:pointer;font-weight:600">
+            Últ. 30 días
+          </button>
+          <button id="vend-btn-mes" onclick="_vendSetModo('mes')"
+            style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+            Mes actual
+          </button>
+          <input type="month" id="vend-mes-input"
+            style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
+            onchange="_vendSetMes(this.value)">
+          <span id="vend-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
+        </div>
+      </div>
+
+      <!-- Fila KPIs -->
+      <div id="vend-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+      <!-- Fila 2: Ranking barras + Tabla detalle -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 vendedores</div>
+          <div id="vend-ranking-wrap" style="position:relative;height:280px">
+            <canvas id="vend-ranking-chart"></canvas>
+            <div id="vend-ranking-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Detalle de vendedores</div>
+          <div id="vend-detalle" style="font-size:12px;max-height:320px;overflow-y:auto"></div>
+        </div>
+
+      </div>
+
+      <!-- Fila 3: Tendencia mensual top 5 + Top por sucursal -->
+      <div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 vendedores (últimos 6 meses)</div>
+          <div id="vend-mes-wrap" style="position:relative;height:220px">
+            <canvas id="vend-mes-chart"></canvas>
+            <div id="vend-mes-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-card-title" style="margin-bottom:12px">Líder por sucursal</div>
+          <div id="vend-sucursal" style="font-size:12px"></div>
+        </div>
+
+      </div>
+
+      <!-- Fila 4: Productos más vendidos por vendedor (barras apiladas) -->
+      <div class="chart-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <span class="chart-card-title">Productos más vendidos por vendedor</span>
+          <div id="vend-pvv-leyenda" style="display:flex;flex-wrap:wrap;gap:10px;font-size:10px"></div>
+        </div>
+        <div id="vend-pvv-wrap" style="position:relative;height:300px">
+          <canvas id="vend-pvv-chart"></canvas>
+          <div id="vend-pvv-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+        </div>
+      </div>
+
+    </div><!-- /vendedores-dash-area -->
+
+<!-- ── Dashboard Médicos ───────────────────────────────────────── -->
+<div id="medicos-dash-area" style="display:none">
+
+  <!-- Header con selector de período -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+    <div class="section-label" style="margin-bottom:0">Médicos</div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      <button id="med-btn-30d" onclick="_medSetModo('30d')"
+        style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--blue-mid);color:#fff;cursor:pointer;font-weight:600">
+        Últ. 30 días
+      </button>
+      <button id="med-btn-mes" onclick="_medSetModo('mes')"
+        style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+        Mes actual
+      </button>
+      <input type="month" id="med-mes-input"
+        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
+        onchange="_medSetMes(this.value)">
+      <span id="med-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
+    </div>
+  </div>
+
+  <!-- Fila KPIs -->
+  <div id="med-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+
+  <!-- Fila 2: Ranking top 10 médicos + ventas por rep -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 médicos por ventas</div>
+      <div id="med-ranking-wrap" style="position:relative;height:280px">
+        <canvas id="med-ranking-chart"></canvas>
+        <div id="med-ranking-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Ventas por representante</div>
+      <div id="med-rep-wrap" style="position:relative;height:280px">
+        <canvas id="med-rep-chart"></canvas>
+        <div id="med-rep-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fila 3: Tendencia mensual + Detalle tabla -->
+  <div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 médicos (últimos 6 meses)</div>
+      <div id="med-mes-wrap" style="position:relative;height:220px">
+        <canvas id="med-mes-chart"></canvas>
+        <div id="med-mes-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-card-title" style="margin-bottom:12px">Detalle de médicos</div>
+      <div id="med-detalle" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+</div><!-- /medicos-dash-area -->
+
     <!-- ── Overlay "Generando tablero" (cubre cualquier tab) ── -->
     <div id="tab-generando-overlay" style="display:none;position:absolute;inset:0;background:var(--bg);z-index:10;padding:20px">
       <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:16px" id="tab-generando-titulo">Generando tablero…</div>
@@ -1618,6 +1786,8 @@
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
@@ -1688,6 +1858,27 @@ function debeUsarPWA() {
 // ── Verificar acceso al cargar ────────────────────────────────────────────────
 let _usuario = null;
 let _resetEquipoId = null;
+let _logoCached = null;         // logo pre-cargado en base64 para PDF
+let _iframeSnapshot = null;     // snapshot cacheado del chart_dinamico activo
+
+// Escuchar mensajes del iframe (snapshot de captura + altura del body)
+window.addEventListener('message', function(e) {
+  if (!e.data) return;
+  if (e.data.__suiteDbg) { console.log('[iframe]', e.data.__suiteDbg); return; }
+  if (e.data.__suiteChartImg !== undefined) {
+    _iframeSnapshot = e.data.__suiteChartImg || null;
+    if (_iframeSnapshot) console.log('[Studio] snapshot iframe cacheado:', e.data.__w, 'x', e.data.__h);
+    else console.log('[Studio] snapshot iframe: null');
+  }
+  // Ajustar altura del iframe según el body del chart
+  if (e.data.__suiteHeight) {
+    const iframes = document.querySelectorAll('#dashboard-ia-contenido iframe');
+    if (iframes.length) {
+      const newH = Math.min(Math.max(e.data.__suiteHeight + 32, 300), 560);
+      iframes[0].style.height = newH + 'px';
+    }
+  }
+});
 
 (async () => {
   const t = getToken();
@@ -1705,11 +1896,33 @@ let _resetEquipoId = null;
     cargarDashboardsGuardados();
     cargarNavDashboards();
     if (_usuario.debe_cambiar_password) _forzarModalPassword();
+    // Pre-cargar logo para PDF (sin bloquear el inicio)
+    _precargarLogo();
   } catch {
     clearToken();
     mostrarLogin();
   }
 })();
+
+async function _precargarLogo() {
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 4000);
+    const resp = await fetch('/static/logo_transparente.png', { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!resp.ok) return;
+    const buf = await resp.arrayBuffer();
+    _logoCached = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload  = () => res(fr.result);         // data:image/png;base64,...
+      fr.onerror = rej;
+      fr.readAsDataURL(new Blob([buf]));
+    });
+    console.log('[Studio] logo pre-cargado para PDF');
+  } catch (e) {
+    console.warn('[Studio] logo no disponible:', e.message);
+  }
+}
 
 // ── Render header ─────────────────────────────────────────────────────────────
 function renderHeader() {
@@ -2173,7 +2386,24 @@ async function _scPollJob(jobId, hasDashHint) {
     }
     _scRemoveTyping();
     const hasDash = !!(data.dashboard);
-    if (hasDash) {
+    if (hasDash && data.dashboard.tipo === 'switch_tab') {
+      // El backend indica navegar a un tab dedicado
+      const tab  = data.dashboard.tab;
+      const modo = data.dashboard.modo;
+      const fi   = data.dashboard.fecha_inicio;
+      if (tab === 'vendedores') {
+        if (fi) { _vendMes = fi.slice(0,7); _vendModo = ''; }
+        else    { _vendModo = modo || '30d'; _vendMes = null; }
+        const mesInput = document.getElementById('vend-mes-input');
+        if (mesInput && _vendMes) mesInput.value = _vendMes;
+      } else if (tab === 'medicos') {
+        if (fi) { _medMes = fi.slice(0,7); _medModo = ''; }
+        else    { _medModo = modo || '30d'; _medMes = null; }
+        const mesInput = document.getElementById('med-mes-input');
+        if (mesInput && _medMes) mesInput.value = _medMes;
+      }
+      _switchTab(tab);
+    } else if (hasDash) {
       _scDashCache[jobId] = data.dashboard;
       renderDashboard(data.dashboard);
       // Agregar al historial para poder guardarlo desde el topbar
@@ -2213,6 +2443,56 @@ async function _scEnviar() {
   _scAddTyping();
 
   try {
+    // ── Cambio de período en tab activo (médicos / vendedores) ───────────────
+    // Si ya estamos en uno de esos tabs y el mensaje menciona un mes u otro período,
+    // recargamos directamente sin llamar al backend.
+    const _TABS_CON_PERIODO = ['medicos', 'vendedores'];
+    if (_TABS_CON_PERIODO.includes(_currentTab)) {
+      const _mesesMapPer = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesRefMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      const _pide30dPer  = /\b(30\s*d[ií]as?|[uú]ltimos?\s*30|treinta\s*d[ií]as?)\b/i.test(texto);
+      const _pideMesPer  = /\b(mes\s+actual|este\s+mes)\b/i.test(texto);
+      if (_mesRefMatch || _pide30dPer || _pideMesPer) {
+        const _applyPeriodo = (setMes, setModo, mesInput, cargar, tabNombre) => {
+          if (_mesRefMatch) {
+            const numMes  = _mesesMapPer[_mesRefMatch[1]];
+            const anioM   = texto.match(/\b(20\d{2})\b/);
+            const anio    = anioM ? parseInt(anioM[1]) : new Date().getFullYear();
+            setMes(`${anio}-${String(numMes).padStart(2,'0')}`);
+            const inp = document.getElementById(mesInput);
+            if (inp) inp.value = `${anio}-${String(numMes).padStart(2,'0')}`;
+          } else if (_pide30dPer) {
+            setModo('30d');
+          } else {
+            setModo('mes');
+          }
+          _scRemoveTyping();
+          const label = _mesRefMatch ? `mes de ${_mesRefMatch[1]}` : (_pide30dPer ? 'últimos 30 días' : 'mes actual');
+          _scAddBubble(`Actualizando dashboard de **${tabNombre}** — ${label}.`, 'bot');
+          _mostrarOverlayGenerando(_currentTab);
+          cargar();
+        };
+        if (_currentTab === 'medicos') {
+          _applyPeriodo(
+            v => { _medMes = v; _medModo = ''; },
+            m => { _medModo = m; _medMes = null; },
+            'med-mes-input', cargarMedicos, 'Médicos'
+          );
+          return;
+        } else if (_currentTab === 'vendedores') {
+          _applyPeriodo(
+            v => { _vendMes = v; _vendModo = ''; },
+            m => { _vendModo = m; _vendMes = null; },
+            'vend-mes-input', cargarVendedores, 'Vendedores'
+          );
+          return;
+        }
+      }
+    }
+
     // Zonas → navegar directamente sin llamar al backend
     const _zonasHint = /\b(zona[s]?|cobertura|geogr[aá]f|regi[oó]n|regiones|distribuci[oó]n.*sucursal|sucursal.*distribuci[oó]n|d[oó]nde.*vende|vende.*d[oó]nde)\b/i.test(texto);
     if (_zonasHint) {
@@ -2244,6 +2524,61 @@ async function _scEnviar() {
       _scRemoveTyping();
       _scAddBubble('Te muestro el dashboard de **Inventario** — stock, críticos y valor por sucursal.', 'bot');
       _switchTab('inventario');
+      return;
+    }
+
+    // Médicos → navegar directamente sin llamar al backend
+    const _medHint = /\bm[eé]dic[oa]s?\b|\bprescriptor(es)?\b|\bm[eé]d\.?\b.{0,6}(dashboard|tablero|dash)/i.test(texto);
+    if (_medHint) {
+      const _mesesMap = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      if (_mesMatch) {
+        const _numMes  = _mesesMap[_mesMatch[1]];
+        const _anioMes = texto.match(/\b(20\d{2})\b/);
+        const _anio    = _anioMes ? parseInt(_anioMes[1]) : new Date().getFullYear();
+        _medMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
+        _medModo = '';
+        const mesInput = document.getElementById('med-mes-input');
+        if (mesInput) mesInput.value = _medMes;
+      } else {
+        _medModo = '30d';
+        _medMes  = null;
+      }
+      _scRemoveTyping();
+      const _periodoLabel = _medMes ? `mes de ${_mesMatch[1]}` : 'últimos 30 días';
+      _scAddBubble(`Te muestro el dashboard de **Médicos** — ${_periodoLabel}.`, 'bot');
+      _switchTab('medicos');
+      return;
+    }
+
+    // Vendedores → navegar directamente sin llamar al backend
+    const _vendHint = /\bvend[eo]d[oa]r(es)?\b|\bvendodores?\b|\bvend\.?\b.{0,6}(dashboard|tablero|dash)|equipo.{0,10}venta[s]?|fuerza.{0,10}venta[s]?|ranking.{0,10}venta[s]?|mejor.{0,10}vend/i.test(texto);
+    if (_vendHint) {
+      // Detectar mes mencionado en el texto
+      const _mesesMap = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      if (_mesMatch) {
+        const _numMes = _mesesMap[_mesMatch[1]];
+        const _anioMes = texto.match(/\b(20\d{2})\b/);
+        const _anio = _anioMes ? parseInt(_anioMes[1]) : new Date().getFullYear();
+        _vendMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
+        _vendModo = '';
+        const mesInput = document.getElementById('vend-mes-input');
+        if (mesInput) mesInput.value = _vendMes;
+      } else {
+        _vendModo = '30d';
+        _vendMes  = null;
+      }
+      _scRemoveTyping();
+      const _periodoLabel = _vendMes ? `mes de ${_mesMatch[1]}` : 'últimos 30 días';
+      _scAddBubble(`Te muestro el dashboard de **Vendedores** — ${_periodoLabel}.`, 'bot');
+      _switchTab('vendedores');
       return;
     }
 
@@ -2380,6 +2715,8 @@ document.addEventListener('keydown', e => {
 
 // ── Dashboards ────────────────────────────────────────────────────────────────
 let _modoActivo = '30d';
+let _fi = null;   // fecha inicio del rango personalizado (ISO string YYYY-MM-DD)
+let _ff = null;   // fecha fin del rango personalizado
 let _chartVentas  = null;
 let _chartPedidos = null;
 
@@ -2551,7 +2888,7 @@ function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 let _currentTab = 'resumen';
 
 const _TAB_NOMBRES = {
-  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario'
+  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores', medicos: 'Médicos'
 };
 
 function _mostrarOverlayGenerando(tab) {
@@ -2569,42 +2906,55 @@ function _ocultarOverlayGenerando() {
 
 function _switchTab(tab) {
   _currentTab = tab;
-  const isResumen    = tab === 'resumen';
-  const isZonas      = tab === 'zonas';
-  const isProductos  = tab === 'productos';
-  const isInventario = tab === 'inventario';
+  const isResumen     = tab === 'resumen';
+  const isZonas       = tab === 'zonas';
+  const isProductos   = tab === 'productos';
+  const isInventario  = tab === 'inventario';
+  const isVendedores  = tab === 'vendedores';
+  const isMedicos     = tab === 'medicos';
 
   // Ocultar dashboard de IA si está visible
   const iaWrap = document.getElementById('dashboard-ia-wrap');
   if (iaWrap && !iaWrap.classList.contains('hidden')) iaWrap.classList.add('hidden');
 
-  document.getElementById('static-dash-area').style.display      = isResumen    ? '' : 'none';
-  document.getElementById('zonas-dash-area').style.display       = isZonas      ? '' : 'none';
-  document.getElementById('productos-dash-area').style.display   = isProductos  ? '' : 'none';
-  document.getElementById('inventario-dash-area').style.display  = isInventario ? '' : 'none';
-  document.getElementById('header-periodo').style.display        = isResumen    ? '' : 'none';
+  document.getElementById('static-dash-area').style.display      = isResumen     ? '' : 'none';
+  document.getElementById('zonas-dash-area').style.display       = isZonas       ? '' : 'none';
+  document.getElementById('productos-dash-area').style.display   = isProductos   ? '' : 'none';
+  document.getElementById('inventario-dash-area').style.display  = isInventario  ? '' : 'none';
+  document.getElementById('vendedores-dash-area').style.display  = isVendedores  ? '' : 'none';
+  document.getElementById('medicos-dash-area').style.display     = isMedicos     ? '' : 'none';
+  document.getElementById('header-periodo').style.display        = isResumen     ? '' : 'none';
 
   const btnR = document.getElementById('tab-resumen');
   const btnZ = document.getElementById('tab-zonas');
   const btnP = document.getElementById('tab-productos');
   const btnI = document.getElementById('tab-inventario');
+  const btnV = document.getElementById('tab-vendedores');
+  const btnM = document.getElementById('tab-medicos');
   const _active = 'var(--blue-mid)', _dim = 'var(--text-dim)';
-  if (btnR) { btnR.style.color = isResumen    ? _active : _dim; btnR.style.fontWeight = isResumen    ? '600' : '400'; }
-  if (btnZ) { btnZ.style.color = isZonas      ? _active : _dim; btnZ.style.fontWeight = isZonas      ? '600' : '400'; }
-  if (btnP) { btnP.style.color = isProductos  ? _active : _dim; btnP.style.fontWeight = isProductos  ? '600' : '400'; }
-  if (btnI) { btnI.style.color = isInventario ? _active : _dim; btnI.style.fontWeight = isInventario ? '600' : '400'; }
+  if (btnR) { btnR.style.color = isResumen     ? _active : _dim; btnR.style.fontWeight = isResumen     ? '600' : '400'; }
+  if (btnZ) { btnZ.style.color = isZonas       ? _active : _dim; btnZ.style.fontWeight = isZonas       ? '600' : '400'; }
+  if (btnP) { btnP.style.color = isProductos   ? _active : _dim; btnP.style.fontWeight = isProductos   ? '600' : '400'; }
+  if (btnI) { btnI.style.color = isInventario  ? _active : _dim; btnI.style.fontWeight = isInventario  ? '600' : '400'; }
+  if (btnV) { btnV.style.color = isVendedores  ? _active : _dim; btnV.style.fontWeight = isVendedores  ? '600' : '400'; }
+  if (btnM) { btnM.style.color = isMedicos     ? _active : _dim; btnM.style.fontWeight = isMedicos     ? '600' : '400'; }
 
   if (!isResumen) {
     // Siempre mostrar overlay "Generando tablero" al navegar a cualquier tab
     _mostrarOverlayGenerando(tab);
-    _invLoaded   = false;
-    _prodLoaded  = false;
-    _zonasLoaded = false;
+    _invLoaded    = false;
+    _prodLoaded   = false;
+    _zonasLoaded  = false;
+    _vendLoaded   = false;
+    _medLoaded    = false;
   }
 
   if (isZonas)      cargarZonas();
   if (isProductos)  cargarProductos();
   if (isInventario) cargarInventario();
+  if (isVendedores) cargarVendedores();
+  if (isMedicos)    cargarMedicos();
+  _syncHeaderSaveBtn();
 }
 
 // ── Dashboard Zonas ───────────────────────────────────────────────────────────
@@ -3146,34 +3496,64 @@ function _renderProdPrediccion(data) {
 
 async function cargarDashboards(modo) {
   _modoActivo = modo;
+  // Preset → limpiar rango personalizado
+  _fi = null;
+  _ff = null;
+  const fiEl = document.getElementById('rango-fi');
+  const ffEl = document.getElementById('rango-ff');
+  if (fiEl) fiEl.value = '';
+  if (ffEl) ffEl.value = '';
 
-  // Actualizar toggle
-  document.querySelectorAll('.periodo-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.modo === modo);
-  });
+  _cargarDashboardsConRango(modo, null, null);
+}
+
+function _aplicarRango() {
+  const fi = document.getElementById('rango-fi').value;
+  const ff = document.getElementById('rango-ff').value;
+  if (!fi || !ff) { mostrarToast('Selecciona fecha inicio y fin', 'warn'); return; }
+  if (fi > ff) { mostrarToast('La fecha inicio debe ser anterior a la fecha fin', 'warn'); return; }
+  _fi = fi;
+  _ff = ff;
+  // Desactivar botones preset al usar rango
+  document.querySelectorAll('.periodo-btn').forEach(b => b.classList.remove('active'));
+  _cargarDashboardsConRango('custom', fi, ff);
+}
+
+async function _cargarDashboardsConRango(modo, fi, ff) {
+  const esModoCustom = fi && ff;
+  const paramBase = esModoCustom ? `fi=${fi}&ff=${ff}` : `modo=${modo}`;
+
+  // Actualizar toggle solo para presets
+  if (!esModoCustom) {
+    document.querySelectorAll('.periodo-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.modo === modo);
+    });
+  }
 
   const _modoLabels = { hoy: 'Hoy', '15d': 'Últ. 15 días', '30d': 'Últ. 30 días', mes: 'Mes actual' };
-  const periodoLabel = _modoLabels[modo] || modo;
+  const periodoLabel = esModoCustom
+    ? `${fi.slice(5)} → ${ff.slice(5)}`
+    : (_modoLabels[modo] || modo);
   const compLabel = document.getElementById('comp-periodo-label');
   if (compLabel) compLabel.textContent = periodoLabel;
 
   // Cargar todos los datos en paralelo
   try {
     const [kpisData, ventasData, pedidosData, tendenciaData, productosData, vendedoresData, diariaData, mensualData] = await Promise.all([
-      api(`/api/datos/kpis?modo=${modo}`),
-      api(`/api/datos/ventas?modo=${modo}`),
+      api(`/api/datos/kpis?${paramBase}`),
+      api(`/api/datos/ventas?${paramBase}`),
       api(`/api/datos/pedidos`),
       api('/api/datos/plantilla/tendencia_anual'),
-      api(`/api/datos/plantilla/top_productos?modo=${modo}`),
-      api(`/api/datos/plantilla/top_vendedores?modo=${modo}`),
+      api(`/api/datos/plantilla/top_productos?${paramBase}`),
+      api(`/api/datos/plantilla/top_vendedores?${paramBase}`),
       api('/api/datos/plantilla/ventas_diario'),
       api('/api/datos/plantilla/comparativo_meses'),
     ]);
 
-    renderKPIs(kpisData, modo);
+    renderKPIs(kpisData, esModoCustom ? periodoLabel : modo);
     renderChartVentas(ventasData.sucursales);
     renderChartPedidos(pedidosData.sucursales);
-    renderTablaComparativo(ventasData.sucursales, modo);
+    renderTablaComparativo(ventasData.sucursales, esModoCustom ? periodoLabel : modo);
     renderChartTendencia(tendenciaData.datos || []);
     renderChartProductos(productosData.datos || []);
     renderChartVendedores(vendedoresData.datos || []);
@@ -3877,69 +4257,444 @@ function toggleSidebar() {
 
 // ── Sinc botones guardar / pdf en header ─────────────────────────────────────
 function _syncHeaderSaveBtn() {
-  const disabled = _activeDashIdx === null;
-  document.getElementById('header-save-btn').disabled = disabled;
-  document.getElementById('header-pdf-btn').disabled  = disabled;
-}
+  const saveBtn  = document.getElementById('header-save-btn');
+  const pdfBtn   = document.getElementById('header-pdf-btn');
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
 
-// ── Guardar dashboard activo (Studio + queda visible en PWA automáticamente) ──
-function guardarDashActivo() {
-  if (_activeDashIdx !== null) {
-    guardarDashHistorial(_activeDashIdx);
+  // Tab estático (Ventas, Médicos, Vendedores…): siempre habilitados, siempre "Guardar"
+  if (!iaVisible) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
+    if (pdfBtn)  pdfBtn.disabled = false;
+    return;
+  }
+
+  // Panel IA: depende del item activo
+  const item = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  if (!item) {
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '💾 Guardar'; }
+    if (pdfBtn)  pdfBtn.disabled = true;
+    return;
+  }
+  if (pdfBtn) pdfBtn.disabled = false;
+  if (saveBtn) {
+    saveBtn.disabled  = item.guardado ? true : false;
+    saveBtn.textContent = item.guardado ? '✓ Guardado' : '💾 Guardar';
   }
 }
 
-// ── Exportar PDF ──────────────────────────────────────────────────────────────
-function exportarPDF() {
-  window.print();
+// ── Guardar dashboard activo (Studio + queda visible en PWA automáticamente) ──
+async function guardarDashActivo() {
+  await _guardarComoReporte();
+}
+
+function _tituloGuardado() {
+  const item    = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
+  const fecha   = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  if (!iaVisible) return `${_TAB_NOMBRES[_currentTab] || 'Dashboard'} · ${fecha}`;
+  if (!item)      return `Dashboard · ${fecha}`;
+  const q = (item.pregunta || '').trim();
+  if (q) {
+    const qc = q.length > 45 ? q.slice(0, 42) + '…' : q;
+    return item.tipo === 'chart_dinamico' ? `Gráfica · ${qc} · ${fecha}` : `${qc} · ${fecha}`;
+  }
+  return `${item.titulo || 'Dashboard'} · ${fecha}`;
+}
+
+async function _abrirVisorPDF(id, titulo) {
+  document.getElementById('pdf-viewer-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'pdf-viewer-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  // Skeleton mientras carga el PDF
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:min(860px,96vw);height:93vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;gap:10px">
+        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${titulo}</span>
+        <div style="display:flex;gap:8px;flex-shrink:0" id="pdf-modal-btns">
+          <span style="font-size:11px;color:var(--text-dim)">Cargando PDF…</span>
+          <button onclick="document.getElementById('pdf-viewer-modal').remove()"
+                  style="font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-weight:600">
+            Cerrar
+          </button>
+        </div>
+      </div>
+      <div id="pdf-modal-body" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">
+        Cargando…
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  // Fetch con Authorization header → blob URL → iframe
+  let blobUrl = null;
+  try {
+    const resp = await fetch(`/api/datos/dashboards/${id}/pdf`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+    });
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const blob = await resp.blob();
+    blobUrl = URL.createObjectURL(blob);
+  } catch (e) {
+    const body = document.getElementById('pdf-modal-body');
+    if (body) body.textContent = 'Error al cargar el PDF: ' + e.message;
+    return;
+  }
+
+  const body = document.getElementById('pdf-modal-body');
+  const btns = document.getElementById('pdf-modal-btns');
+  if (body) {
+    body.style.cssText = 'flex:1;padding:0';
+    body.innerHTML = `<iframe src="${blobUrl}#toolbar=1&view=FitH"
+        style="width:100%;height:100%;border:none;border-radius:0 0 12px 12px;background:#525659"
+        title="${titulo}"></iframe>`;
+  }
+  if (btns) {
+    btns.innerHTML = `
+      <a href="${blobUrl}" download="${titulo.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s·]/g,'_')}.pdf"
+         style="font-size:11px;padding:5px 12px;border-radius:6px;background:var(--blue-mid);color:#fff;text-decoration:none;font-weight:600">
+        ⬇ Descargar
+      </a>
+      <button onclick="document.getElementById('pdf-viewer-modal').remove()"
+              style="font-size:11px;padding:5px 14px;border-radius:6px;border:1px solid #94a3b8;background:#475569;color:#f1f5f9;cursor:pointer;font-weight:600">
+        Cerrar
+      </button>`;
+  }
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function _guardarComoReporte(opts = {}) {
+  const titulo   = opts.titulo   || _tituloGuardado();
+  const tipo     = opts.tipo     || (_activeDashIdx !== null ? _historial[_activeDashIdx]?.tipo : null) || _currentTab || 'dashboard';
+  const pregunta = opts.pregunta !== undefined ? opts.pregunta : ((_activeDashIdx !== null ? _historial[_activeDashIdx]?.pregunta : '') || '');
+  const datos    = opts.datos    || (_activeDashIdx !== null ? _historial[_activeDashIdx]?.datos : null) || {};
+  const histIdx  = opts.histIdx  !== undefined ? opts.histIdx : _activeDashIdx;
+
+  const saveBtn = document.getElementById('header-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Guardando…'; }
+
+  try {
+    const pdf_b64 = await Promise.race([
+      _generarPDFBase64(titulo, pregunta),
+      new Promise(r => setTimeout(() => r(null), 18000)),
+    ]);
+    if (!pdf_b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
+
+    const res = await api('/api/datos/dashboards', {
+      method: 'POST',
+      body: JSON.stringify({ titulo, pregunta, tipo, datos_json: datos, pdf_b64 }),
+    });
+    const db_id = res.id;
+
+    if (histIdx !== null && _historial[histIdx]) {
+      _historial[histIdx].guardado = true;
+      _historial[histIdx].db_id   = db_id;
+      const actBtn = document.querySelector(`#dash-item-${histIdx} [title="Guardar"]`);
+      if (actBtn) actBtn.outerHTML = '<span class="dash-saved-badge">✓</span>';
+      const meta = document.getElementById(`dash-meta-${histIdx}`);
+      if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${tipo} · ${_relTime(Date.now())}`;
+    }
+
+    mostrarToast('PDF guardado ✓', 'success');
+    cargarNavDashboards();
+    _syncHeaderSaveBtn();
+    _abrirVisorPDF(db_id, titulo);
+  } catch (e) {
+    console.error('[guardar]', e);
+    mostrarToast('Error al guardar: ' + e.message, 'error');
+  } finally {
+    _syncHeaderSaveBtn();
+  }
+}
+
+// ── Generador de PDF ejecutivo (fondo blanco, logo, metadatos, gráfica) ───────
+
+// Captura el canvas más grande de un contenedor y lo convierte a JPEG sobre fondo blanco
+function _capturarCanvasDeContenedor(contenedor) {
+  let best = null;
+  contenedor.querySelectorAll('canvas').forEach(c => {
+    if (!best || c.width * c.height > best.width * best.height) best = c;
+  });
+  console.log('[PDF] canvas dims:', best?.width, 'x', best?.height, 'en', contenedor.id || contenedor.className);
+  if (!best || best.width === 0 || best.height === 0) return null;
+  const tmp = document.createElement('canvas');
+  tmp.width  = best.width;
+  tmp.height = best.height;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  ctx.drawImage(best, 0, 0);
+  const jpg = tmp.toDataURL('image/jpeg', 0.92);
+  console.log('[PDF] canvas capturado, jpg len:', jpg.length);
+  return jpg;
+}
+
+async function _capturarImagen() {
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  const iaVisible = wrap && !wrap.classList.contains('hidden');
+
+  // ── Caso 0: tabs estáticos (Ventas, Médicos, Vendedores, Zonas, Inventario) ──
+  // Capturar TODO el área del tab con html2canvas (no solo un canvas)
+  if (!iaVisible) {
+    const tabContainers = {
+      resumen:     'static-dash-area',
+      zonas:       'zonas-dash-area',
+      productos:   'productos-dash-area',
+      inventario:  'inventario-dash-area',
+      vendedores:  'vendedores-dash-area',
+      medicos:     'medicos-dash-area',
+    };
+    const containerId = tabContainers[_currentTab];
+    const tabArea = containerId ? document.getElementById(containerId) : null;
+    console.log('[PDF] tab estático:', _currentTab, '→', containerId);
+    if (!tabArea) return null;
+    if (typeof html2canvas === 'undefined') {
+      console.warn('[PDF] html2canvas no disponible');
+      return null;
+    }
+    // Si aún no terminó de cargar, esperar un poco
+    if (tabArea.querySelectorAll('canvas').length === 0) {
+      await new Promise(r => setTimeout(r, 1800));
+    }
+    // Capturar el área visible del tab (no el scroll completo)
+    const rect = tabArea.getBoundingClientRect();
+    const visH  = Math.min(tabArea.scrollHeight, window.innerHeight - Math.max(rect.top, 0));
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(null), 12000);
+      html2canvas(tabArea, {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        ignoreElements: el => el.tagName === 'IFRAME',
+        width:  tabArea.offsetWidth,
+        height: Math.max(visH, tabArea.offsetHeight),
+        windowWidth:  tabArea.offsetWidth,
+        scrollX: 0,
+        scrollY: -Math.max(rect.top, 0),
+      })
+        .then(snap => {
+          clearTimeout(timer);
+          console.log('[PDF] html2canvas tab:', snap.width, 'x', snap.height);
+          resolve(snap.toDataURL('image/jpeg', 0.90));
+        })
+        .catch(e => { clearTimeout(timer); console.error('[PDF] html2canvas err:', e); resolve(null); });
+    });
+  }
+
+  const contenido = document.getElementById('dashboard-ia-contenido');
+  if (!contenido) return null;
+
+  // ── Caso A: chart_dinamico (IA) — iframe con Chart.js ────────────────────────
+  const iframe = contenido.querySelector('iframe');
+  if (iframe) {
+    if (_iframeSnapshot) {
+      console.log('[PDF] usando snapshot cacheado del iframe');
+      return _iframeSnapshot;
+    }
+    console.log('[PDF] solicitando snapshot al iframe…');
+    const imgData = await new Promise(resolve => {
+      const tid = setTimeout(() => resolve(_iframeSnapshot || null), 6000);
+      const check = setInterval(() => {
+        if (_iframeSnapshot) { clearTimeout(tid); clearInterval(check); resolve(_iframeSnapshot); }
+      }, 200);
+      try { iframe.contentWindow?.postMessage({ __suiteCapture: true }, '*'); } catch {}
+    });
+    console.log('[PDF] iframe imagen:', imgData ? `OK (${imgData.length})` : 'null');
+    return imgData;
+  }
+
+  // ── Caso B: dashboard IA predefinido (kpi_bar, ranking, etc.) ────────────────
+  if (contenido.querySelectorAll('canvas').length > 0) {
+    await new Promise(r => setTimeout(r, 1200));
+    return _capturarCanvasDeContenedor(contenido);
+  }
+
+  // ── Caso C: html2canvas fallback ──────────────────────────────────────────────
+  if (typeof html2canvas === 'undefined') return null;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), 6000);
+    html2canvas(contenido, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
+                              ignoreElements: el => el.tagName === 'IFRAME' })
+      .then(snap => { clearTimeout(timer); resolve(snap.toDataURL('image/jpeg', 0.92)); })
+      .catch(() => { clearTimeout(timer); resolve(null); });
+  });
+}
+
+function _imgDims(imgData) {
+  // Retorna {w, h} esperando a que la imagen cargue (async)
+  return new Promise(res => {
+    const tmp = new Image();
+    tmp.onload = () => res({ w: tmp.naturalWidth || 800, h: tmp.naturalHeight || 400 });
+    tmp.onerror = () => res({ w: 800, h: 400 });
+    tmp.src = imgData;
+  });
+}
+
+async function _generarPDFBase64(titulo, pregunta) {
+  console.log('[PDF] _generarPDFBase64 inicio');
+  if (!window.jspdf) { console.warn('[PDF] jsPDF no cargado — CDN bloqueado?'); return null; }
+  const { jsPDF } = window.jspdf;
+
+  console.log('[PDF] capturando imagen…');
+  const imgData = await _capturarImagen();
+  console.log('[PDF] imagen:', imgData ? `OK (${imgData.length} chars) formato:${imgData.substring(5,20)}` : 'null');
+  if (!imgData) { console.warn('[PDF] sin imagen — abortando'); return null; }
+
+  const { w: _iw, h: _ih } = await _imgDims(imgData);
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW  = doc.internal.pageSize.getWidth();   // 210mm
+  const PH  = doc.internal.pageSize.getHeight();  // 297mm
+
+  // Logo — usar el pre-cargado (no fetch en tiempo de generación)
+  if (_logoCached) {
+    try { doc.addImage(_logoCached, 'PNG', 8, 6, 36, 14); } catch {}
+  }
+
+  // Título
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(26, 43, 90);
+  doc.text(titulo.length > 80 ? titulo.slice(0, 77) + '…' : titulo, PW - 8, 13, { align: 'right' });
+
+  // Separador
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.4);
+  doc.line(8, 22, PW - 8, 22);
+
+  // Metadatos
+  const ahora  = new Date();
+  const genPor = _usuario ? _usuario.nombre : 'Usuario';
+  const metas  = [
+    `Generado por: ${genPor}`,
+    `Fecha: ${ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+    `Hora: ${ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+    'Suite Analítica · Nentria',
+  ];
+  const cW = (PW - 16) / metas.length;
+  doc.setFontSize(8);
+  metas.forEach((txt, i) => {
+    doc.setFont('helvetica', i === 3 ? 'bold' : 'normal');
+    doc.setTextColor(i === 3 ? 26 : 100, i === 3 ? 43 : 116, i === 3 ? 90 : 139);
+    doc.text(txt, 8 + i * cW, 28);
+  });
+
+  // Consulta (opcional)
+  let yImg = 34;
+  if (pregunta && pregunta.trim()) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Consulta: ${pregunta.length > 130 ? pregunta.slice(0, 127) + '…' : pregunta}`, 8, yImg);
+    yImg += 6;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(8, yImg - 1, PW - 8, yImg - 1);
+    yImg += 2;
+  }
+
+  // Gráfica
+  const availH = PH - yImg - 10;
+  const availW = PW - 16;
+  const w = _iw, h = _ih;
+  const ratio  = w / (h || 1);
+  let imgW = availW, imgH = imgW / ratio;
+  if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
+  // Si es SVG, convertir a PNG via Image+Canvas antes de agregar a jsPDF
+  let finalImg = imgData;
+  if (imgData.startsWith('data:image/svg+xml')) {
+    finalImg = await new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth || w || 800; c.height = img.naturalHeight || h || 400;
+        const ctx2 = c.getContext('2d');
+        ctx2.fillStyle = '#ffffff'; ctx2.fillRect(0, 0, c.width, c.height);
+        ctx2.drawImage(img, 0, 0);
+        res(c.toDataURL('image/jpeg', 0.92));
+      };
+      img.onerror = () => res(imgData);
+      img.src = imgData;
+    });
+  }
+  const fmt = finalImg.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+  console.log('[PDF] addImage fmt:', fmt, 'dims:', Math.round(imgW), 'x', Math.round(imgH), 'y:', Math.round(yImg));
+  try { doc.addImage(finalImg, fmt, (PW - imgW) / 2, yImg, imgW, imgH); console.log('[PDF] addImage OK'); }
+  catch (e) { console.error('[PDF] addImage ERROR:', e); }
+
+  // Pie
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+
+  console.log('[PDF] PDF generado OK');
+  return doc.output('datauristring').split(',')[1];
+}
+
+// ── Exportar PDF (botón PDF manual → descarga directa) ───────────────────────
+async function exportarPDF() {
+  const item     = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
+  const tabTitulo = _TAB_NOMBRES[_currentTab] || 'Dashboard';
+  const titulo   = item?.titulo || (iaVisible ? 'Dashboard' : tabTitulo);
+  const pregunta = item?.pregunta || '';
+  const btn      = document.getElementById('header-pdf-btn');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
+  console.log('[PDF] exportarPDF llamado, titulo:', titulo);
+  try {
+    // Timeout global de 8s por si algo cuelga
+    const b64 = await Promise.race([
+      _generarPDFBase64(titulo, pregunta),
+      new Promise(r => setTimeout(() => r(null), 18000)),
+    ]);
+    if (!b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
+    const bytes = atob(b64);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+    Object.assign(document.createElement('a'), {
+      href: url,
+      download: `${titulo.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)}.pdf`,
+    }).click();
+    URL.revokeObjectURL(url);
+  } finally {
+    console.log('[PDF] finally — restaurando botón');
+    if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
+  }
 }
 
 // ── Navegador de dashboards guardados en header ───────────────────────────────
 function actualizarNavDashboards(dashboards) {
   const sel = document.getElementById('header-dash-select');
   if (!sel) return;
-  // Limpiar opciones menos la primera (placeholder)
   while (sel.options.length > 1) sel.remove(1);
-  if (!dashboards || !dashboards.length) {
-    sel.disabled = true;
-    return;
-  }
+  if (!dashboards || !dashboards.length) { sel.disabled = true; return; }
   dashboards.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d.id;
-    opt.textContent = `📊 ${d.titulo || d.nombre || 'Dashboard'}`;
+    opt.dataset.hasPdf  = d.has_pdf ? '1' : '0';
+    opt.dataset.titulo  = d.titulo || 'Dashboard';
+    opt.textContent     = `📊 ${d.titulo || 'Dashboard'}`;
     sel.appendChild(opt);
   });
   sel.disabled = false;
 }
 
 function navegarDashHeader(sel) {
-  const id = parseInt(sel.value);
-  sel.value = '';   // Resetear para que pueda re-seleccionarse
+  const id  = parseInt(sel.value);
+  const opt = sel.options[sel.selectedIndex];
+  sel.value = '';
   if (!id) return;
-  // Buscar en historial local (ya cargado en sidebar de guardados)
-  const idx = _historial.findIndex(h => h.db_id === id || h.id === id);
-  if (idx >= 0) {
-    verDashHistorial(idx);
-    return;
-  }
-  // Si no está en historial, buscarlo en la lista global ya cargada
-  api('/api/datos/dashboards').then(data => {
-    const d = (data.dashboards || []).find(x => x.id === id);
-    if (!d) { mostrarToast('Dashboard no encontrado', 'error'); return; }
-    let datos;
-    try { datos = typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : d.datos_json; } catch { datos = {}; }
-    const entry = {
-      titulo: d.titulo, tipo: d.tipo, datos,
-      guardado: true, db_id: d.id, ts: Date.now(),
-    };
-    _historial.push(entry);
-    const newIdx = _historial.length - 1;
-    entry._idx = newIdx;
-    renderHistorialItem(entry, newIdx);
-    _actualizarContadorHist();
-    verDashHistorial(newIdx);
-  }).catch(e => mostrarToast('Error al cargar dashboard: ' + e.message, 'error'));
+  const titulo  = opt?.dataset.titulo || 'Reporte PDF';
+  const hasPdf  = opt?.dataset.hasPdf === '1';
+  if (hasPdf) { _abrirVisorPDF(id, titulo); return; }
+  // Fallback: dashboards antiguos sin PDF → buscar en historial local
+  const idx = _historial.findIndex(h => h.db_id === id);
+  if (idx >= 0) { verDashHistorial(idx); return; }
+  mostrarToast('Este reporte no tiene PDF adjunto', 'warn');
 }
 
 // Prompts IA por tipo de dashboard — la IA consulta el ERP y genera el análisis
@@ -4049,16 +4804,64 @@ function renderDashboard(spec) {
 
   // Gráfica dinámica generada por IA — renderizar iframe en área de dashboards
   if (spec.tipo === 'chart_dinamico') {
+    _iframeSnapshot = null;   // resetear snapshot anterior
     const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-scripts');
-    iframe.srcdoc = spec.html || '';
-    iframe.style.cssText = 'width:100%;border:none;border-radius:12px;min-height:380px;display:block;';
-    iframe.onload = () => {
+    iframe.setAttribute('sandbox', 'allow-scripts');   // sin allow-same-origin evita bug Chrome
+    // Inyectar script de captura AL FINAL del HTML del iframe
+    // (después del inline script de Chart.js, para que el canvas ya exista)
+    // Altura mínima mientras carga
+    iframe.style.height = '440px';
+    const captureScript = `<script>(function(){
+  function dbg(msg){ window.parent.postMessage({__suiteDbg: msg},'*'); }
+  // Reportar altura del body para que el padre ajuste el iframe
+  function reportHeight() {
+    var h = document.body ? document.body.scrollHeight : 0;
+    if (h > 50) window.parent.postMessage({__suiteHeight: h}, '*');
+  }
+  function capture() {
+    var cvs = document.querySelector('canvas');
+    if (cvs && (cvs.width || cvs.offsetWidth)) {
+      var w = cvs.width || cvs.offsetWidth;
+      var h = cvs.height || cvs.offsetHeight;
       try {
-        const h = iframe.contentDocument?.body?.scrollHeight;
-        if (h && h > 100) iframe.style.height = Math.min(h + 32, 520) + 'px';
-      } catch {}
-    };
+        var png = cvs.toDataURL('image/png');
+        if (png && png.length > 400) {
+          window.parent.postMessage({__suiteChartImg: png, __w: w, __h: h}, '*');
+          reportHeight();
+          return true;
+        }
+      } catch(e) { dbg('canvas err:'+e.message); }
+    }
+    var svg = document.querySelector('svg');
+    if (svg) {
+      try {
+        var box = svg.getBoundingClientRect();
+        var w = Math.round(box.width) || svg.getAttribute('width') || 800;
+        var h = Math.round(box.height) || svg.getAttribute('height') || 400;
+        var xml = new XMLSerializer().serializeToString(svg);
+        var b64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+        window.parent.postMessage({__suiteChartImg: b64, __w: w, __h: h, __fmt: 'svg'}, '*');
+        reportHeight();
+        return true;
+      } catch(e) { dbg('svg err:'+e.message); }
+    }
+    dbg('no canvas, no svg. elems:' + document.body.children.length);
+    return false;
+  }
+  var attempts = 0;
+  function tryCapture() {
+    if (capture()) return;
+    if (++attempts < 20) setTimeout(tryCapture, 400);
+    else { dbg('timeout'); window.parent.postMessage({__suiteChartImg:null},'*'); }
+  }
+  window.addEventListener('message', function(e){ if(e.data&&e.data.__suiteCapture) tryCapture(); });
+  // Auto-capturar y reportar altura cuando el contenido esté listo
+  setTimeout(function(){ reportHeight(); tryCapture(); }, 1200);
+})()\x3c/script>`;
+    const rawHtml = spec.html || '';
+    iframe.srcdoc = rawHtml.includes('</body>')
+      ? rawHtml.replace('</body>', captureScript + '</body>')
+      : rawHtml + captureScript;
     contenido.appendChild(iframe);
     document.getElementById('dashboard-ia-narrativa').classList.add('hidden');
     wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -5638,34 +6441,17 @@ function renderMiniViz(idx) {
 
 async function guardarDashHistorial(idx) {
   const item = _historial[idx];
-  if (!item || item.guardado) return;
-  try {
-    const res = await api('/api/datos/dashboards', {
-      method: 'POST',
-      body: JSON.stringify({
-        titulo: item.titulo,
-        pregunta: item.pregunta || '',
-        tipo: item.tipo,
-        datos_json: item.datos,
-      }),
-    });
-    item.guardado = true;
-    item.db_id = res.id;
-    const card = document.getElementById(`dash-item-${idx}`);
-    if (card) {
-      const actions = card.querySelector('.dash-hist-actions');
-      if (actions) {
-        const saveBtn = actions.querySelector('[title="Guardar"]');
-        if (saveBtn) saveBtn.outerHTML = '<span class="dash-saved-badge">✓</span>';
-      }
-      const meta = document.getElementById(`dash-meta-${idx}`);
-      if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
-    }
-    mostrarToast('Dashboard guardado', 'success');
-    cargarNavDashboards();  // Refrescar selector en header
-  } catch (e) {
-    mostrarToast('Error al guardar: ' + e.message, 'error');
-  }
+  if (!item) return;
+  if (item.guardado) { mostrarToast('Este dashboard ya está guardado ✓', 'info'); return; }
+  if (_activeDashIdx !== idx) verDashHistorial(idx);
+  await new Promise(r => setTimeout(r, 600));
+  await _guardarComoReporte({
+    titulo:   _tituloGuardado(),
+    tipo:     item.tipo,
+    pregunta: item.pregunta || '',
+    datos:    item.datos,
+    histIdx:  idx,
+  });
 }
 
 async function cargarNavDashboards() {
@@ -5716,6 +6502,8 @@ function eliminarDashHistorial(idx) {
 }
 
 async function cargarDashboardsGuardados() {
+  // Preservar _activeDashIdx — agregarAlHistorial lo sobreescribe en cada llamada
+  const prevActive = _activeDashIdx;
   try {
     const data = await api('/api/datos/dashboards');
     const dashes = (data.dashboards || []).slice().reverse();
@@ -5730,6 +6518,13 @@ async function cargarDashboardsGuardados() {
       });
     });
   } catch { /* ignore — BD vacía o error */ }
+  // Si había un dashboard activo antes de recargar, restaurarlo
+  // (evita que agregarAlHistorial sobreescriba _activeDashIdx)
+  // Si no había ninguno (carga inicial), dejar el último cargado activo
+  if (prevActive !== null) {
+    _activeDashIdx = prevActive;
+  }
+  _syncHeaderSaveBtn();
 }
 
 // ── Análisis IA personalizado desde sidebar ───────────────────────────────────
@@ -5779,7 +6574,14 @@ async function enviarSolicitudIA() {
 // Toggle de período + IA sidebar Enter (Ctrl+Enter)
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.periodo-btn').forEach(btn => {
-    btn.addEventListener('click', () => cargarDashboards(btn.dataset.modo));
+    btn.addEventListener('click', () => {
+      // Limpiar rango personalizado al usar preset
+      const fiEl = document.getElementById('rango-fi');
+      const ffEl = document.getElementById('rango-ff');
+      if (fiEl) fiEl.value = '';
+      if (ffEl) ffEl.value = '';
+      cargarDashboards(btn.dataset.modo);
+    });
   });
   const sbInput = document.getElementById('sb-ia-input');
   if (sbInput) {
@@ -6086,6 +6888,568 @@ function _renderInvCriticos(lista, el) {
       <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--warn)">${p.piezas_90d.toLocaleString('es-MX')} pzs</td>
       <td style="padding:6px 8px;text-align:right;font-size:12px;color:var(--danger)">${_formatMXN(p.importe_90d)}</td>
     </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+// ── Dashboard Médicos — estado ────────────────────────────────────────────────
+let _medLoaded  = false;
+let _medModo    = '30d';
+let _medMes     = null;
+let _medCharts  = {};
+
+// ── Dashboard Vendedores ──────────────────────────────────────────────────────
+let _vendLoaded  = false;
+let _vendModo    = '30d';
+let _vendMes     = null;
+let _vendCharts  = {};
+
+function _vendSetModo(modo) {
+  _vendModo = modo;
+  _vendMes  = null;
+  const btn30  = document.getElementById('vend-btn-30d');
+  const btnMes = document.getElementById('vend-btn-mes');
+  const labelEl = document.getElementById('vend-label');
+  const _actStyle = 'var(--blue-mid)';
+  const _inactBg  = 'var(--surface)';
+  const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg;  btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
+  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg;  btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  if (labelEl) {
+    if (modo === '30d') labelEl.textContent = 'Últimos 30 días';
+    else {
+      const hoy = new Date();
+      const mes = hoy.toLocaleString('es-MX', { month: 'long' });
+      labelEl.textContent = `${mes.charAt(0).toUpperCase()}${mes.slice(1)} ${hoy.getFullYear()}`;
+    }
+  }
+  _mostrarOverlayGenerando('vendedores');
+  cargarVendedores();
+}
+
+function _vendSetMes(valor) {
+  if (!valor) return;
+  _vendMes  = valor;
+  _vendModo = '';
+  const btn30  = document.getElementById('vend-btn-30d');
+  const btnMes = document.getElementById('vend-btn-mes');
+  const labelEl = document.getElementById('vend-label');
+  const _inactBg  = 'var(--surface)';
+  const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = _inactBg;  btn30.style.color  = _inactTxt; }
+  if (btnMes) { btnMes.style.background = _inactBg;  btnMes.style.color = _inactTxt; }
+  if (labelEl) labelEl.textContent = valor;
+  _mostrarOverlayGenerando('vendedores');
+  cargarVendedores();
+}
+
+async function cargarVendedores() {
+  _vendLoaded = true;
+  let url = '/api/datos/vendedores';
+  if (_fi && _ff) {
+    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  } else if (_vendMes) {
+    url += `?mes=${encodeURIComponent(_vendMes)}`;
+  } else {
+    url += `?modo=${encodeURIComponent(_vendModo || '30d')}`;
+  }
+
+  const [dataResult] = await Promise.allSettled([
+    api(url),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+
+  if (dataResult.status === 'fulfilled') {
+    const data = dataResult.value;
+    _renderVendKPIs(data);
+    _renderVendRanking(data);
+    _renderVendMes(data);
+    _renderVendSucursal(data);
+    _renderVendDetalle(data);
+    _renderVendProdxVend(data);
+  } else {
+    const msg = dataResult.reason?.message || 'Error al cargar datos';
+    const kpisEl = document.getElementById('vend-kpis');
+    if (kpisEl) kpisEl.innerHTML = `<div style="color:var(--danger);font-size:12px;grid-column:span 4">${msg}</div>`;
+  }
+}
+
+function _renderVendKPIs(data) {
+  const el = document.getElementById('vend-kpis');
+  if (!el) return;
+  const kpis = [
+    { label: 'Ventas del período',    valor: _formatMXN(data.total_ventas || 0),                         color: 'var(--blue-mid)', sub: 'importe total' },
+    { label: 'Vendedor líder',        valor: (data.lider_nombre || '—'),                                  color: 'var(--warn)',     sub: _formatMXN(data.lider_importe || 0) },
+    { label: 'Total pedidos',         valor: (data.total_pedidos || 0).toLocaleString('es-MX'),           color: 'var(--blue)',     sub: 'pedidos pagados' },
+    { label: 'Vendedores activos',    valor: (data.vendedores_activos || 0).toLocaleString('es-MX'),      color: 'var(--success)',  sub: 'con ventas en el período' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:18px;font-weight:700;color:${k.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k.valor}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${k.sub}</div>
+    </div>`).join('');
+}
+
+function _renderVendRanking(data) {
+  const canvas  = document.getElementById('vend-ranking-chart');
+  const nodata  = document.getElementById('vend-ranking-nodata');
+  if (!canvas) return;
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  const top10 = (data.ranking || []).slice(0, 10);
+  if (_vendCharts.ranking) { _vendCharts.ranking.destroy(); delete _vendCharts.ranking; }
+
+  if (!top10.length) {
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
+    return;
+  }
+  canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
+
+  _vendCharts.ranking = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: top10.map(v => v.nombre),
+      datasets: [{
+        label: 'Importe',
+        data: top10.map(v => v.importe),
+        backgroundColor: '#1A2B5A',
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)}` } },
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+        y: {
+          ticks: { color: textColor, font: { size: 11 } },
+          grid: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function _renderVendMes(data) {
+  const canvas = document.getElementById('vend-mes-chart');
+  const nodata = document.getElementById('vend-mes-nodata');
+  if (!canvas) return;
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  if (_vendCharts.mes) { _vendCharts.mes.destroy(); delete _vendCharts.mes; }
+
+  const porMes = data.por_mes || [];
+  if (!porMes.length) {
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
+    return;
+  }
+  canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
+
+  const meses     = [...new Set(porMes.map(r => r.mes))].sort();
+  const vendNames = [...new Set(porMes.map(r => r.vendedor))];
+
+  const datasets = vendNames.map((nombre, i) => ({
+    label: nombre,
+    data: meses.map(m => {
+      const row = porMes.find(r => r.mes === m && r.vendedor === nombre);
+      return row ? row.importe : null;
+    }),
+    borderColor: COLORES[i % COLORES.length],
+    backgroundColor: COLORES[i % COLORES.length] + '22',
+    tension: 0.3,
+    pointRadius: 4,
+    spanGaps: true,
+  }));
+
+  _vendCharts.mes = new Chart(canvas, {
+    type: 'line',
+    data: { labels: meses, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: textColor, font: { size: 10 }, boxWidth: 10 } },
+        tooltip: { callbacks: { label: ctx => ctx.parsed.y !== null ? ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` : '' } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font: { size: 11 } }, grid: { display: false } },
+        y: {
+          ticks: { color: textColor, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid: { color: gridColor },
+          border: { display: false },
+        },
+      },
+    },
+  });
+}
+
+function _renderVendSucursal(data) {
+  const el = document.getElementById('vend-sucursal');
+  if (!el) return;
+  const lista = data.por_sucursal || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  const maxImp = Math.max(...lista.map(s => s.importe));
+  el.innerHTML = lista.map(s => {
+    const pct = maxImp > 0 ? (s.importe / maxImp * 100).toFixed(0) : 0;
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+        <span style="font-size:11px;font-weight:600;color:var(--text)">${s.sucursal}</span>
+        <span style="font-size:10px;color:var(--text-dim)">${_formatMXN(s.importe)}</span>
+      </div>
+      <div style="font-size:10px;color:var(--blue-mid);margin-bottom:3px">▸ ${s.vendedor}</div>
+      <div style="height:5px;border-radius:3px;background:var(--border);overflow:hidden">
+        <div style="height:100%;border-radius:3px;background:#1A2B5A;width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function _renderVendDetalle(data) {
+  const el = document.getElementById('vend-detalle');
+  if (!el) return;
+  const lista = data.detalle || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Vendedor</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pedidos</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Ticket</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500" title="vs período anterior">Var. %</th>
+    </tr></thead>
+    <tbody>${lista.map((v, i) => {
+      const varCol = v.variacion === null ? 'var(--text-dim)'
+                   : v.variacion >= 0 ? 'var(--success)' : 'var(--danger)';
+      const varTxt = v.variacion === null ? '—'
+                   : (v.variacion >= 0 ? '▲' : '▼') + ' ' + Math.abs(v.variacion) + '%';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 6px;color:var(--text-dim);font-size:11px">${i+1}</td>
+        <td style="padding:5px 6px;font-size:11px;color:var(--text);max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.nombre}</td>
+        <td style="padding:5px 6px;font-size:10px;color:var(--text-dim);max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.sucursal_principal}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text);white-space:nowrap">${_formatMXN(v.importe)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${v.pedidos}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim);white-space:nowrap">${_formatMXN(v.ticket_promedio)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:600;color:${varCol};white-space:nowrap">${varTxt}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function _renderVendProdxVend(data) {
+  const canvas  = document.getElementById('vend-pvv-chart');
+  const nodata  = document.getElementById('vend-pvv-nodata');
+  const leyenda = document.getElementById('vend-pvv-leyenda');
+  if (!canvas) return;
+
+  const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+
+  if (_vendCharts.pvv) { _vendCharts.pvv.destroy(); delete _vendCharts.pvv; }
+
+  const lista = data.prod_por_vendedor || [];
+  if (!lista.length) {
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
+    return;
+  }
+  canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
+
+  // Paleta por posición de producto (rank 1..5)
+  const PALETA = ['#1A2B5A', '#00897B', '#EF6C3A', '#5C6BC0', '#26A69A'];
+  const RANK_LABEL = ['1er producto', '2do producto', '3er producto', '4to producto', '5to producto'];
+
+  const vendedores = lista.map(v => v.vendedor);
+  const maxRank    = Math.max(...lista.map(v => v.productos.length));
+
+  // Un dataset por posición de ranking (coloreado igual para todos los vendedores)
+  const datasets = Array.from({ length: Math.min(maxRank, 5) }, (_, i) => ({
+    label:           RANK_LABEL[i],
+    data:            lista.map(v => v.productos[i]?.importe ?? 0),
+    backgroundColor: PALETA[i],
+    borderRadius:    i === Math.min(maxRank, 5) - 1 ? 4 : 0,
+    // Extra para tooltip
+    _nombres:        lista.map(v => v.productos[i]?.producto ?? ''),
+  }));
+
+  _vendCharts.pvv = new Chart(canvas, {
+    type: 'bar',
+    data: { labels: vendedores, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: ctx => ctx[0]?.label || '',
+            label: ctx => {
+              const nombre = ctx.dataset._nombres?.[ctx.dataIndex] || '';
+              return nombre && ctx.parsed.x > 0
+                ? ` ${nombre}: ${_formatMXN(ctx.parsed.x)}`
+                : null;
+            },
+          },
+          filter: item => item.parsed.x > 0,
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: { color: textColor, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid:   { color: gridColor },
+          border: { display: false },
+        },
+        y: {
+          stacked: true,
+          ticks: { color: textColor, font: { size: 11 } },
+          grid:   { display: false },
+        },
+      },
+    },
+  });
+
+  // Leyenda de posición de producto
+  if (leyenda) {
+    leyenda.innerHTML = PALETA.slice(0, Math.min(maxRank, 5)).map((c, i) =>
+      `<span style="display:inline-flex;align-items:center;gap:4px">
+        <span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block"></span>
+        <span style="color:var(--text-dim)">${RANK_LABEL[i]}</span>
+      </span>`
+    ).join('');
+  }
+}
+
+// ── Dashboard Médicos ─────────────────────────────────────────────────────────
+
+function _medSetModo(modo) {
+  _medModo = modo;
+  _medMes  = null;
+  const _actStyle = 'var(--blue-mid)'; const _inactBg = 'var(--surface)'; const _inactTxt = 'var(--text)';
+  const btn30  = document.getElementById('med-btn-30d');
+  const btnMes = document.getElementById('med-btn-mes');
+  const labelEl = document.getElementById('med-label');
+  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg; btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
+  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg; btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  if (labelEl) labelEl.textContent = modo === '30d' ? 'Últimos 30 días' : 'Mes actual';
+  _mostrarOverlayGenerando('medicos');
+  cargarMedicos();
+}
+
+function _medSetMes(valor) {
+  if (!valor) return;
+  _medMes  = valor;
+  _medModo = '';
+  const btn30  = document.getElementById('med-btn-30d');
+  const btnMes = document.getElementById('med-btn-mes');
+  const labelEl = document.getElementById('med-label');
+  const _inactBg = 'var(--surface)'; const _inactTxt = 'var(--text)';
+  if (btn30)  { btn30.style.background  = _inactBg; btn30.style.color  = _inactTxt; }
+  if (btnMes) { btnMes.style.background = _inactBg; btnMes.style.color = _inactTxt; }
+  if (labelEl) labelEl.textContent = valor;
+  _mostrarOverlayGenerando('medicos');
+  cargarMedicos();
+}
+
+async function cargarMedicos() {
+  _medLoaded = true;
+  let url = '/api/datos/medicos';
+  if (_fi && _ff) {
+    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  } else if (_medMes) {
+    url += `?mes=${encodeURIComponent(_medMes)}`;
+  } else {
+    url += `?modo=${encodeURIComponent(_medModo || '30d')}`;
+  }
+
+  const [dataResult] = await Promise.allSettled([
+    api(url),
+    new Promise(r => setTimeout(r, 1500)),
+  ]);
+  _ocultarOverlayGenerando();
+
+  if (dataResult.status === 'fulfilled') {
+    const data = dataResult.value;
+    _renderMedKPIs(data);
+    _renderMedRanking(data);
+    _renderMedRep(data);
+    _renderMedMes(data);
+    _renderMedDetalle(data);
+  } else {
+    const kpisEl = document.getElementById('med-kpis');
+    if (kpisEl) kpisEl.innerHTML = `<div style="color:var(--danger);font-size:12px;grid-column:span 4">${dataResult.reason?.message || 'Error al cargar datos'}</div>`;
+  }
+}
+
+function _renderMedKPIs(data) {
+  const el = document.getElementById('med-kpis');
+  if (!el) return;
+  const kpis = [
+    { label: 'Ventas del período',   valor: _formatMXN(data.total_ventas || 0),                         color: 'var(--blue-mid)', sub: 'via médicos prescriptores' },
+    { label: 'Médico líder',         valor: data.lider_nombre || '—',                                    color: 'var(--warn)',     sub: _formatMXN(data.lider_importe || 0) },
+    { label: 'Médicos activos',      valor: (data.medicos_activos || 0).toLocaleString('es-MX'),         color: 'var(--blue)',     sub: 'con ventas en el período' },
+    { label: 'Rep con más médicos',  valor: data.top_rep || '—',                                         color: 'var(--success)',  sub: 'representante más activo' },
+  ];
+  el.innerHTML = kpis.map(k => `
+    <div class="chart-card" style="padding:14px">
+      <div style="font-size:10px;color:var(--text-dim);margin-bottom:6px">${k.label}</div>
+      <div style="font-size:18px;font-weight:700;color:${k.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${k.valor}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:4px">${k.sub}</div>
+    </div>`).join('');
+}
+
+function _renderMedRanking(data) {
+  const canvas = document.getElementById('med-ranking-chart');
+  const nodata = document.getElementById('med-ranking-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.ranking) { _medCharts.ranking.destroy(); delete _medCharts.ranking; }
+  const top10 = (data.ranking || []).slice(0, 10);
+  if (!top10.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  _medCharts.ranking = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: top10.map(v => v.nombre),
+      datasets: [{ label: 'Importe', data: top10.map(v => v.importe),
+        backgroundColor: '#1A2B5A', borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)} · Rep: ${top10[ctx.dataIndex]?.vendedor ?? '—'}` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:11} }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedRep(data) {
+  const canvas = document.getElementById('med-rep-chart');
+  const nodata = document.getElementById('med-rep-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.rep) { _medCharts.rep.destroy(); delete _medCharts.rep; }
+  const lista = (data.por_rep || []).slice(0, 10);
+  if (!lista.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  _medCharts.rep = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: lista.map(v => v.rep),
+      datasets: [{ label: 'Importe', data: lista.map(v => v.importe),
+        backgroundColor: '#00897B', borderRadius: 4 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${_formatMXN(ctx.parsed.x)} · ${lista[ctx.dataIndex]?.medicos ?? 0} médicos` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:11} }, grid: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedMes(data) {
+  const canvas = document.getElementById('med-mes-chart');
+  const nodata = document.getElementById('med-mes-nodata');
+  if (!canvas) return;
+  const esDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+  if (_medCharts.mes) { _medCharts.mes.destroy(); delete _medCharts.mes; }
+  const porMes = data.por_mes || [];
+  if (!porMes.length) { canvas.style.display='none'; if(nodata) nodata.style.display=''; return; }
+  canvas.style.display=''; if(nodata) nodata.style.display='none';
+  const meses    = [...new Set(porMes.map(r => r.mes))].sort();
+  const medNames = [...new Set(porMes.map(r => r.medico))];
+  const datasets = medNames.map((nombre, i) => ({
+    label: nombre,
+    data: meses.map(m => { const row = porMes.find(r => r.mes === m && r.medico === nombre); return row ? row.importe : null; }),
+    borderColor: COLORES[i % COLORES.length],
+    backgroundColor: COLORES[i % COLORES.length] + '22',
+    tension: 0.3, pointRadius: 4, spanGaps: true, fill: false,
+  }));
+  _medCharts.mes = new Chart(canvas, {
+    type: 'line',
+    data: { labels: meses, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: textColor, font:{size:10}, boxWidth:10, padding:8 } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${_formatMXN(ctx.parsed.y)}` } },
+      },
+      scales: {
+        x: { ticks: { color: textColor, font:{size:10} }, grid: { color: gridColor }, border: { display: false } },
+        y: { ticks: { color: textColor, font:{size:10}, callback: v => _formatMXN(v) },
+             grid: { color: gridColor }, border: { display: false } },
+      },
+    },
+  });
+}
+
+function _renderMedDetalle(data) {
+  const el = document.getElementById('med-detalle');
+  if (!el) return;
+  const lista = data.ranking || [];
+  if (!lista.length) { el.innerHTML = '<div style="color:var(--text-dim)">Sin datos</div>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">#</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Médico</th>
+      <th style="padding:4px 6px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Rep</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Clientes</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500" title="vs período anterior">Var. %</th>
+    </tr></thead>
+    <tbody>${lista.map((v, i) => {
+      const varCol = v.variacion === null ? 'var(--text-dim)' : v.variacion >= 0 ? 'var(--success)' : 'var(--danger)';
+      const varTxt = v.variacion === null ? '—' : (v.variacion >= 0 ? '▲' : '▼') + ' ' + Math.abs(v.variacion) + '%';
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:5px 6px;color:var(--text-dim);font-size:11px">${i+1}</td>
+        <td style="padding:5px 6px;font-size:11px;color:var(--text);max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.nombre}</td>
+        <td style="padding:5px 6px;font-size:10px;color:var(--text-dim);max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${v.vendedor}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;white-space:nowrap">${_formatMXN(v.importe)}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;color:var(--text-dim)">${v.clientes}</td>
+        <td style="padding:5px 6px;text-align:right;font-size:11px;font-weight:600;color:${varCol};white-space:nowrap">${varTxt}</td>
+      </tr>`;
+    }).join('')}</tbody>
   </table>`;
 }
 </script>

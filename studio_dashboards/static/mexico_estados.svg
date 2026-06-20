@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================
+     Proyecto : Suite Analítica — Nentria Intelligent Solutions
+     Módulo   : studio_dashboards
+     Archivo  : static/mexico_estados.svg
+     Autor    : Geovani Daniel Nolasco
+     Versión  : 1.0.0
+     Descripción: Mapa coroplético simplificado de México (32 estados)
+                  Códigos INEGI 01-32. Sin relleno — JS asigna colores.
+     ============================================================ -->
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="800" height="500" viewBox="0 0 800 500">
+  <g id="estados" stroke="#fff" stroke-width="0.5" stroke-linejoin="round">
+
+    <!-- 01 Aguascalientes -->
+    <path id="mx-01" data-nombre="Aguascalientes"
+      d="M262,283 L278,280 L285,290 L280,303 L265,305 L258,295 Z"/>
+
+    <!-- 02 Baja California -->
+    <path id="mx-02" data-nombre="Baja California"
+      d="M55,52 L78,55 L105,80 L118,110 L112,140 L100,155 L88,150
+         L75,130 L62,105 L50,80 Z"/>
+
+    <!-- 03 Baja California Sur -->
+    <path id="mx-03" data-nombre="Baja California Sur"
+      d="M88,158 L104,158 L118,180 L122,210 L115,240 L105,265
+         L92,275 L78,260 L72,230 L75,200 L80,178 Z"/>
+
+    <!-- 04 Campeche -->
+    <path id="mx-04" data-nombre="Campeche"
+      d="M488,352 L530,348 L545,360 L548,390 L540,420 L515,428
+         L495,420 L482,400 L480,375 Z"/>
+
+    <!-- 05 Coahuila -->
+    <path id="mx-05" data-nombre="Coahuila"
+      d="M295,92 L380,88 L405,100 L418,130 L410,175 L390,200
+         L355,210 L320,205 L295,190 L280,160 L278,125 Z"/>
+
+    <!-- 06 Colima -->
+    <path id="mx-06" data-nombre="Colima"
+      d="M210,348 L228,342 L238,355 L232,370 L215,372 L205,360 Z"/>
+
+    <!-- 07 Chiapas -->
+    <path id="mx-07" data-nombre="Chiapas"
+      d="M435,420 L490,415 L508,428 L510,455 L490,465 L458,460
+         L432,448 L425,435 Z"/>
+
+    <!-- 08 Chihuahua -->
+    <path id="mx-08" data-nombre="Chihuahua"
+      d="M145,52 L248,52 L268,68 L278,92 L275,155 L258,185
+         L225,195 L190,185 L158,165 L138,130 L132,90 Z"/>
+
+    <!-- 09 Ciudad de México -->
+    <path id="mx-09" data-nombre="Ciudad de México"
+      d="M345,345 L360,342 L368,352 L362,365 L348,367 L340,357 Z"/>
+
+    <!-- 10 Durango -->
+    <path id="mx-10" data-nombre="Durango"
+      d="M148,168 L222,162 L240,178 L248,220 L238,250 L215,265
+         L185,260 L158,245 L142,210 L140,185 Z"/>
+
+    <!-- 11 Guanajuato -->
+    <path id="mx-11" data-nombre="Guanajuato"
+      d="M278,298 L320,292 L342,302 L345,325 L330,338 L298,340
+         L275,328 L270,312 Z"/>
+
+    <!-- 12 Guerrero -->
+    <path id="mx-12" data-nombre="Guerrero"
+      d="M248,370 L298,360 L325,368 L332,398 L318,425 L290,432
+         L258,420 L240,400 L242,380 Z"/>
+
+    <!-- 13 Hidalgo -->
+    <path id="mx-13" data-nombre="Hidalgo"
+      d="M345,292 L388,285 L400,298 L395,320 L372,330 L348,328
+         L338,315 Z"/>
+
+    <!-- 14 Jalisco -->
+    <path id="mx-14" data-nombre="Jalisco"
+      d="M190,278 L250,268 L272,280 L275,310 L260,345 L235,355
+         L208,348 L188,330 L178,305 L180,285 Z"/>
+
+    <!-- 15 México (Estado de México) -->
+    <path id="mx-15" data-nombre="Estado de México"
+      d="M308,320 L340,312 L358,322 L362,342 L350,358 L325,360
+         L305,348 L298,335 Z"/>
+
+    <!-- 16 Michoacán -->
+    <path id="mx-16" data-nombre="Michoacán"
+      d="M228,332 L298,322 L318,335 L322,365 L305,385 L272,390
+         L242,380 L222,362 L218,342 Z"/>
+
+    <!-- 17 Morelos -->
+    <path id="mx-17" data-nombre="Morelos"
+      d="M335,358 L362,352 L370,368 L362,385 L338,388 L328,372 Z"/>
+
+    <!-- 18 Nayarit -->
+    <path id="mx-18" data-nombre="Nayarit"
+      d="M175,265 L215,255 L228,272 L225,298 L205,310 L178,305
+         L165,285 Z"/>
+
+    <!-- 19 Nuevo León -->
+    <path id="mx-19" data-nombre="Nuevo León"
+      d="M395,108 L440,105 L458,125 L455,175 L432,200 L405,205
+         L388,185 L385,148 Z"/>
+
+    <!-- 20 Oaxaca -->
+    <path id="mx-20" data-nombre="Oaxaca"
+      d="M338,388 L420,378 L438,395 L435,432 L405,442 L368,438
+         L340,425 L328,408 Z"/>
+
+    <!-- 21 Puebla -->
+    <path id="mx-21" data-nombre="Puebla"
+      d="M368,325 L420,318 L438,335 L435,375 L415,390 L388,392
+         L368,378 L360,355 Z"/>
+
+    <!-- 22 Querétaro -->
+    <path id="mx-22" data-nombre="Querétaro"
+      d="M318,285 L350,280 L362,295 L358,318 L335,325 L315,315
+         L308,300 Z"/>
+
+    <!-- 23 Quintana Roo -->
+    <path id="mx-23" data-nombre="Quintana Roo"
+      d="M568,335 L605,330 L618,348 L615,420 L598,438 L572,435
+         L558,415 L555,375 L560,348 Z"/>
+
+    <!-- 24 San Luis Potosí -->
+    <path id="mx-24" data-nombre="San Luis Potosí"
+      d="M322,215 L398,208 L415,225 L412,268 L388,285 L350,282
+         L322,268 L308,248 L310,228 Z"/>
+
+    <!-- 25 Sinaloa -->
+    <path id="mx-25" data-nombre="Sinaloa"
+      d="M118,158 L155,148 L170,168 L182,215 L175,260 L155,278
+         L130,270 L112,240 L108,195 L110,168 Z"/>
+
+    <!-- 26 Sonora -->
+    <path id="mx-26" data-nombre="Sonora"
+      d="M88,52 L148,52 L165,72 L170,120 L162,162 L138,172
+         L108,165 L88,148 L72,115 L68,78 Z"/>
+
+    <!-- 27 Tabasco -->
+    <path id="mx-27" data-nombre="Tabasco"
+      d="M455,400 L498,392 L510,408 L505,432 L478,438 L455,428
+         L448,412 Z"/>
+
+    <!-- 28 Tamaulipas -->
+    <path id="mx-28" data-nombre="Tamaulipas"
+      d="M435,100 L502,95 L518,118 L515,195 L498,238 L468,260
+         L440,255 L418,228 L412,188 L415,135 Z"/>
+
+    <!-- 29 Tlaxcala -->
+    <path id="mx-29" data-nombre="Tlaxcala"
+      d="M372,322 L395,318 L402,330 L396,345 L375,348 L365,336 Z"/>
+
+    <!-- 30 Veracruz -->
+    <path id="mx-30" data-nombre="Veracruz"
+      d="M412,265 L445,255 L468,272 L472,325 L465,390 L448,415
+         L428,418 L410,400 L405,358 L402,308 L408,278 Z"/>
+
+    <!-- 31 Yucatán -->
+    <path id="mx-31" data-nombre="Yucatán"
+      d="M520,322 L598,318 L610,332 L608,358 L575,365 L528,362
+         L512,345 Z"/>
+
+    <!-- 32 Zacatecas -->
+    <path id="mx-32" data-nombre="Zacatecas"
+      d="M248,222 L318,215 L330,232 L325,278 L305,292 L272,295
+         L248,280 L235,255 L235,235 Z"/>
+
+  </g>
+</svg>

@@ -309,16 +309,108 @@ function renderDashCardPWA(dash) {
     ventas_hoy: 'Hoy', ventas_sucursal: 'Sucursales',
     top_vendedores: 'Vendedores', comparativo_meses: 'Meses',
     pedidos_activos: 'Pedidos', texto_ia: 'IA',
+    chart_dinamico: 'Gráfica IA',
   }[tipo] || tipo;
+
+  // Botón PDF si el dashboard tiene PDF guardado
+  const pdfBtn = dash.has_pdf
+    ? `<button class="dash-pwa-pdf-btn" data-pdf-id="${dash.id}" data-pdf-titulo="${(dash.titulo||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}" onclick="verPDFDashboard(+this.dataset.pdfId,this.dataset.pdfTitulo)" title="Ver PDF">📄 Ver PDF</button>`
+    : '';
 
   return `<div class="dash-pwa-card card-item">
     <div class="dash-pwa-header">
       <span class="dash-pwa-titulo">${dash.titulo}</span>
       <span class="dash-pwa-tipo">${tipoLabel}</span>
     </div>
-    ${vizHtml}
-    <div class="dash-pwa-fecha">${fechaStr}</div>
+    ${vizHtml || (dash.has_pdf ? '<div class="dash-pwa-pdf-hint">Toca "Ver PDF" para visualizar esta gráfica</div>' : '')}
+    <div class="dash-pwa-footer">
+      <span class="dash-pwa-fecha">${fechaStr}</span>
+      ${pdfBtn}
+    </div>
   </div>`;
+}
+
+// ── Ver PDF de un dashboard guardado ─────────────────────────────────────────
+async function verPDFDashboard(id, titulo) {
+  document.getElementById('pdf-pwa-modal')?.remove();
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const label = titulo || 'Reporte PDF';
+
+  const modal = document.createElement('div');
+  modal.id = 'pdf-pwa-modal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:var(--bg)';
+
+  modal.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+      <button id="pdf-pwa-close"
+              style="min-width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        ‹
+      </button>
+      <span style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${label}</span>
+    </div>
+    <div id="pdf-pwa-body" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-soft);font-size:14px">
+      <div style="text-align:center">
+        <div class="spinner" style="margin:0 auto 12px"></div>
+        Cargando PDF…
+      </div>
+    </div>`;
+
+  document.body.appendChild(modal);
+
+  const closeBtn = document.getElementById('pdf-pwa-close');
+  let blobUrl = null;
+  const cerrar = () => { if (blobUrl) URL.revokeObjectURL(blobUrl); modal.remove(); };
+  closeBtn.onclick = cerrar;
+
+  try {
+    const res = await authFetch(`/api/dashboards/${id}/pdf`);
+    if (!res.ok) throw new Error('PDF no disponible');
+    const blob = await res.blob();
+    blobUrl = URL.createObjectURL(blob);
+    const body = document.getElementById('pdf-pwa-body');
+    if (!body) return;
+
+    const nombreArchivo = (label).replace(/[^a-zA-Z0-9\s·\-]/g, '_') + '.pdf';
+
+    if (isIOS) {
+      // iOS no puede mostrar PDFs en iframe — mostrar botones de acción
+      body.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 24px';
+      body.innerHTML = `
+        <div style="font-size:48px;margin-bottom:8px">📄</div>
+        <p style="font-size:14px;color:var(--text-soft);text-align:center;margin:0">
+          En iPhone/iPad abre el PDF con el visor nativo
+        </p>
+        <a href="${blobUrl}" target="_blank" rel="noopener"
+           style="display:block;width:100%;max-width:280px;text-align:center;padding:14px;border-radius:12px;background:var(--blue-mid);color:#fff;font-size:15px;font-weight:700;text-decoration:none">
+          📂 Abrir PDF
+        </a>
+        <a href="${blobUrl}" download="${nombreArchivo}"
+           style="display:block;width:100%;max-width:280px;text-align:center;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:600;text-decoration:none">
+          ⬇ Descargar
+        </a>`;
+    } else {
+      // Android / desktop — iframe funciona bien
+      body.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0';
+      body.innerHTML = `
+        <div style="background:var(--surface-2,#2d3748);padding:8px 14px;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">
+          <a href="${blobUrl}" download="${nombreArchivo}"
+             style="font-size:12px;font-weight:600;color:#fff;background:#00897B;border-radius:8px;padding:6px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+            ⬇ Descargar
+          </a>
+        </div>
+        <iframe src="${blobUrl}#toolbar=1&view=FitH"
+                style="flex:1;border:none;min-height:0;width:100%"
+                title="PDF"></iframe>`;
+    }
+  } catch {
+    const body = document.getElementById('pdf-pwa-body');
+    if (body) body.innerHTML = `
+      <div style="text-align:center;padding:32px;color:var(--text-soft)">
+        <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+        <p>No se pudo cargar el PDF</p>
+      </div>`;
+  }
 }
 
 // ── Render: Inicio — ventas del mes por sucursal ──────────────────────────────

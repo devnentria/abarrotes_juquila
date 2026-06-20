@@ -21,8 +21,9 @@ Nota sobre fechas:
 """
 from collections import defaultdict
 from datetime import date, timedelta
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+import base64
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse, Response
 
 from shared.auth import get_current_user
 from shared.config import TEST_DATE
@@ -442,7 +443,8 @@ def dashboards_guardados():
     from shared.database_local import fetch_all as _fetch_all
 
     rows = _fetch_all(
-        "SELECT id, titulo, tipo, datos_json, creado_en "
+        "SELECT id, titulo, tipo, datos_json, creado_en, "
+        "       CASE WHEN pdf_b64 <> '' THEN 1 ELSE 0 END AS has_pdf "
         "FROM dashboards WHERE guardado=1 ORDER BY creado_en DESC"
     )
     for r in rows:
@@ -451,6 +453,27 @@ def dashboards_guardados():
         except Exception:
             r["datos_json"] = {}
     return JSONResponse({"dashboards": rows})
+
+
+@router.get("/dashboards/{dashboard_id}/pdf")
+def pdf_dashboard(dashboard_id: int):
+    """Devuelve el PDF de un dashboard guardado como respuesta binaria."""
+    from shared.database_local import fetch_one as _fetch_one
+    row = _fetch_one(
+        "SELECT pdf_b64 FROM dashboards WHERE id=? AND guardado=1",
+        (dashboard_id,)
+    )
+    if not row or not row.get("pdf_b64"):
+        raise HTTPException(404, "PDF no disponible")
+    try:
+        pdf_bytes = base64.b64decode(row["pdf_b64"])
+    except Exception:
+        raise HTTPException(500, "Error al decodificar el PDF")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="dashboard_{dashboard_id}.pdf"'},
+    )
 
 
 @router.get("/reportes")

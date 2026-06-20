@@ -214,6 +214,8 @@ def init_db() -> None:
             "ALTER TABLE inventario_historico_productos ADD COLUMN precio3 REAL NOT NULL DEFAULT 0",
             "CREATE INDEX IF NOT EXISTS idx_invhp_prod ON inventario_historico_productos(cve_producto)",
             "CREATE INDEX IF NOT EXISTS idx_invhp_fecha ON inventario_historico_productos(fecha)",
+            # PDF generado al guardar un dashboard
+            "ALTER TABLE dashboards ADD COLUMN pdf_b64 TEXT NOT NULL DEFAULT ''",
         ]
         for sql in migraciones:
             try:

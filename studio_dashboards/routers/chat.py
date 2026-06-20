@@ -104,6 +104,7 @@ _DASHBOARDS_DISPONIBLES = (
     "Los dashboards visuales disponibles son:\n"
     "- **Ventas**: reporte completo · ventas de hoy · por sucursal · tendencia · comparativo de meses · diario\n"
     "- **Vendedores**: top vendedores · variación de vendedores\n"
+    "- **Médicos**: ranking de médicos por ventas · tendencia mensual · ventas por representante\n"
     "- **Productos**: top productos más vendidos\n"
     "- **Clientes**: clientes frecuentes\n"
     "- **Pedidos**: pedidos activos por sucursal\n"
@@ -271,7 +272,22 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
             print(f"[studio-chat] Clasificar error job={job_id}: {e}", flush=True)
 
     # ── 2. Generar dashboard predefinido si aplica ────────────────────────────
-    if tipo_dash != "ninguno":
+    # Tipos con tab dedicado en el Studio — redirigir al tab en lugar de generar chart
+    _TIPOS_CON_TAB = {"top_vendedores", "variacion_vendedores", "medicos_dashboard"}
+    if tipo_dash in _TIPOS_CON_TAB:
+        modo = spec_dash.get("modo", "30d")
+        fi   = spec_dash.get("fecha_inicio")
+        ff   = spec_dash.get("fecha_fin")
+        if tipo_dash == "medicos_dashboard":
+            dashboard = {"tipo": "switch_tab", "tab": "medicos", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
+            respuesta = "Te muestro el dashboard de **Médicos** — ranking, tendencia mensual y ventas por representante."
+        else:
+            dashboard = {"tipo": "switch_tab", "tab": "vendedores", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
+            respuesta = "Te muestro el dashboard de **Vendedores** — ranking, tendencia mensual y líder por sucursal."
+        estado    = "done"
+        tipo_dash = "con_tab"   # evitar que caiga al bloque siguiente
+
+    if tipo_dash not in ("ninguno", "con_tab"):
         try:
             modo      = spec_dash.get("modo", "30d")
             fi        = spec_dash.get("fecha_inicio")
@@ -303,7 +319,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
             tipo_dash = "ninguno"
 
     # ── 3. Respuesta de texto o gráfica dinámica (si no hay dashboard predefinido) ────
-    if tipo_dash == "ninguno":
+    if tipo_dash == "ninguno" and estado != "done":
         try:
             area, costo_dir = director.clasificar(
                 msg, historial, model=STUDIO_CHAT_MODEL,

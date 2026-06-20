@@ -9,7 +9,7 @@
  * El usuario no nota que existe — solo nota que la app es rápida.
  */
 
-const CACHE_NAME = 'suite-analitica-v58';
+const CACHE_NAME = 'suite-analitica-v62';
 
 // Derivar el prefijo de ruta según dónde está instalado el SW
 // Local: self.location = http://localhost:8001/sw.js → BASE = ''
@@ -18,8 +18,8 @@ const BASE = self.location.pathname.replace(/\/sw\.js$/, '');
 
 // Solo CSS y JS se cachean — el HTML siempre va a la red para estar al día
 const STATIC_ASSETS = [
-  `${BASE}/static/style.css?v=51`,
-  `${BASE}/static/app.js?v=53`,
+  `${BASE}/static/style.css?v=62`,
+  `${BASE}/static/app.js?v=62`,
 ];
 
 // Instalar: guardar assets estáticos en caché

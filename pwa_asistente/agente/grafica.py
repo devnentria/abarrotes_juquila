@@ -42,6 +42,14 @@ REGLAS ESTRICTAS:
 - El documento debe iniciar exactamente con <!DOCTYPE html>
 - Incluye Chart.js desde CDN: https://cdn.jsdelivr.net/npm/chart.js
 
+DATOS — FIDELIDAD ABSOLUTA (crítico):
+- ⛔ NUNCA inventar series, períodos ni comparaciones que no estén en los datos recibidos.
+  Si los datos tienen un solo período (ej. "abril 2026"), usa solo ese período.
+  No agregues "año anterior", "mismo mes del año pasado" ni ninguna serie extra.
+- ⛔ NUNCA mostrar barras o líneas con valor 0 porque no tenías el dato — si no tienes el valor, no crees la serie.
+- ⛔ NUNCA asumir que el usuario quiere comparar años si no lo pidió explícitamente.
+- ✅ Usa EXACTAMENTE los valores numéricos presentes en el texto de datos — no los estimes ni los redondees.
+
 ESTILO EJECUTIVO (fondo blanco, colores corporativos):
   body: background #ffffff, font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif
   color de texto principal: #1e293b
