@@ -1858,7 +1858,27 @@ function debeUsarPWA() {
 // ── Verificar acceso al cargar ────────────────────────────────────────────────
 let _usuario = null;
 let _resetEquipoId = null;
-let _logoCached = null;   // logo pre-cargado en base64 para PDF
+let _logoCached = null;         // logo pre-cargado en base64 para PDF
+let _iframeSnapshot = null;     // snapshot cacheado del chart_dinamico activo
+
+// Escuchar mensajes del iframe (snapshot de captura + altura del body)
+window.addEventListener('message', function(e) {
+  if (!e.data) return;
+  if (e.data.__suiteDbg) { console.log('[iframe]', e.data.__suiteDbg); return; }
+  if (e.data.__suiteChartImg !== undefined) {
+    _iframeSnapshot = e.data.__suiteChartImg || null;
+    if (_iframeSnapshot) console.log('[Studio] snapshot iframe cacheado:', e.data.__w, 'x', e.data.__h);
+    else console.log('[Studio] snapshot iframe: null');
+  }
+  // Ajustar altura del iframe según el body del chart
+  if (e.data.__suiteHeight) {
+    const iframes = document.querySelectorAll('#dashboard-ia-contenido iframe');
+    if (iframes.length) {
+      const newH = Math.min(Math.max(e.data.__suiteHeight + 32, 300), 560);
+      iframes[0].style.height = newH + 'px';
+    }
+  }
+});
 
 (async () => {
   const t = getToken();
@@ -2934,6 +2954,7 @@ function _switchTab(tab) {
   if (isInventario) cargarInventario();
   if (isVendedores) cargarVendedores();
   if (isMedicos)    cargarMedicos();
+  _syncHeaderSaveBtn();
 }
 
 // ── Dashboard Zonas ───────────────────────────────────────────────────────────
@@ -4236,12 +4257,22 @@ function toggleSidebar() {
 
 // ── Sinc botones guardar / pdf en header ─────────────────────────────────────
 function _syncHeaderSaveBtn() {
-  const item     = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
   const saveBtn  = document.getElementById('header-save-btn');
   const pdfBtn   = document.getElementById('header-pdf-btn');
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
+
+  // Tab estático (Ventas, Médicos, Vendedores…): siempre habilitados, siempre "Guardar"
+  if (!iaVisible) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
+    if (pdfBtn)  pdfBtn.disabled = false;
+    return;
+  }
+
+  // Panel IA: depende del item activo
+  const item = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
   if (!item) {
-    if (saveBtn) { saveBtn.disabled = true;  saveBtn.textContent = '💾 Guardar'; }
-    if (pdfBtn)    pdfBtn.disabled = true;
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '💾 Guardar'; }
+    if (pdfBtn)  pdfBtn.disabled = true;
     return;
   }
   if (pdfBtn) pdfBtn.disabled = false;
@@ -4252,77 +4283,254 @@ function _syncHeaderSaveBtn() {
 }
 
 // ── Guardar dashboard activo (Studio + queda visible en PWA automáticamente) ──
-function guardarDashActivo() {
-  if (_activeDashIdx !== null) {
-    guardarDashHistorial(_activeDashIdx);
+async function guardarDashActivo() {
+  await _guardarComoReporte();
+}
+
+function _tituloGuardado() {
+  const item    = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
+  const fecha   = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  if (!iaVisible) return `${_TAB_NOMBRES[_currentTab] || 'Dashboard'} · ${fecha}`;
+  if (!item)      return `Dashboard · ${fecha}`;
+  const q = (item.pregunta || '').trim();
+  if (q) {
+    const qc = q.length > 45 ? q.slice(0, 42) + '…' : q;
+    return item.tipo === 'chart_dinamico' ? `Gráfica · ${qc} · ${fecha}` : `${qc} · ${fecha}`;
+  }
+  return `${item.titulo || 'Dashboard'} · ${fecha}`;
+}
+
+async function _abrirVisorPDF(id, titulo) {
+  document.getElementById('pdf-viewer-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'pdf-viewer-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  // Skeleton mientras carga el PDF
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:12px;width:min(860px,96vw);height:93vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;gap:10px">
+        <span style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${titulo}</span>
+        <div style="display:flex;gap:8px;flex-shrink:0" id="pdf-modal-btns">
+          <span style="font-size:11px;color:var(--text-dim)">Cargando PDF…</span>
+          <button onclick="document.getElementById('pdf-viewer-modal').remove()"
+                  style="font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-weight:600">
+            Cerrar
+          </button>
+        </div>
+      </div>
+      <div id="pdf-modal-body" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">
+        Cargando…
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  // Fetch con Authorization header → blob URL → iframe
+  let blobUrl = null;
+  try {
+    const resp = await fetch(`/api/datos/dashboards/${id}/pdf`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+    });
+    if (!resp.ok) throw new Error(`${resp.status}`);
+    const blob = await resp.blob();
+    blobUrl = URL.createObjectURL(blob);
+  } catch (e) {
+    const body = document.getElementById('pdf-modal-body');
+    if (body) body.textContent = 'Error al cargar el PDF: ' + e.message;
+    return;
+  }
+
+  const body = document.getElementById('pdf-modal-body');
+  const btns = document.getElementById('pdf-modal-btns');
+  if (body) {
+    body.style.cssText = 'flex:1;padding:0';
+    body.innerHTML = `<iframe src="${blobUrl}#toolbar=1&view=FitH"
+        style="width:100%;height:100%;border:none;border-radius:0 0 12px 12px;background:#525659"
+        title="${titulo}"></iframe>`;
+  }
+  if (btns) {
+    btns.innerHTML = `
+      <a href="${blobUrl}" download="${titulo.replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ\s·]/g,'_')}.pdf"
+         style="font-size:11px;padding:5px 12px;border-radius:6px;background:var(--blue-mid);color:#fff;text-decoration:none;font-weight:600">
+        ⬇ Descargar
+      </a>
+      <button onclick="document.getElementById('pdf-viewer-modal').remove()"
+              style="font-size:11px;padding:5px 14px;border-radius:6px;border:1px solid #94a3b8;background:#475569;color:#f1f5f9;cursor:pointer;font-weight:600">
+        Cerrar
+      </button>`;
+  }
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function _guardarComoReporte(opts = {}) {
+  const titulo   = opts.titulo   || _tituloGuardado();
+  const tipo     = opts.tipo     || (_activeDashIdx !== null ? _historial[_activeDashIdx]?.tipo : null) || _currentTab || 'dashboard';
+  const pregunta = opts.pregunta !== undefined ? opts.pregunta : ((_activeDashIdx !== null ? _historial[_activeDashIdx]?.pregunta : '') || '');
+  const datos    = opts.datos    || (_activeDashIdx !== null ? _historial[_activeDashIdx]?.datos : null) || {};
+  const histIdx  = opts.histIdx  !== undefined ? opts.histIdx : _activeDashIdx;
+
+  const saveBtn = document.getElementById('header-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Guardando…'; }
+
+  try {
+    const pdf_b64 = await Promise.race([
+      _generarPDFBase64(titulo, pregunta),
+      new Promise(r => setTimeout(() => r(null), 18000)),
+    ]);
+    if (!pdf_b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
+
+    const res = await api('/api/datos/dashboards', {
+      method: 'POST',
+      body: JSON.stringify({ titulo, pregunta, tipo, datos_json: datos, pdf_b64 }),
+    });
+    const db_id = res.id;
+
+    if (histIdx !== null && _historial[histIdx]) {
+      _historial[histIdx].guardado = true;
+      _historial[histIdx].db_id   = db_id;
+      const actBtn = document.querySelector(`#dash-item-${histIdx} [title="Guardar"]`);
+      if (actBtn) actBtn.outerHTML = '<span class="dash-saved-badge">✓</span>';
+      const meta = document.getElementById(`dash-meta-${histIdx}`);
+      if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${tipo} · ${_relTime(Date.now())}`;
+    }
+
+    mostrarToast('PDF guardado ✓', 'success');
+    cargarNavDashboards();
+    _syncHeaderSaveBtn();
+    _abrirVisorPDF(db_id, titulo);
+  } catch (e) {
+    console.error('[guardar]', e);
+    mostrarToast('Error al guardar: ' + e.message, 'error');
+  } finally {
+    _syncHeaderSaveBtn();
   }
 }
 
 // ── Generador de PDF ejecutivo (fondo blanco, logo, metadatos, gráfica) ───────
+
+// Captura el canvas más grande de un contenedor y lo convierte a JPEG sobre fondo blanco
+function _capturarCanvasDeContenedor(contenedor) {
+  let best = null;
+  contenedor.querySelectorAll('canvas').forEach(c => {
+    if (!best || c.width * c.height > best.width * best.height) best = c;
+  });
+  console.log('[PDF] canvas dims:', best?.width, 'x', best?.height, 'en', contenedor.id || contenedor.className);
+  if (!best || best.width === 0 || best.height === 0) return null;
+  const tmp = document.createElement('canvas');
+  tmp.width  = best.width;
+  tmp.height = best.height;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  ctx.drawImage(best, 0, 0);
+  const jpg = tmp.toDataURL('image/jpeg', 0.92);
+  console.log('[PDF] canvas capturado, jpg len:', jpg.length);
+  return jpg;
+}
+
 async function _capturarImagen() {
+  const wrap = document.getElementById('dashboard-ia-wrap');
+  const iaVisible = wrap && !wrap.classList.contains('hidden');
+
+  // ── Caso 0: tabs estáticos (Ventas, Médicos, Vendedores, Zonas, Inventario) ──
+  // Capturar TODO el área del tab con html2canvas (no solo un canvas)
+  if (!iaVisible) {
+    const tabContainers = {
+      resumen:     'static-dash-area',
+      zonas:       'zonas-dash-area',
+      productos:   'productos-dash-area',
+      inventario:  'inventario-dash-area',
+      vendedores:  'vendedores-dash-area',
+      medicos:     'medicos-dash-area',
+    };
+    const containerId = tabContainers[_currentTab];
+    const tabArea = containerId ? document.getElementById(containerId) : null;
+    console.log('[PDF] tab estático:', _currentTab, '→', containerId);
+    if (!tabArea) return null;
+    if (typeof html2canvas === 'undefined') {
+      console.warn('[PDF] html2canvas no disponible');
+      return null;
+    }
+    // Si aún no terminó de cargar, esperar un poco
+    if (tabArea.querySelectorAll('canvas').length === 0) {
+      await new Promise(r => setTimeout(r, 1800));
+    }
+    // Capturar el área visible del tab (no el scroll completo)
+    const rect = tabArea.getBoundingClientRect();
+    const visH  = Math.min(tabArea.scrollHeight, window.innerHeight - Math.max(rect.top, 0));
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(null), 12000);
+      html2canvas(tabArea, {
+        scale: 1.5,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        ignoreElements: el => el.tagName === 'IFRAME',
+        width:  tabArea.offsetWidth,
+        height: Math.max(visH, tabArea.offsetHeight),
+        windowWidth:  tabArea.offsetWidth,
+        scrollX: 0,
+        scrollY: -Math.max(rect.top, 0),
+      })
+        .then(snap => {
+          clearTimeout(timer);
+          console.log('[PDF] html2canvas tab:', snap.width, 'x', snap.height);
+          resolve(snap.toDataURL('image/jpeg', 0.90));
+        })
+        .catch(e => { clearTimeout(timer); console.error('[PDF] html2canvas err:', e); resolve(null); });
+    });
+  }
+
   const contenido = document.getElementById('dashboard-ia-contenido');
   if (!contenido) return null;
 
-  // Caso A: chart_dinamico — hay un iframe con Chart.js
-  // NO usar html2canvas con iframes (se cuelga). Solo leer el canvas directamente.
+  // ── Caso A: chart_dinamico (IA) — iframe con Chart.js ────────────────────────
   const iframe = contenido.querySelector('iframe');
   if (iframe) {
-    // Esperar a que Chart.js termine de renderizar
-    await new Promise(r => setTimeout(r, 1800));
-    try {
-      const cvs = iframe.contentDocument?.querySelector('canvas');
-      if (cvs && cvs.width > 0) {
-        // Composite sobre fondo blanco — Chart.js usa fondo transparente
-        // y jsPDF mostraría el canvas vacío sobre papel blanco
-        const tmp = document.createElement('canvas');
-        tmp.width  = cvs.width;
-        tmp.height = cvs.height;
-        const ctx = tmp.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, tmp.width, tmp.height);
-        ctx.drawImage(cvs, 0, 0);
-        return tmp.toDataURL('image/png');
-      }
-    } catch (e) { console.warn('[PDF] iframe canvas error:', e); }
-    return null;
-  }
-
-  // Caso B: dashboard predefinido — capturar canvases de Chart.js directamente
-  const canvases = contenido.querySelectorAll('canvas');
-  if (canvases.length > 0) {
-    let best = null;
-    canvases.forEach(c => { if (!best || c.width * c.height > best.width * best.height) best = c; });
-    if (best && best.width > 0) {
-      // Composite sobre fondo blanco
-      const tmp = document.createElement('canvas');
-      tmp.width  = best.width;
-      tmp.height = best.height;
-      const ctx = tmp.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, tmp.width, tmp.height);
-      ctx.drawImage(best, 0, 0);
-      return tmp.toDataURL('image/png');
+    if (_iframeSnapshot) {
+      console.log('[PDF] usando snapshot cacheado del iframe');
+      return _iframeSnapshot;
     }
+    console.log('[PDF] solicitando snapshot al iframe…');
+    const imgData = await new Promise(resolve => {
+      const tid = setTimeout(() => resolve(_iframeSnapshot || null), 6000);
+      const check = setInterval(() => {
+        if (_iframeSnapshot) { clearTimeout(tid); clearInterval(check); resolve(_iframeSnapshot); }
+      }, 200);
+      try { iframe.contentWindow?.postMessage({ __suiteCapture: true }, '*'); } catch {}
+    });
+    console.log('[PDF] iframe imagen:', imgData ? `OK (${imgData.length})` : 'null');
+    return imgData;
   }
 
-  // Caso C: sin canvas — intentar html2canvas solo si está disponible
+  // ── Caso B: dashboard IA predefinido (kpi_bar, ranking, etc.) ────────────────
+  if (contenido.querySelectorAll('canvas').length > 0) {
+    await new Promise(r => setTimeout(r, 1200));
+    return _capturarCanvasDeContenedor(contenido);
+  }
+
+  // ── Caso C: html2canvas fallback ──────────────────────────────────────────────
   if (typeof html2canvas === 'undefined') return null;
   return new Promise(resolve => {
     const timer = setTimeout(() => resolve(null), 6000);
     html2canvas(contenido, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
                               ignoreElements: el => el.tagName === 'IFRAME' })
-      .then(snap => { clearTimeout(timer); resolve(snap.toDataURL('image/png')); })
+      .then(snap => { clearTimeout(timer); resolve(snap.toDataURL('image/jpeg', 0.92)); })
       .catch(() => { clearTimeout(timer); resolve(null); });
   });
 }
 
-function _b64FromCanvas(imgData) {
-  // Obtener dimensiones reales del canvas para calcular ratio sin colgar
-  const tmp = document.createElement('img');
-  tmp.src = imgData;
-  const w = tmp.naturalWidth  || 800;
-  const h = tmp.naturalHeight || 400;
-  return { w, h };
+function _imgDims(imgData) {
+  // Retorna {w, h} esperando a que la imagen cargue (async)
+  return new Promise(res => {
+    const tmp = new Image();
+    tmp.onload = () => res({ w: tmp.naturalWidth || 800, h: tmp.naturalHeight || 400 });
+    tmp.onerror = () => res({ w: 800, h: 400 });
+    tmp.src = imgData;
+  });
 }
 
 async function _generarPDFBase64(titulo, pregunta) {
@@ -4332,12 +4540,13 @@ async function _generarPDFBase64(titulo, pregunta) {
 
   console.log('[PDF] capturando imagen…');
   const imgData = await _capturarImagen();
-  console.log('[PDF] imagen:', imgData ? `OK (${imgData.length} chars)` : 'null');
+  console.log('[PDF] imagen:', imgData ? `OK (${imgData.length} chars) formato:${imgData.substring(5,20)}` : 'null');
   if (!imgData) { console.warn('[PDF] sin imagen — abortando'); return null; }
 
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const PW  = doc.internal.pageSize.getWidth();
-  const PH  = doc.internal.pageSize.getHeight();
+  const { w: _iw, h: _ih } = await _imgDims(imgData);
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW  = doc.internal.pageSize.getWidth();   // 210mm
+  const PH  = doc.internal.pageSize.getHeight();  // 297mm
 
   // Logo — usar el pre-cargado (no fetch en tiempo de generación)
   if (_logoCached) {
@@ -4385,14 +4594,34 @@ async function _generarPDFBase64(titulo, pregunta) {
     yImg += 2;
   }
 
-  // Gráfica — usar dimensiones sin await Image (evita cuelgue)
+  // Gráfica
   const availH = PH - yImg - 10;
   const availW = PW - 16;
-  const { w, h } = _b64FromCanvas(imgData);
+  const w = _iw, h = _ih;
   const ratio  = w / (h || 1);
   let imgW = availW, imgH = imgW / ratio;
   if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
-  try { doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH); } catch (e) { console.warn('[PDF] addImage error:', e); }
+  // Si es SVG, convertir a PNG via Image+Canvas antes de agregar a jsPDF
+  let finalImg = imgData;
+  if (imgData.startsWith('data:image/svg+xml')) {
+    finalImg = await new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth || w || 800; c.height = img.naturalHeight || h || 400;
+        const ctx2 = c.getContext('2d');
+        ctx2.fillStyle = '#ffffff'; ctx2.fillRect(0, 0, c.width, c.height);
+        ctx2.drawImage(img, 0, 0);
+        res(c.toDataURL('image/jpeg', 0.92));
+      };
+      img.onerror = () => res(imgData);
+      img.src = imgData;
+    });
+  }
+  const fmt = finalImg.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
+  console.log('[PDF] addImage fmt:', fmt, 'dims:', Math.round(imgW), 'x', Math.round(imgH), 'y:', Math.round(yImg));
+  try { doc.addImage(finalImg, fmt, (PW - imgW) / 2, yImg, imgW, imgH); console.log('[PDF] addImage OK'); }
+  catch (e) { console.error('[PDF] addImage ERROR:', e); }
 
   // Pie
   doc.setFont('helvetica', 'normal');
@@ -4407,7 +4636,9 @@ async function _generarPDFBase64(titulo, pregunta) {
 // ── Exportar PDF (botón PDF manual → descarga directa) ───────────────────────
 async function exportarPDF() {
   const item     = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
-  const titulo   = item?.titulo   || 'Dashboard';
+  const iaVisible = !document.getElementById('dashboard-ia-wrap')?.classList.contains('hidden');
+  const tabTitulo = _TAB_NOMBRES[_currentTab] || 'Dashboard';
+  const titulo   = item?.titulo || (iaVisible ? 'Dashboard' : tabTitulo);
   const pregunta = item?.pregunta || '';
   const btn      = document.getElementById('header-pdf-btn');
 
@@ -4417,7 +4648,7 @@ async function exportarPDF() {
     // Timeout global de 8s por si algo cuelga
     const b64 = await Promise.race([
       _generarPDFBase64(titulo, pregunta),
-      new Promise(r => setTimeout(() => r(null), 8000)),
+      new Promise(r => setTimeout(() => r(null), 18000)),
     ]);
     if (!b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
     const bytes = atob(b64);
@@ -4439,48 +4670,31 @@ async function exportarPDF() {
 function actualizarNavDashboards(dashboards) {
   const sel = document.getElementById('header-dash-select');
   if (!sel) return;
-  // Limpiar opciones menos la primera (placeholder)
   while (sel.options.length > 1) sel.remove(1);
-  if (!dashboards || !dashboards.length) {
-    sel.disabled = true;
-    return;
-  }
+  if (!dashboards || !dashboards.length) { sel.disabled = true; return; }
   dashboards.forEach(d => {
     const opt = document.createElement('option');
     opt.value = d.id;
-    opt.textContent = `📊 ${d.titulo || d.nombre || 'Dashboard'}`;
+    opt.dataset.hasPdf  = d.has_pdf ? '1' : '0';
+    opt.dataset.titulo  = d.titulo || 'Dashboard';
+    opt.textContent     = `📊 ${d.titulo || 'Dashboard'}`;
     sel.appendChild(opt);
   });
   sel.disabled = false;
 }
 
 function navegarDashHeader(sel) {
-  const id = parseInt(sel.value);
-  sel.value = '';   // Resetear para que pueda re-seleccionarse
+  const id  = parseInt(sel.value);
+  const opt = sel.options[sel.selectedIndex];
+  sel.value = '';
   if (!id) return;
-  // Buscar en historial local (ya cargado en sidebar de guardados)
-  const idx = _historial.findIndex(h => h.db_id === id || h.id === id);
-  if (idx >= 0) {
-    verDashHistorial(idx);
-    return;
-  }
-  // Si no está en historial, buscarlo en la lista global ya cargada
-  api('/api/datos/dashboards').then(data => {
-    const d = (data.dashboards || []).find(x => x.id === id);
-    if (!d) { mostrarToast('Dashboard no encontrado', 'error'); return; }
-    let datos;
-    try { datos = typeof d.datos_json === 'string' ? JSON.parse(d.datos_json) : d.datos_json; } catch { datos = {}; }
-    const entry = {
-      titulo: d.titulo, tipo: d.tipo, datos,
-      guardado: true, db_id: d.id, ts: Date.now(),
-    };
-    _historial.push(entry);
-    const newIdx = _historial.length - 1;
-    entry._idx = newIdx;
-    renderHistorialItem(entry, newIdx);
-    _actualizarContadorHist();
-    verDashHistorial(newIdx);
-  }).catch(e => mostrarToast('Error al cargar dashboard: ' + e.message, 'error'));
+  const titulo  = opt?.dataset.titulo || 'Reporte PDF';
+  const hasPdf  = opt?.dataset.hasPdf === '1';
+  if (hasPdf) { _abrirVisorPDF(id, titulo); return; }
+  // Fallback: dashboards antiguos sin PDF → buscar en historial local
+  const idx = _historial.findIndex(h => h.db_id === id);
+  if (idx >= 0) { verDashHistorial(idx); return; }
+  mostrarToast('Este reporte no tiene PDF adjunto', 'warn');
 }
 
 // Prompts IA por tipo de dashboard — la IA consulta el ERP y genera el análisis
@@ -4590,16 +4804,64 @@ function renderDashboard(spec) {
 
   // Gráfica dinámica generada por IA — renderizar iframe en área de dashboards
   if (spec.tipo === 'chart_dinamico') {
+    _iframeSnapshot = null;   // resetear snapshot anterior
     const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
-    iframe.srcdoc = spec.html || '';
-    iframe.style.cssText = 'width:100%;border:none;border-radius:12px;min-height:380px;display:block;';
-    iframe.onload = () => {
+    iframe.setAttribute('sandbox', 'allow-scripts');   // sin allow-same-origin evita bug Chrome
+    // Inyectar script de captura AL FINAL del HTML del iframe
+    // (después del inline script de Chart.js, para que el canvas ya exista)
+    // Altura mínima mientras carga
+    iframe.style.height = '440px';
+    const captureScript = `<script>(function(){
+  function dbg(msg){ window.parent.postMessage({__suiteDbg: msg},'*'); }
+  // Reportar altura del body para que el padre ajuste el iframe
+  function reportHeight() {
+    var h = document.body ? document.body.scrollHeight : 0;
+    if (h > 50) window.parent.postMessage({__suiteHeight: h}, '*');
+  }
+  function capture() {
+    var cvs = document.querySelector('canvas');
+    if (cvs && (cvs.width || cvs.offsetWidth)) {
+      var w = cvs.width || cvs.offsetWidth;
+      var h = cvs.height || cvs.offsetHeight;
       try {
-        const h = iframe.contentDocument?.body?.scrollHeight;
-        if (h && h > 100) iframe.style.height = Math.min(h + 32, 520) + 'px';
-      } catch {}
-    };
+        var png = cvs.toDataURL('image/png');
+        if (png && png.length > 400) {
+          window.parent.postMessage({__suiteChartImg: png, __w: w, __h: h}, '*');
+          reportHeight();
+          return true;
+        }
+      } catch(e) { dbg('canvas err:'+e.message); }
+    }
+    var svg = document.querySelector('svg');
+    if (svg) {
+      try {
+        var box = svg.getBoundingClientRect();
+        var w = Math.round(box.width) || svg.getAttribute('width') || 800;
+        var h = Math.round(box.height) || svg.getAttribute('height') || 400;
+        var xml = new XMLSerializer().serializeToString(svg);
+        var b64 = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+        window.parent.postMessage({__suiteChartImg: b64, __w: w, __h: h, __fmt: 'svg'}, '*');
+        reportHeight();
+        return true;
+      } catch(e) { dbg('svg err:'+e.message); }
+    }
+    dbg('no canvas, no svg. elems:' + document.body.children.length);
+    return false;
+  }
+  var attempts = 0;
+  function tryCapture() {
+    if (capture()) return;
+    if (++attempts < 20) setTimeout(tryCapture, 400);
+    else { dbg('timeout'); window.parent.postMessage({__suiteChartImg:null},'*'); }
+  }
+  window.addEventListener('message', function(e){ if(e.data&&e.data.__suiteCapture) tryCapture(); });
+  // Auto-capturar y reportar altura cuando el contenido esté listo
+  setTimeout(function(){ reportHeight(); tryCapture(); }, 1200);
+})()\x3c/script>`;
+    const rawHtml = spec.html || '';
+    iframe.srcdoc = rawHtml.includes('</body>')
+      ? rawHtml.replace('</body>', captureScript + '</body>')
+      : rawHtml + captureScript;
     contenido.appendChild(iframe);
     document.getElementById('dashboard-ia-narrativa').classList.add('hidden');
     wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -6179,74 +6441,17 @@ function renderMiniViz(idx) {
 
 async function guardarDashHistorial(idx) {
   const item = _historial[idx];
-  if (!item) { console.warn('[Guardar] idx inválido:', idx); return; }
+  if (!item) return;
   if (item.guardado) { mostrarToast('Este dashboard ya está guardado ✓', 'info'); return; }
-
-  const saveBtn = document.getElementById('header-save-btn');
-  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Guardando…'; }
-  console.log('[Guardar] guardando dashboard idx:', idx, 'titulo:', item.titulo);
-
-  // PASO 1 — guardar en DB inmediatamente (sin PDF)
-  let db_id = null;
-  try {
-    const res = await api('/api/datos/dashboards', {
-      method: 'POST',
-      body: JSON.stringify({
-        titulo:     item.titulo,
-        pregunta:   item.pregunta || '',
-        tipo:       item.tipo,
-        datos_json: item.datos,
-        pdf_b64:    '',
-      }),
-    });
-    db_id = res.id;
-    item.guardado = true;
-    item.db_id    = db_id;
-
-    const card = document.getElementById(`dash-item-${idx}`);
-    if (card) {
-      const actions = card.querySelector('.dash-hist-actions');
-      if (actions) {
-        const btn = actions.querySelector('[title="Guardar"]');
-        if (btn) btn.outerHTML = '<span class="dash-saved-badge">✓</span>';
-      }
-      const meta = document.getElementById(`dash-meta-${idx}`);
-      if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
-    }
-    console.log('[Guardar] guardado en DB, id:', db_id);
-    mostrarToast('Dashboard guardado ✓', 'success');
-    cargarNavDashboards();
-    cargarDashboardsGuardados();   // refrescar lista lateral de guardados
-    _syncHeaderSaveBtn();          // mostrar "✓ Guardado" en header
-  } catch (e) {
-    console.error('[Guardar] error POST:', e);
-    mostrarToast('Error al guardar: ' + e.message, 'error');
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
-    return;
-  } finally {
-    // El estado final del botón lo gestiona _syncHeaderSaveBtn
-    _syncHeaderSaveBtn();
-  }
-
-  // PASO 2 — generar PDF en background y actualizar el registro (sin bloquear UI)
-  if (!db_id) return;
   if (_activeDashIdx !== idx) verDashHistorial(idx);
-  await new Promise(r => setTimeout(r, 500));
-  try {
-    const pdf_b64 = await Promise.race([
-      _generarPDFBase64(item.titulo, item.pregunta || ''),
-      new Promise(r => setTimeout(() => r(null), 10000)),
-    ]) || '';
-    if (pdf_b64) {
-      await api(`/api/datos/dashboards/${db_id}/pdf`, {
-        method: 'PATCH',
-        body: JSON.stringify({ pdf_b64 }),
-      });
-      mostrarToast('PDF adjunto al dashboard ✓', 'success');
-    }
-  } catch (e) {
-    console.warn('[guardar] PDF background failed:', e);
-  }
+  await new Promise(r => setTimeout(r, 600));
+  await _guardarComoReporte({
+    titulo:   _tituloGuardado(),
+    tipo:     item.tipo,
+    pregunta: item.pregunta || '',
+    datos:    item.datos,
+    histIdx:  idx,
+  });
 }
 
 async function cargarNavDashboards() {
@@ -6297,6 +6502,8 @@ function eliminarDashHistorial(idx) {
 }
 
 async function cargarDashboardsGuardados() {
+  // Preservar _activeDashIdx — agregarAlHistorial lo sobreescribe en cada llamada
+  const prevActive = _activeDashIdx;
   try {
     const data = await api('/api/datos/dashboards');
     const dashes = (data.dashboards || []).slice().reverse();
@@ -6311,6 +6518,13 @@ async function cargarDashboardsGuardados() {
       });
     });
   } catch { /* ignore — BD vacía o error */ }
+  // Si había un dashboard activo antes de recargar, restaurarlo
+  // (evita que agregarAlHistorial sobreescriba _activeDashIdx)
+  // Si no había ninguno (carga inicial), dejar el último cargado activo
+  if (prevActive !== null) {
+    _activeDashIdx = prevActive;
+  }
+  _syncHeaderSaveBtn();
 }
 
 // ── Análisis IA personalizado desde sidebar ───────────────────────────────────
