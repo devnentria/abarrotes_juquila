@@ -337,86 +337,108 @@ function renderDashCardPWA(dash) {
   </div>`;
 }
 
+// ── Cargar PDF.js desde CDN (lazy, solo una vez) ─────────────────────────────
+async function _cargarPDFjs() {
+  if (window.pdfjsLib) return true;
+  try {
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return true;
+  } catch { return false; }
+}
+
 // ── Ver PDF de un dashboard guardado ─────────────────────────────────────────
 async function verPDFDashboard(id, titulo) {
   document.getElementById('pdf-pwa-modal')?.remove();
-
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const label = titulo || 'Reporte PDF';
+  const nombreArchivo = label.replace(/[^a-zA-Z0-9\s·\-]/g, '_') + '.pdf';
 
   const modal = document.createElement('div');
   modal.id = 'pdf-pwa-modal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;background:var(--bg)';
-
   modal.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0">
       <button id="pdf-pwa-close"
-              style="min-width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+              style="min-width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:20px;cursor:pointer;flex-shrink:0">
         ‹
       </button>
       <span style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${label}</span>
+      <a id="pdf-pwa-dl" style="display:none;font-size:12px;font-weight:600;color:#fff;background:#00897B;border-radius:8px;padding:7px 13px;text-decoration:none;white-space:nowrap;flex-shrink:0">
+        ⬇ Descargar
+      </a>
     </div>
-    <div id="pdf-pwa-body" style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-soft);font-size:14px">
-      <div style="text-align:center">
-        <div class="spinner" style="margin:0 auto 12px"></div>
-        Cargando PDF…
+    <div id="pdf-pwa-body" style="flex:1;overflow-y:auto;background:#525659;display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px">
+      <div style="color:#fff;font-size:14px;display:flex;align-items:center;gap:10px;padding-top:40px">
+        <div class="spinner"></div> Cargando PDF…
       </div>
     </div>`;
-
   document.body.appendChild(modal);
 
-  const closeBtn = document.getElementById('pdf-pwa-close');
   let blobUrl = null;
   const cerrar = () => { if (blobUrl) URL.revokeObjectURL(blobUrl); modal.remove(); };
-  closeBtn.onclick = cerrar;
+  document.getElementById('pdf-pwa-close').onclick = cerrar;
 
   try {
     const res = await authFetch(`/api/dashboards/${id}/pdf`);
     if (!res.ok) throw new Error('PDF no disponible');
-    const blob = await res.blob();
-    blobUrl = URL.createObjectURL(blob);
+    const arrayBuffer = await res.arrayBuffer();
+
+    // Blob URL para descarga
+    blobUrl = URL.createObjectURL(new Blob([arrayBuffer], { type: 'application/pdf' }));
+    const dlBtn = document.getElementById('pdf-pwa-dl');
+    if (dlBtn) { dlBtn.href = blobUrl; dlBtn.download = nombreArchivo; dlBtn.style.display = ''; }
+
     const body = document.getElementById('pdf-pwa-body');
     if (!body) return;
 
-    const nombreArchivo = (label).replace(/[^a-zA-Z0-9\s·\-]/g, '_') + '.pdf';
+    // Intentar renderizar con PDF.js
+    const pdfOk = await _cargarPDFjs();
+    if (!pdfOk) throw new Error('PDF.js no disponible');
 
-    if (isMobile) {
-      // Móvil (iOS + Android) no renderiza PDFs en iframe blob — mostrar botones de acción
-      body.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 24px';
+    const pdfDoc = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    body.innerHTML = '';  // quitar spinner
+
+    const dpr    = Math.min(window.devicePixelRatio || 1, 2);
+    const maxPxW = body.clientWidth - 24;  // ancho disponible en px
+
+    for (let pn = 1; pn <= pdfDoc.numPages; pn++) {
+      const page = await pdfDoc.getPage(pn);
+      // Escala para que la página quepa en el ancho disponible
+      const vp0   = page.getViewport({ scale: 1 });
+      const scale = (maxPxW / vp0.width) * dpr;
+      const vp    = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = vp.width;
+      canvas.height = vp.height;
+      canvas.style.cssText = `width:${vp.width / dpr}px;max-width:100%;border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.5);background:#fff`;
+
+      body.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch {
+    const body = document.getElementById('pdf-pwa-body');
+    // Fallback: botones si PDF.js falla (sin red para CDN, etc.)
+    if (body && blobUrl) {
+      body.style.cssText = 'flex:1;overflow-y:auto;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 24px';
       body.innerHTML = `
-        <div style="font-size:48px;margin-bottom:8px">📄</div>
+        <div style="font-size:48px">📄</div>
         <p style="font-size:14px;color:var(--text-soft);text-align:center;margin:0">
-          Abre el PDF con el visor de tu dispositivo
+          PDF listo — ábrelo con el visor de tu dispositivo
         </p>
         <a href="${blobUrl}" target="_blank" rel="noopener"
            style="display:block;width:100%;max-width:280px;text-align:center;padding:14px;border-radius:12px;background:var(--blue-mid);color:#fff;font-size:15px;font-weight:700;text-decoration:none">
           📂 Abrir PDF
-        </a>
-        <a href="${blobUrl}" download="${nombreArchivo}"
-           style="display:block;width:100%;max-width:280px;text-align:center;padding:14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;font-weight:600;text-decoration:none">
-          ⬇ Descargar
         </a>`;
-    } else {
-      // Android / desktop — iframe funciona bien
-      body.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0';
-      body.innerHTML = `
-        <div style="background:var(--surface-2,#2d3748);padding:8px 14px;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0">
-          <a href="${blobUrl}" download="${nombreArchivo}"
-             style="font-size:12px;font-weight:600;color:#fff;background:#00897B;border-radius:8px;padding:6px 14px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-            ⬇ Descargar
-          </a>
-        </div>
-        <iframe src="${blobUrl}#toolbar=1&view=FitH"
-                style="flex:1;border:none;min-height:0;width:100%"
-                title="PDF"></iframe>`;
+    } else if (body) {
+      body.innerHTML = `<div style="color:#fff;text-align:center;padding:40px">⚠️ No se pudo cargar el PDF</div>`;
     }
-  } catch {
-    const body = document.getElementById('pdf-pwa-body');
-    if (body) body.innerHTML = `
-      <div style="text-align:center;padding:32px;color:var(--text-soft)">
-        <div style="font-size:36px;margin-bottom:12px">⚠️</div>
-        <p>No se pudo cargar el PDF</p>
-      </div>`;
   }
 }
 
