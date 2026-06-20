@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
-from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT
+from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente import feedback as _feedback
@@ -200,10 +200,10 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
 
     execute(
         "UPDATE usuarios SET "
-        "consultas_ia   = consultas_ia + 1, "
-        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1.0, 2), "
+        "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
         "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
-        (costo_usd, usuario_id),
+        (IA_RATIO_PWA, IA_RATIO_PWA, costo_usd, usuario_id),
     )
 
     execute(

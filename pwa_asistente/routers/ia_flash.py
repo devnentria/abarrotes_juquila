@@ -26,7 +26,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
-from shared.config import IA_FLASH_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, OPENAI_API_KEY
+from shared.config import IA_FLASH_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA, OPENAI_API_KEY
 from shared.database import query, hoy
 from shared.database_local import execute as execute_local, verificar_mes_ia
 from shared import cache_dashboard as _cache
@@ -77,9 +77,11 @@ def _registrar_costo(usuario_id: int, costo_usd: float, sumar_consulta: bool = F
     verificar_mes_ia(usuario_id, date.today().strftime("%Y-%m"))
     if sumar_consulta:
         execute_local(
-            "UPDATE usuarios SET consultas_ia = consultas_ia + 1, "
-            "    costo_ia_usd = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
-            (costo_usd, usuario_id),
+            "UPDATE usuarios SET "
+            "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
+            "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
+            "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+            (IA_RATIO_PWA, IA_RATIO_PWA, costo_usd, usuario_id),
         )
     else:
         execute_local(
