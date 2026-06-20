@@ -1756,6 +1756,24 @@
           <input type="text" id="perfil-nombre" placeholder="Tu nombre">
         </div>
 
+        <!-- Usuario (email, solo lectura) -->
+        <div class="field">
+          <label>Usuario</label>
+          <input type="text" id="perfil-email" readonly
+                 style="background:var(--bg-secondary);color:var(--text-dim);cursor:default">
+        </div>
+
+        <!-- Consultas IA -->
+        <div class="field">
+          <label>Consultas IA</label>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;background:var(--bg-secondary);border-radius:6px;height:8px;overflow:hidden">
+              <div id="perfil-ia-barra" style="height:100%;background:var(--accent);border-radius:6px;transition:width .3s"></div>
+            </div>
+            <span id="perfil-ia-texto" style="font-size:13px;color:var(--text-dim);white-space:nowrap"></span>
+          </div>
+        </div>
+
         <!-- Modo oscuro -->
         <div class="theme-toggle">
           <div style="display:flex;align-items:center;gap:10px">
@@ -2057,6 +2075,18 @@ function abrirModalPerfil() {
   cerrarMenu();
   _fotoPendiente = null;
   document.getElementById('perfil-nombre').value = _usuario.nombre;
+  document.getElementById('perfil-email').value   = _usuario.email || '';
+
+  // Consultas IA
+  const usadas  = _usuario.consultas_ia  || 0;
+  const limite  = _usuario.limite_ia     || 700;
+  const ilimitado = limite === 0;
+  const pct = ilimitado ? 0 : Math.min(100, Math.round(usadas / limite * 100));
+  document.getElementById('perfil-ia-barra').style.width = ilimitado ? '0%' : pct + '%';
+  document.getElementById('perfil-ia-texto').textContent  = ilimitado
+    ? `${usadas} / ∞`
+    : `${usadas} / ${limite}`;
+
   const prev = document.getElementById('perfil-avatar-preview');
   renderAvatar(prev, _usuario.nombre, _usuario.foto_perfil);
 
