@@ -63,25 +63,27 @@ def _flash(prompt: str) -> tuple[str, float]:
     return texto, costo
 
 
-def _registrar_costo(usuario_id: int, costo_usd: float, sumar_consulta: bool = False) -> None:
+def _registrar_costo(usuario_id: int, costo_usd: float, ratio: float = 0.0) -> None:
     """
-    Acumula el costo real de tokens en el usuario.
+    Acumula costo de tokens y descuenta créditos al usuario.
 
     Args:
-        usuario_id     (int):   ID del usuario (0 = cron/sistema, se ignora).
-        costo_usd      (float): Costo real calculado con tokens del modelo.
-        sumar_consulta (bool):  Si True, también incrementa consultas_ia (+1 cuota del cliente).
+        usuario_id (int):   ID del usuario (0 = cron/sistema, se ignora).
+        costo_usd  (float): Costo real en USD.
+        ratio      (float): Créditos a descontar. 0 = solo registra costo sin contar consulta.
+                            1.0 = primer click (flash sin regenerar).
+                            IA_RATIO_PWA = regenerar (doble).
     """
     if usuario_id == 0:
         return  # Llamada del cron — no hay usuario real que actualizar
     verificar_mes_ia(usuario_id, date.today().strftime("%Y-%m"))
-    if sumar_consulta:
+    if ratio > 0:
         execute_local(
             "UPDATE usuarios SET "
             "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
             "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
             "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
-            (IA_RATIO_PWA, IA_RATIO_PWA, costo_usd, usuario_id),
+            (ratio, ratio, costo_usd, usuario_id),
         )
     else:
         execute_local(
@@ -191,7 +193,7 @@ def ia_sucursal(
 
     texto, costo = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
-    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
+    _registrar_costo(usuario["id"], costo, ratio=IA_RATIO_PWA if regenerar else 1.0)
     return JSONResponse({"texto": texto})
 
 
@@ -271,7 +273,7 @@ def ia_inventario(
 
     texto, costo = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
-    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
+    _registrar_costo(usuario["id"], costo, ratio=IA_RATIO_PWA if regenerar else 1.0)
     return JSONResponse({"texto": texto})
 
 
@@ -369,7 +371,7 @@ def ia_medicos(
         )
 
     texto, costo = _flash(prompt)
-    _registrar_costo(usuario["id"], costo, sumar_consulta=regenerar)
+    _registrar_costo(usuario["id"], costo, ratio=IA_RATIO_PWA if regenerar else 1.0)
     return JSONResponse({"texto": texto})
 
 
