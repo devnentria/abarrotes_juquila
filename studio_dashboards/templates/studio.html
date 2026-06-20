@@ -2398,6 +2398,56 @@ async function _scEnviar() {
   _scAddTyping();
 
   try {
+    // ── Cambio de período en tab activo (médicos / vendedores) ───────────────
+    // Si ya estamos en uno de esos tabs y el mensaje menciona un mes u otro período,
+    // recargamos directamente sin llamar al backend.
+    const _TABS_CON_PERIODO = ['medicos', 'vendedores'];
+    if (_TABS_CON_PERIODO.includes(_currentTab)) {
+      const _mesesMapPer = {
+        enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,
+        julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12
+      };
+      const _mesRefMatch = texto.toLowerCase().match(/\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b/);
+      const _pide30dPer  = /\b(30\s*d[ií]as?|[uú]ltimos?\s*30|treinta\s*d[ií]as?)\b/i.test(texto);
+      const _pideMesPer  = /\b(mes\s+actual|este\s+mes)\b/i.test(texto);
+      if (_mesRefMatch || _pide30dPer || _pideMesPer) {
+        const _applyPeriodo = (setMes, setModo, mesInput, cargar, tabNombre) => {
+          if (_mesRefMatch) {
+            const numMes  = _mesesMapPer[_mesRefMatch[1]];
+            const anioM   = texto.match(/\b(20\d{2})\b/);
+            const anio    = anioM ? parseInt(anioM[1]) : new Date().getFullYear();
+            setMes(`${anio}-${String(numMes).padStart(2,'0')}`);
+            const inp = document.getElementById(mesInput);
+            if (inp) inp.value = `${anio}-${String(numMes).padStart(2,'0')}`;
+          } else if (_pide30dPer) {
+            setModo('30d');
+          } else {
+            setModo('mes');
+          }
+          _scRemoveTyping();
+          const label = _mesRefMatch ? `mes de ${_mesRefMatch[1]}` : (_pide30dPer ? 'últimos 30 días' : 'mes actual');
+          _scAddBubble(`Actualizando dashboard de **${tabNombre}** — ${label}.`, 'bot');
+          _mostrarOverlayGenerando(_currentTab);
+          cargar();
+        };
+        if (_currentTab === 'medicos') {
+          _applyPeriodo(
+            v => { _medMes = v; _medModo = ''; },
+            m => { _medModo = m; _medMes = null; },
+            'med-mes-input', cargarMedicos, 'Médicos'
+          );
+          return;
+        } else if (_currentTab === 'vendedores') {
+          _applyPeriodo(
+            v => { _vendMes = v; _vendModo = ''; },
+            m => { _vendModo = m; _vendMes = null; },
+            'vend-mes-input', cargarVendedores, 'Vendedores'
+          );
+          return;
+        }
+      }
+    }
+
     // Zonas → navegar directamente sin llamar al backend
     const _zonasHint = /\b(zona[s]?|cobertura|geogr[aá]f|regi[oó]n|regiones|distribuci[oó]n.*sucursal|sucursal.*distribuci[oó]n|d[oó]nde.*vende|vende.*d[oó]nde)\b/i.test(texto);
     if (_zonasHint) {
