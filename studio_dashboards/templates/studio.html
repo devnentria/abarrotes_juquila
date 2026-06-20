@@ -4595,12 +4595,9 @@ async function _generarPDFBase64(titulo, pregunta) {
   }
 
   // Gráfica
-  const availH = PH - yImg - 10;
   const availW = PW - 16;
   const w = _iw, h = _ih;
-  const ratio  = w / (h || 1);
-  let imgW = availW, imgH = imgW / ratio;
-  if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
+
   // Si es SVG, convertir a PNG via Image+Canvas antes de agregar a jsPDF
   let finalImg = imgData;
   if (imgData.startsWith('data:image/svg+xml')) {
@@ -4619,15 +4616,80 @@ async function _generarPDFBase64(titulo, pregunta) {
     });
   }
   const fmt = finalImg.startsWith('data:image/jpeg') ? 'JPEG' : 'PNG';
-  console.log('[PDF] addImage fmt:', fmt, 'dims:', Math.round(imgW), 'x', Math.round(imgH), 'y:', Math.round(yImg));
-  try { doc.addImage(finalImg, fmt, (PW - imgW) / 2, yImg, imgW, imgH); console.log('[PDF] addImage OK'); }
-  catch (e) { console.error('[PDF] addImage ERROR:', e); }
 
-  // Pie
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+  const imgW    = availW;
+  const mmPerPx = imgW / (w || 1);       // mm por píxel horizontal
+  const imgH    = h * mmPerPx;           // alto total en mm si se pone al ancho completo
+  const availH  = PH - yImg - 10;        // espacio disponible en la primera página
+
+  const _addFooter = () => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+  };
+
+  if (imgH <= availH) {
+    // Una sola página — cabe perfectamente
+    console.log('[PDF] addImage (1 pág) fmt:', fmt, 'dims:', Math.round(imgW), 'x', Math.round(imgH));
+    try { doc.addImage(finalImg, fmt, (PW - imgW) / 2, yImg, imgW, imgH); }
+    catch (e) { console.error('[PDF] addImage ERROR:', e); }
+    _addFooter();
+  } else {
+    // Multi-página: cortar la imagen en franjas verticales
+    console.log('[PDF] Multi-página, imgH=', Math.round(imgH), 'mm, availH=', Math.round(availH));
+    const srcCanvas = document.createElement('canvas');
+    srcCanvas.width = w; srcCanvas.height = h;
+    const srcCtx = srcCanvas.getContext('2d');
+    const tmpImg = new Image();
+    await new Promise(r => { tmpImg.onload = r; tmpImg.onerror = r; tmpImg.src = finalImg; });
+    srcCtx.fillStyle = '#ffffff';
+    srcCtx.fillRect(0, 0, w, h);
+    srcCtx.drawImage(tmpImg, 0, 0);
+
+    // Alturas disponibles: primera página (menor, ya tiene encabezado), resto (más espacio)
+    const subPageAvailH = PH - 14;  // páginas 2+ tienen mini-encabezado de 10mm + margen inferior
+    const firstPxH  = Math.floor(availH / mmPerPx);
+    const subPxH    = Math.floor(subPageAvailH / mmPerPx);
+
+    let srcY = 0, pageIdx = 0;
+    while (srcY < h && pageIdx < 12) {
+      const maxPxH  = pageIdx === 0 ? firstPxH : subPxH;
+      const slicePx = Math.min(maxPxH, h - srcY);
+      if (slicePx <= 0) break;
+
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = w; sliceCanvas.height = slicePx;
+      const sliceCtx = sliceCanvas.getContext('2d');
+      sliceCtx.fillStyle = '#ffffff';
+      sliceCtx.fillRect(0, 0, w, slicePx);
+      sliceCtx.drawImage(srcCanvas, 0, srcY, w, slicePx, 0, 0, w, slicePx);
+
+      const sliceData  = sliceCanvas.toDataURL('image/jpeg', 0.88);
+      const sliceH_mm  = slicePx * mmPerPx;
+      const yPos       = pageIdx === 0 ? yImg : 12;
+
+      if (pageIdx > 0) {
+        doc.addPage();
+        // Mini-encabezado en páginas 2+
+        doc.setFillColor(26, 43, 90);
+        doc.rect(0, 0, PW, 10, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(255, 255, 255);
+        const t = titulo.length > 70 ? titulo.slice(0, 67) + '…' : titulo;
+        doc.text(t, PW / 2, 6.5, { align: 'center' });
+      }
+
+      try { doc.addImage(sliceData, 'JPEG', (PW - imgW) / 2, yPos, imgW, sliceH_mm); }
+      catch (e) { console.error('[PDF] slice addImage ERROR:', e); }
+
+      _addFooter();
+      srcY += slicePx;
+      pageIdx++;
+    }
+    console.log('[PDF] Multi-página OK:', pageIdx, 'páginas');
+  }
 
   console.log('[PDF] PDF generado OK');
   return doc.output('datauristring').split(',')[1];

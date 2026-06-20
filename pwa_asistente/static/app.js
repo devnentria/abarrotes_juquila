@@ -312,17 +312,24 @@ function renderDashCardPWA(dash) {
     chart_dinamico: 'Gráfica IA',
   }[tipo] || tipo;
 
-  // Botón PDF si el dashboard tiene PDF guardado
+  // Si tiene PDF guardado, mostrar solo miniatura de tipo — no datos raw
   const pdfBtn = dash.has_pdf
     ? `<button class="dash-pwa-pdf-btn" data-pdf-id="${dash.id}" data-pdf-titulo="${(dash.titulo||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}" onclick="verPDFDashboard(+this.dataset.pdfId,this.dataset.pdfTitulo)" title="Ver PDF">📄 Ver PDF</button>`
     : '';
+
+  const bodyHtml = dash.has_pdf
+    ? `<div class="dash-pwa-pdf-preview">
+        <span class="dash-pwa-pdf-icon">📊</span>
+        <span class="dash-pwa-pdf-label">${tipoLabel !== tipo ? tipoLabel : 'Dashboard'} guardado</span>
+      </div>`
+    : (vizHtml || '');
 
   return `<div class="dash-pwa-card card-item">
     <div class="dash-pwa-header">
       <span class="dash-pwa-titulo">${dash.titulo}</span>
       <span class="dash-pwa-tipo">${tipoLabel}</span>
     </div>
-    ${vizHtml || (dash.has_pdf ? '<div class="dash-pwa-pdf-hint">Toca "Ver PDF" para visualizar esta gráfica</div>' : '')}
+    ${bodyHtml}
     <div class="dash-pwa-footer">
       <span class="dash-pwa-fecha">${fechaStr}</span>
       ${pdfBtn}
@@ -334,7 +341,7 @@ function renderDashCardPWA(dash) {
 async function verPDFDashboard(id, titulo) {
   document.getElementById('pdf-pwa-modal')?.remove();
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const label = titulo || 'Reporte PDF';
 
   const modal = document.createElement('div');
@@ -373,13 +380,13 @@ async function verPDFDashboard(id, titulo) {
 
     const nombreArchivo = (label).replace(/[^a-zA-Z0-9\s·\-]/g, '_') + '.pdf';
 
-    if (isIOS) {
-      // iOS no puede mostrar PDFs en iframe — mostrar botones de acción
+    if (isMobile) {
+      // Móvil (iOS + Android) no renderiza PDFs en iframe blob — mostrar botones de acción
       body.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px 24px';
       body.innerHTML = `
         <div style="font-size:48px;margin-bottom:8px">📄</div>
         <p style="font-size:14px;color:var(--text-soft);text-align:center;margin:0">
-          En iPhone/iPad abre el PDF con el visor nativo
+          Abre el PDF con el visor de tu dispositivo
         </p>
         <a href="${blobUrl}" target="_blank" rel="noopener"
            style="display:block;width:100%;max-width:280px;text-align:center;padding:14px;border-radius:12px;background:var(--blue-mid);color:#fff;font-size:15px;font-weight:700;text-decoration:none">

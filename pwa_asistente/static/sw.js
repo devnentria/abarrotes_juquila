@@ -9,7 +9,7 @@
  * El usuario no nota que existe — solo nota que la app es rápida.
  */
 
-const CACHE_NAME = 'suite-analitica-v62';
+const CACHE_NAME = 'suite-analitica-v63';
 
 // Derivar el prefijo de ruta según dónde está instalado el SW
 // Local: self.location = http://localhost:8001/sw.js → BASE = ''
