@@ -4263,25 +4263,44 @@ async function _capturarImagen() {
   });
 }
 
+function _b64FromCanvas(imgData) {
+  // Obtener dimensiones reales del canvas para calcular ratio sin colgar
+  const tmp = document.createElement('img');
+  tmp.src = imgData;
+  const w = tmp.naturalWidth  || 800;
+  const h = tmp.naturalHeight || 400;
+  return { w, h };
+}
+
 async function _generarPDFBase64(titulo, pregunta) {
-  if (!window.jspdf) return null;
+  if (!window.jspdf) { console.warn('[PDF] jsPDF no cargado'); return null; }
   const { jsPDF } = window.jspdf;
 
   const imgData = await _capturarImagen();
-  if (!imgData) return null;
+  if (!imgData) { console.warn('[PDF] sin imagen'); return null; }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const PW  = doc.internal.pageSize.getWidth();
   const PH  = doc.internal.pageSize.getHeight();
 
-  // Logo esquina superior izquierda (sin fondo)
+  // Logo — con timeout de 3s para el fetch
   try {
-    const buf  = await (await fetch('/static/logo_transparente.png')).arrayBuffer();
-    const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
-    doc.addImage('data:image/png;base64,' + b64, 'PNG', 8, 6, 36, 14);
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 3000);
+    const resp = await fetch('/static/logo_transparente.png', { signal: ctrl.signal });
+    clearTimeout(tid);
+    const buf  = await resp.arrayBuffer();
+    // Usar FileReader en lugar de spread para evitar stack overflow en PNGs grandes
+    const b64logo = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload  = () => res(fr.result.split(',')[1]);
+      fr.onerror = rej;
+      fr.readAsDataURL(new Blob([buf]));
+    });
+    doc.addImage('data:image/png;base64,' + b64logo, 'PNG', 8, 6, 36, 14);
   } catch {}
 
-  // Título en azul marino, alineado a la derecha
+  // Título
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(26, 43, 90);
@@ -4292,10 +4311,10 @@ async function _generarPDFBase64(titulo, pregunta) {
   doc.setLineWidth(0.4);
   doc.line(8, 22, PW - 8, 22);
 
-  // Metadatos en una sola fila
-  const ahora   = new Date();
-  const genPor  = _usuario ? _usuario.nombre : 'Usuario';
-  const metas   = [
+  // Metadatos
+  const ahora  = new Date();
+  const genPor = _usuario ? _usuario.nombre : 'Usuario';
+  const metas  = [
     `Generado por: ${genPor}`,
     `Fecha: ${ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}`,
     `Hora: ${ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
@@ -4322,12 +4341,11 @@ async function _generarPDFBase64(titulo, pregunta) {
     yImg += 2;
   }
 
-  // Gráfica centrada
+  // Gráfica — usar dimensiones sin await Image (evita cuelgue)
   const availH = PH - yImg - 10;
   const availW = PW - 16;
-  const tmp    = new Image();
-  await new Promise(r => { tmp.onload = r; tmp.src = imgData; });
-  const ratio  = tmp.naturalWidth / tmp.naturalHeight;
+  const { w, h } = _b64FromCanvas(imgData);
+  const ratio  = w / (h || 1);
   let imgW = availW, imgH = imgW / ratio;
   if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
   doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH);
@@ -4350,17 +4368,20 @@ async function exportarPDF() {
 
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
   try {
-    const b64 = await _generarPDFBase64(titulo, pregunta);
-    if (!b64) { mostrarToast('No se pudo capturar la gráfica', 'error'); return; }
+    // Timeout global de 12s por si algo cuelga
+    const b64 = await Promise.race([
+      _generarPDFBase64(titulo, pregunta),
+      new Promise(r => setTimeout(() => r(null), 12000)),
+    ]);
+    if (!b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
     const bytes = atob(b64);
     const arr   = new Uint8Array(bytes.length);
     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
-    const a   = Object.assign(document.createElement('a'), {
+    Object.assign(document.createElement('a'), {
       href: url,
       download: `${titulo.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)}.pdf`,
-    });
-    a.click();
+    }).click();
     URL.revokeObjectURL(url);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
