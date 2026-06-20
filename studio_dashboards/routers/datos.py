@@ -2458,6 +2458,20 @@ def obtener_pdf_dashboard(dashboard_id: int, usuario=Depends(get_current_user)):
     )
 
 
+class PdfUpdate(BaseModel):
+    pdf_b64: str = ""
+
+
+@router.patch("/dashboards/{dashboard_id}/pdf")
+def actualizar_pdf_dashboard(dashboard_id: int, body: PdfUpdate, usuario=Depends(get_current_user)):
+    """Actualiza el PDF de un dashboard ya guardado."""
+    dash = fetch_one("SELECT id FROM dashboards WHERE id=? AND guardado=1", (dashboard_id,))
+    if not dash:
+        raise HTTPException(404, "Dashboard no encontrado")
+    execute("UPDATE dashboards SET pdf_b64=? WHERE id=?", (body.pdf_b64, dashboard_id))
+    return JSONResponse({"ok": True})
+
+
 @router.delete("/dashboards/{dashboard_id}")
 def eliminar_dashboard(dashboard_id: int, usuario=Depends(get_current_user)):
     """Elimina un dashboard guardado."""

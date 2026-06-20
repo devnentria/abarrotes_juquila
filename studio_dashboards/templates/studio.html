@@ -6104,23 +6104,11 @@ async function guardarDashHistorial(idx) {
   const item = _historial[idx];
   if (!item || item.guardado) return;
 
-  // Si no es el dashboard activo visible, mostrarlo primero para capturarlo
-  if (_activeDashIdx !== idx) verDashHistorial(idx);
+  const saveBtn = document.getElementById('header-save-btn');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Guardando…'; }
 
-  // Pequeña pausa para que el DOM se pinte antes de capturar
-  await new Promise(r => setTimeout(r, 300));
-
-  // Generar PDF con timeout de 12s — si falla se guarda sin PDF
-  let pdf_b64 = '';
-  try {
-    pdf_b64 = await Promise.race([
-      _generarPDFBase64(item.titulo, item.pregunta || ''),
-      new Promise(r => setTimeout(() => r(null), 12000)),
-    ]) || '';
-  } catch (e) {
-    console.warn('[guardar] PDF generation failed:', e);
-  }
-
+  // PASO 1 — guardar en DB inmediatamente (sin PDF)
+  let db_id = null;
   try {
     const res = await api('/api/datos/dashboards', {
       method: 'POST',
@@ -6129,25 +6117,51 @@ async function guardarDashHistorial(idx) {
         pregunta:   item.pregunta || '',
         tipo:       item.tipo,
         datos_json: item.datos,
-        pdf_b64,
+        pdf_b64:    '',
       }),
     });
+    db_id = res.id;
     item.guardado = true;
-    item.db_id    = res.id;
+    item.db_id    = db_id;
+
     const card = document.getElementById(`dash-item-${idx}`);
     if (card) {
       const actions = card.querySelector('.dash-hist-actions');
       if (actions) {
-        const saveBtn = actions.querySelector('[title="Guardar"]');
-        if (saveBtn) saveBtn.outerHTML = '<span class="dash-saved-badge">✓</span>';
+        const btn = actions.querySelector('[title="Guardar"]');
+        if (btn) btn.outerHTML = '<span class="dash-saved-badge">✓</span>';
       }
       const meta = document.getElementById(`dash-meta-${idx}`);
       if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
     }
-    mostrarToast(pdf_b64 ? 'Dashboard guardado con PDF ✓' : 'Dashboard guardado', 'success');
+    mostrarToast('Dashboard guardado ✓', 'success');
     cargarNavDashboards();
   } catch (e) {
     mostrarToast('Error al guardar: ' + e.message, 'error');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
+    return;
+  } finally {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
+  }
+
+  // PASO 2 — generar PDF en background y actualizar el registro (sin bloquear UI)
+  if (!db_id) return;
+  if (_activeDashIdx !== idx) verDashHistorial(idx);
+  await new Promise(r => setTimeout(r, 500));
+  try {
+    const pdf_b64 = await Promise.race([
+      _generarPDFBase64(item.titulo, item.pregunta || ''),
+      new Promise(r => setTimeout(() => r(null), 10000)),
+    ]) || '';
+    if (pdf_b64) {
+      await api(`/api/datos/dashboards/${db_id}/pdf`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pdf_b64 }),
+      });
+      mostrarToast('PDF adjunto al dashboard ✓', 'success');
+    }
+  } catch (e) {
+    console.warn('[guardar] PDF background failed:', e);
   }
 }
 
