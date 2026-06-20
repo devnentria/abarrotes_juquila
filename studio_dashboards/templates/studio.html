@@ -1858,6 +1858,7 @@ function debeUsarPWA() {
 // ── Verificar acceso al cargar ────────────────────────────────────────────────
 let _usuario = null;
 let _resetEquipoId = null;
+let _logoCached = null;   // logo pre-cargado en base64 para PDF
 
 (async () => {
   const t = getToken();
@@ -1875,11 +1876,33 @@ let _resetEquipoId = null;
     cargarDashboardsGuardados();
     cargarNavDashboards();
     if (_usuario.debe_cambiar_password) _forzarModalPassword();
+    // Pre-cargar logo para PDF (sin bloquear el inicio)
+    _precargarLogo();
   } catch {
     clearToken();
     mostrarLogin();
   }
 })();
+
+async function _precargarLogo() {
+  try {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 4000);
+    const resp = await fetch('/static/logo_transparente.png', { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!resp.ok) return;
+    const buf = await resp.arrayBuffer();
+    _logoCached = await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onload  = () => res(fr.result);         // data:image/png;base64,...
+      fr.onerror = rej;
+      fr.readAsDataURL(new Blob([buf]));
+    });
+    console.log('[Studio] logo pre-cargado para PDF');
+  } catch (e) {
+    console.warn('[Studio] logo no disponible:', e.message);
+  }
+}
 
 // ── Render header ─────────────────────────────────────────────────────────────
 function renderHeader() {
@@ -4273,32 +4296,23 @@ function _b64FromCanvas(imgData) {
 }
 
 async function _generarPDFBase64(titulo, pregunta) {
-  if (!window.jspdf) { console.warn('[PDF] jsPDF no cargado'); return null; }
+  console.log('[PDF] _generarPDFBase64 inicio');
+  if (!window.jspdf) { console.warn('[PDF] jsPDF no cargado — CDN bloqueado?'); return null; }
   const { jsPDF } = window.jspdf;
 
+  console.log('[PDF] capturando imagen…');
   const imgData = await _capturarImagen();
-  if (!imgData) { console.warn('[PDF] sin imagen'); return null; }
+  console.log('[PDF] imagen:', imgData ? `OK (${imgData.length} chars)` : 'null');
+  if (!imgData) { console.warn('[PDF] sin imagen — abortando'); return null; }
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const PW  = doc.internal.pageSize.getWidth();
   const PH  = doc.internal.pageSize.getHeight();
 
-  // Logo — con timeout de 3s para el fetch
-  try {
-    const ctrl = new AbortController();
-    const tid  = setTimeout(() => ctrl.abort(), 3000);
-    const resp = await fetch('/static/logo_transparente.png', { signal: ctrl.signal });
-    clearTimeout(tid);
-    const buf  = await resp.arrayBuffer();
-    // Usar FileReader en lugar de spread para evitar stack overflow en PNGs grandes
-    const b64logo = await new Promise((res, rej) => {
-      const fr = new FileReader();
-      fr.onload  = () => res(fr.result.split(',')[1]);
-      fr.onerror = rej;
-      fr.readAsDataURL(new Blob([buf]));
-    });
-    doc.addImage('data:image/png;base64,' + b64logo, 'PNG', 8, 6, 36, 14);
-  } catch {}
+  // Logo — usar el pre-cargado (no fetch en tiempo de generación)
+  if (_logoCached) {
+    try { doc.addImage(_logoCached, 'PNG', 8, 6, 36, 14); } catch {}
+  }
 
   // Título
   doc.setFont('helvetica', 'bold');
@@ -4348,7 +4362,7 @@ async function _generarPDFBase64(titulo, pregunta) {
   const ratio  = w / (h || 1);
   let imgW = availW, imgH = imgW / ratio;
   if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
-  doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH);
+  try { doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH); } catch (e) { console.warn('[PDF] addImage error:', e); }
 
   // Pie
   doc.setFont('helvetica', 'normal');
@@ -4356,6 +4370,7 @@ async function _generarPDFBase64(titulo, pregunta) {
   doc.setTextColor(148, 163, 184);
   doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
 
+  console.log('[PDF] PDF generado OK');
   return doc.output('datauristring').split(',')[1];
 }
 
@@ -4367,11 +4382,12 @@ async function exportarPDF() {
   const btn      = document.getElementById('header-pdf-btn');
 
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
+  console.log('[PDF] exportarPDF llamado, titulo:', titulo);
   try {
-    // Timeout global de 12s por si algo cuelga
+    // Timeout global de 8s por si algo cuelga
     const b64 = await Promise.race([
       _generarPDFBase64(titulo, pregunta),
-      new Promise(r => setTimeout(() => r(null), 12000)),
+      new Promise(r => setTimeout(() => r(null), 8000)),
     ]);
     if (!b64) { mostrarToast('No se pudo generar el PDF', 'error'); return; }
     const bytes = atob(b64);
@@ -4384,6 +4400,7 @@ async function exportarPDF() {
     }).click();
     URL.revokeObjectURL(url);
   } finally {
+    console.log('[PDF] finally — restaurando botón');
     if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
   }
 }
