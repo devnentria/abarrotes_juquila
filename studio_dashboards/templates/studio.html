@@ -4236,9 +4236,19 @@ function toggleSidebar() {
 
 // ── Sinc botones guardar / pdf en header ─────────────────────────────────────
 function _syncHeaderSaveBtn() {
-  const disabled = _activeDashIdx === null;
-  document.getElementById('header-save-btn').disabled = disabled;
-  document.getElementById('header-pdf-btn').disabled  = disabled;
+  const item     = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const saveBtn  = document.getElementById('header-save-btn');
+  const pdfBtn   = document.getElementById('header-pdf-btn');
+  if (!item) {
+    if (saveBtn) { saveBtn.disabled = true;  saveBtn.textContent = '💾 Guardar'; }
+    if (pdfBtn)    pdfBtn.disabled = true;
+    return;
+  }
+  if (pdfBtn) pdfBtn.disabled = false;
+  if (saveBtn) {
+    saveBtn.disabled  = item.guardado ? true : false;
+    saveBtn.textContent = item.guardado ? '✓ Guardado' : '💾 Guardar';
+  }
 }
 
 // ── Guardar dashboard activo (Studio + queda visible en PWA automáticamente) ──
@@ -4257,22 +4267,42 @@ async function _capturarImagen() {
   // NO usar html2canvas con iframes (se cuelga). Solo leer el canvas directamente.
   const iframe = contenido.querySelector('iframe');
   if (iframe) {
-    await new Promise(r => setTimeout(r, 800));
+    // Esperar a que Chart.js termine de renderizar
+    await new Promise(r => setTimeout(r, 1800));
     try {
       const cvs = iframe.contentDocument?.querySelector('canvas');
-      if (cvs) return cvs.toDataURL('image/png');
-    } catch {}
-    return null;   // si no se puede leer el canvas del iframe, no hay imagen
+      if (cvs && cvs.width > 0) {
+        // Composite sobre fondo blanco — Chart.js usa fondo transparente
+        // y jsPDF mostraría el canvas vacío sobre papel blanco
+        const tmp = document.createElement('canvas');
+        tmp.width  = cvs.width;
+        tmp.height = cvs.height;
+        const ctx = tmp.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(cvs, 0, 0);
+        return tmp.toDataURL('image/png');
+      }
+    } catch (e) { console.warn('[PDF] iframe canvas error:', e); }
+    return null;
   }
 
   // Caso B: dashboard predefinido — capturar canvases de Chart.js directamente
-  // (más rápido y confiable que html2canvas para este caso)
   const canvases = contenido.querySelectorAll('canvas');
   if (canvases.length > 0) {
-    // Usar el canvas más grande (el gráfico principal)
     let best = null;
     canvases.forEach(c => { if (!best || c.width * c.height > best.width * best.height) best = c; });
-    if (best && best.width > 0) return best.toDataURL('image/png');
+    if (best && best.width > 0) {
+      // Composite sobre fondo blanco
+      const tmp = document.createElement('canvas');
+      tmp.width  = best.width;
+      tmp.height = best.height;
+      const ctx = tmp.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(best, 0, 0);
+      return tmp.toDataURL('image/png');
+    }
   }
 
   // Caso C: sin canvas — intentar html2canvas solo si está disponible
@@ -6149,10 +6179,12 @@ function renderMiniViz(idx) {
 
 async function guardarDashHistorial(idx) {
   const item = _historial[idx];
-  if (!item || item.guardado) return;
+  if (!item) { console.warn('[Guardar] idx inválido:', idx); return; }
+  if (item.guardado) { mostrarToast('Este dashboard ya está guardado ✓', 'info'); return; }
 
   const saveBtn = document.getElementById('header-save-btn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Guardando…'; }
+  console.log('[Guardar] guardando dashboard idx:', idx, 'titulo:', item.titulo);
 
   // PASO 1 — guardar en DB inmediatamente (sin PDF)
   let db_id = null;
@@ -6181,14 +6213,19 @@ async function guardarDashHistorial(idx) {
       const meta = document.getElementById(`dash-meta-${idx}`);
       if (meta) meta.innerHTML = `<span class="dash-saved-badge">✓ Guardado</span>${item.tipo} · ${_relTime(item.ts)}`;
     }
+    console.log('[Guardar] guardado en DB, id:', db_id);
     mostrarToast('Dashboard guardado ✓', 'success');
     cargarNavDashboards();
+    cargarDashboardsGuardados();   // refrescar lista lateral de guardados
+    _syncHeaderSaveBtn();          // mostrar "✓ Guardado" en header
   } catch (e) {
+    console.error('[Guardar] error POST:', e);
     mostrarToast('Error al guardar: ' + e.message, 'error');
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
     return;
   } finally {
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Guardar'; }
+    // El estado final del botón lo gestiona _syncHeaderSaveBtn
+    _syncHeaderSaveBtn();
   }
 
   // PASO 2 — generar PDF en background y actualizar el registro (sin bloquear UI)
