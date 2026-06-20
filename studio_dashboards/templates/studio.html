@@ -4226,116 +4226,104 @@ function guardarDashActivo() {
 }
 
 // ── Generador de PDF ejecutivo (fondo blanco, logo, metadatos, gráfica) ───────
-async function _generarPDFBase64(titulo, pregunta) {
-  const { jsPDF } = window.jspdf;
+async function _capturarImagen() {
   const contenido = document.getElementById('dashboard-ia-contenido');
   if (!contenido) return null;
 
-  // 1. Capturar imagen de la gráfica
-  let imgData = null;
-
-  // Caso A: chart_dinamico — el contenido es un iframe con Chart.js
+  // Caso A: chart_dinamico — iframe con Chart.js (con allow-same-origin podemos leer el canvas)
   const iframe = contenido.querySelector('iframe');
   if (iframe) {
     try {
-      // Esperar a que Chart.js haya terminado de dibujar
-      await new Promise(r => setTimeout(r, 600));
-      const iframeCanvas = iframe.contentDocument?.querySelector('canvas');
-      if (iframeCanvas) {
-        imgData = iframeCanvas.toDataURL('image/png');
-      }
-    } catch (e) {
-      console.warn('[PDF] iframe canvas capture failed:', e);
-    }
+      await new Promise(r => setTimeout(r, 800));
+      const cvs = iframe.contentDocument?.querySelector('canvas');
+      if (cvs) return cvs.toDataURL('image/png');
+    } catch {}
   }
 
-  // Caso B: dashboard predefinido — capturar con html2canvas
-  if (!imgData) {
-    try {
-      const snap = await html2canvas(contenido, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
-      imgData = snap.toDataURL('image/png');
-    } catch (e) {
-      console.error('[PDF] html2canvas error:', e);
-    }
+  // Caso B: dashboard predefinido — html2canvas con timeout de 8s
+  if (typeof html2canvas === 'undefined') return null;
+  try {
+    const snap = await Promise.race([
+      html2canvas(contenido, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
+    ]);
+    return snap.toDataURL('image/png');
+  } catch (e) {
+    console.error('[PDF] captura fallida:', e.message);
+    return null;
   }
+}
 
+async function _generarPDFBase64(titulo, pregunta) {
+  if (!window.jspdf) return null;
+  const { jsPDF } = window.jspdf;
+
+  const imgData = await _capturarImagen();
   if (!imgData) return null;
 
-  // 2. Crear PDF A4 horizontal, todo en blanco
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const PW  = doc.internal.pageSize.getWidth();   // 297
-  const PH  = doc.internal.pageSize.getHeight();  // 210
+  const PW  = doc.internal.pageSize.getWidth();
+  const PH  = doc.internal.pageSize.getHeight();
 
-  // 3. Logo en esquina superior izquierda (sin fondo de color)
+  // Logo esquina superior izquierda (sin fondo)
   try {
-    const logoResp = await fetch('/static/logo_transparente.png');
-    const logoBuf  = await logoResp.arrayBuffer();
-    const logoB64  = btoa(String.fromCharCode(...new Uint8Array(logoBuf)));
-    doc.addImage('data:image/png;base64,' + logoB64, 'PNG', 8, 6, 36, 14);
+    const buf  = await (await fetch('/static/logo_transparente.png')).arrayBuffer();
+    const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
+    doc.addImage('data:image/png;base64,' + b64, 'PNG', 8, 6, 36, 14);
   } catch {}
 
-  // 4. Título alineado a la derecha del logo
+  // Título en azul marino, alineado a la derecha
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(26, 43, 90);
-  const tituloCorto = titulo.length > 80 ? titulo.slice(0, 77) + '…' : titulo;
-  doc.text(tituloCorto, PW - 8, 13, { align: 'right' });
+  doc.text(titulo.length > 80 ? titulo.slice(0, 77) + '…' : titulo, PW - 8, 13, { align: 'right' });
 
-  // 5. Línea separadora bajo el encabezado
+  // Separador
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.4);
   doc.line(8, 22, PW - 8, 22);
 
-  // 6. Fila de metadatos
-  const ahora    = new Date();
-  const fechaStr = ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
-  const horaStr  = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  const genPor   = _usuario ? _usuario.nombre : 'Usuario';
-
-  doc.setFontSize(8);
-  const metas = [
+  // Metadatos en una sola fila
+  const ahora   = new Date();
+  const genPor  = _usuario ? _usuario.nombre : 'Usuario';
+  const metas   = [
     `Generado por: ${genPor}`,
-    `Fecha: ${fechaStr}`,
-    `Hora: ${horaStr}`,
+    `Fecha: ${ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+    `Hora: ${ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
     'Suite Analítica · Nentria',
   ];
-  const colW = (PW - 16) / metas.length;
+  const cW = (PW - 16) / metas.length;
+  doc.setFontSize(8);
   metas.forEach((txt, i) => {
     doc.setFont('helvetica', i === 3 ? 'bold' : 'normal');
     doc.setTextColor(i === 3 ? 26 : 100, i === 3 ? 43 : 116, i === 3 ? 90 : 139);
-    doc.text(txt, 8 + i * colW, 28);
+    doc.text(txt, 8 + i * cW, 28);
   });
 
-  // 7. Consulta del usuario (si existe)
+  // Consulta (opcional)
   let yImg = 34;
   if (pregunta && pregunta.trim()) {
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    const pq = pregunta.length > 130 ? pregunta.slice(0, 127) + '…' : pregunta;
-    doc.text(`Consulta: ${pq}`, 8, yImg);
-    yImg += 7;
+    doc.text(`Consulta: ${pregunta.length > 130 ? pregunta.slice(0, 127) + '…' : pregunta}`, 8, yImg);
+    yImg += 6;
     doc.setDrawColor(226, 232, 240);
-    doc.line(8, yImg - 2, PW - 8, yImg - 2);
+    doc.line(8, yImg - 1, PW - 8, yImg - 1);
+    yImg += 2;
   }
 
-  // 8. Imagen de la gráfica centrada
-  const availH = PH - yImg - 12;
+  // Gráfica centrada
+  const availH = PH - yImg - 10;
   const availW = PW - 16;
-  const tmpImg = new Image();
-  await new Promise(r => { tmpImg.onload = r; tmpImg.src = imgData; });
-  const ratio = tmpImg.naturalWidth / tmpImg.naturalHeight;
-  let imgW = availW;
-  let imgH = imgW / ratio;
+  const tmp    = new Image();
+  await new Promise(r => { tmp.onload = r; tmp.src = imgData; });
+  const ratio  = tmp.naturalWidth / tmp.naturalHeight;
+  let imgW = availW, imgH = imgW / ratio;
   if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
   doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH);
 
-  // 9. Pie de página
+  // Pie
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
@@ -4344,34 +4332,27 @@ async function _generarPDFBase64(titulo, pregunta) {
   return doc.output('datauristring').split(',')[1];
 }
 
-// ── Exportar PDF (botón PDF manual) ──────────────────────────────────────────
+// ── Exportar PDF (botón PDF manual → descarga directa) ───────────────────────
 async function exportarPDF() {
-  const item = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
-  const titulo   = item ? item.titulo   : 'Dashboard';
-  const pregunta = item ? (item.pregunta || '') : '';
+  const item     = _activeDashIdx !== null ? _historial[_activeDashIdx] : null;
+  const titulo   = item?.titulo   || 'Dashboard';
+  const pregunta = item?.pregunta || '';
+  const btn      = document.getElementById('header-pdf-btn');
 
-  const btn = document.getElementById('header-pdf-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Generando…'; }
-
   try {
     const b64 = await _generarPDFBase64(titulo, pregunta);
-    if (b64) {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      // Re-generar para la descarga (más simple: usar el mismo b64 como blob)
-      const bytes   = atob(b64);
-      const arr     = new Uint8Array(bytes.length);
-      for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-      const blob    = new Blob([arr], { type: 'application/pdf' });
-      const url     = URL.createObjectURL(blob);
-      const a       = document.createElement('a');
-      a.href        = url;
-      a.download    = `${titulo.replace(/[^a-zA-Z0-9]/g,'_').slice(0,40)}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } else {
-      mostrarToast('No se pudo generar el PDF', 'error');
-    }
+    if (!b64) { mostrarToast('No se pudo capturar la gráfica', 'error'); return; }
+    const bytes = atob(b64);
+    const arr   = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([arr], { type: 'application/pdf' }));
+    const a   = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `${titulo.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40)}.pdf`,
+    });
+    a.click();
+    URL.revokeObjectURL(url);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '📄 PDF'; }
   }
@@ -6129,10 +6110,13 @@ async function guardarDashHistorial(idx) {
   // Pequeña pausa para que el DOM se pinte antes de capturar
   await new Promise(r => setTimeout(r, 300));
 
-  // Generar PDF automáticamente
+  // Generar PDF con timeout de 12s — si falla se guarda sin PDF
   let pdf_b64 = '';
   try {
-    pdf_b64 = await _generarPDFBase64(item.titulo, item.pregunta || '') || '';
+    pdf_b64 = await Promise.race([
+      _generarPDFBase64(item.titulo, item.pregunta || ''),
+      new Promise(r => setTimeout(() => r(null), 12000)),
+    ]) || '';
   } catch (e) {
     console.warn('[guardar] PDF generation failed:', e);
   }
