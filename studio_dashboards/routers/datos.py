@@ -2698,6 +2698,72 @@ def vendedores_dashboard(modo: str = "30d", mes: str = None):
         for r in ranking
     ]
 
+    # ── 8. Top 10 productos más vendidos (por importe) ───────────────────────
+    try:
+        prod_rows = query(f"""
+            SELECT TOP 10
+                pg.Descripcion                                          AS nombre,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)        AS importe,
+                ISNULL(SUM(d.Cantidad_Ordenada), 0)                    AS piezas
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+            WHERE {filtro_base} AND {where_periodo}
+            GROUP BY pg.Descripcion
+            ORDER BY importe DESC
+        """)
+        top_productos = [
+            {"nombre": (r["nombre"] or "").strip()[:40], "importe": round(float(r["importe"] or 0), 2), "piezas": int(r["piezas"] or 0)}
+            for r in prod_rows
+        ]
+    except Exception as e:
+        top_productos = []
+
+    # ── 9. Top 10 clientes (por importe, excluyendo MOSTRADOR) ───────────────
+    try:
+        cli_rows = query(f"""
+            SELECT TOP 10
+                cl.Razon_Social                                        AS nombre,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)        AS importe,
+                COUNT(DISTINCT c.Cve_Folio)                            AS pedidos
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN CM_Clientes cl ON CAST(c.Cve_Cliente AS INT) = cl.Cve_Cliente
+            WHERE {filtro_base} AND {where_periodo}
+              AND cl.Razon_Social NOT LIKE '%MOSTRADOR%'
+            GROUP BY cl.Razon_Social
+            ORDER BY importe DESC
+        """)
+        top_clientes = [
+            {"nombre": (r["nombre"] or "").strip()[:40], "importe": round(float(r["importe"] or 0), 2), "pedidos": int(r["pedidos"] or 0)}
+            for r in cli_rows
+        ]
+    except Exception as e:
+        top_clientes = []
+
+    # ── 10. Ventas por laboratorio — top 10 ──────────────────────────────────
+    try:
+        lab_rows = query(f"""
+            SELECT TOP 10
+                ISNULL(NULLIF(LTRIM(RTRIM(pg.Laboratorio)),''), 'Sin clasificar') AS laboratorio,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)                    AS importe
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
+            WHERE {filtro_base} AND {where_periodo}
+            GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(pg.Laboratorio)),''), 'Sin clasificar')
+            ORDER BY importe DESC
+        """)
+        top_labs = [
+            {"laboratorio": (r["laboratorio"] or "").strip()[:35], "importe": round(float(r["importe"] or 0), 2)}
+            for r in lab_rows
+        ]
+    except Exception as e:
+        top_labs = []
+
     return JSONResponse({
         "total_ventas":        total_ventas,
         "lider_nombre":        lider_nombre,
@@ -2708,4 +2774,7 @@ def vendedores_dashboard(modo: str = "30d", mes: str = None):
         "por_sucursal":        por_sucursal,
         "por_mes":             por_mes,
         "detalle":             detalle,
+        "top_productos":       top_productos,
+        "top_clientes":        top_clientes,
+        "top_labs":            top_labs,
     })
