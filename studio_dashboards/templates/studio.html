@@ -1421,6 +1421,7 @@
           <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 vendedores</div>
           <div id="vend-ranking-wrap" style="position:relative;height:280px">
             <canvas id="vend-ranking-chart"></canvas>
+            <div id="vend-ranking-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
           </div>
         </div>
 
@@ -1438,6 +1439,7 @@
           <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 vendedores (últimos 6 meses)</div>
           <div id="vend-mes-wrap" style="position:relative;height:220px">
             <canvas id="vend-mes-chart"></canvas>
+            <div id="vend-mes-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
           </div>
         </div>
 
@@ -6358,7 +6360,8 @@ function _renderVendKPIs(data) {
 }
 
 function _renderVendRanking(data) {
-  const canvas = document.getElementById('vend-ranking-chart');
+  const canvas  = document.getElementById('vend-ranking-chart');
+  const nodata  = document.getElementById('vend-ranking-nodata');
   if (!canvas) return;
   const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
   const textColor = esDark ? '#94a3b8' : '#6E6E73';
@@ -6368,10 +6371,12 @@ function _renderVendRanking(data) {
   if (_vendCharts.ranking) { _vendCharts.ranking.destroy(); delete _vendCharts.ranking; }
 
   if (!top10.length) {
-    const wrap = document.getElementById('vend-ranking-wrap');
-    if (wrap) wrap.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>';
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
     return;
   }
+  canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
 
   _vendCharts.ranking = new Chart(canvas, {
     type: 'bar',
@@ -6409,6 +6414,7 @@ function _renderVendRanking(data) {
 
 function _renderVendMes(data) {
   const canvas = document.getElementById('vend-mes-chart');
+  const nodata = document.getElementById('vend-mes-nodata');
   if (!canvas) return;
   const esDark    = document.documentElement.getAttribute('data-theme') === 'dark';
   const textColor = esDark ? '#94a3b8' : '#6E6E73';
@@ -6418,10 +6424,12 @@ function _renderVendMes(data) {
 
   const porMes = data.por_mes || [];
   if (!porMes.length) {
-    const wrap = document.getElementById('vend-mes-wrap');
-    if (wrap) wrap.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>';
+    canvas.style.display = 'none';
+    if (nodata) nodata.style.display = '';
     return;
   }
+  canvas.style.display = '';
+  if (nodata) nodata.style.display = 'none';
 
   const meses     = [...new Set(porMes.map(r => r.mes))].sort();
   const vendNames = [...new Set(porMes.map(r => r.vendedor))];

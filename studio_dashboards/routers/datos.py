@@ -3,7 +3,7 @@
 # Módulo   : studio_dashboards
 # Archivo  : routers/datos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.4.0
+# Versión  : 2.5.0
 # ============================================================
 """
 Router de datos del ERP para el Studio Dashboards.
@@ -17,6 +17,7 @@ Endpoints:
   GET  /api/datos/zonas                → Dashboard Zonas: mapa + ventas por sucursal
   GET  /api/datos/productos            → Dashboard Productos: top + lista para selector
   GET  /api/datos/productos/prediccion → Predicción de demanda por producto (tratamientos activos)
+  GET  /api/datos/vendedores           → Dashboard Vendedores: ranking, por sucursal, tendencia mensual
   POST /api/datos/generar              → Genera dashboard completo con IA (gpt-5-nano)
   POST /api/datos/dashboards           → Guardar un dashboard
   GET  /api/datos/dashboards           → Listar dashboards guardados
@@ -282,17 +283,20 @@ class DashboardGuardar(BaseModel):
 # ── Ventas por sucursal ───────────────────────────────────────────────────────
 
 @router.get("/ventas")
-def ventas_sucursales(modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
+def ventas_sucursales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Query(None)):
     """
     Ventas por sucursal para los dashboards del Studio.
 
     Args:
-        modo: '30d' → últimos 30 días vs 30 anteriores / 'mes' → mes actual vs anterior
+        modo: 'hoy' | '15d' | '30d' | 'mes' | 'custom'
+        fi:   fecha inicio ISO (solo cuando modo='custom')
+        ff:   fecha fin ISO (solo cuando modo='custom')
 
     Returns:
         JSON con lista de sucursales, ventas, facturas y variación porcentual.
     """
-    filtro_actual, filtro_anterior, _ = _filtros_periodo(modo, "t.Fecha_Documento")
+    if fi and ff: modo = "custom"
+    filtro_actual, filtro_anterior, _ = _filtros_periodo(modo, "t.Fecha_Documento", fi, ff)
 
     rows = query(f"""
         SELECT
@@ -1107,17 +1111,20 @@ def inventario_historico():
 # ── KPIs globales ─────────────────────────────────────────────────────────────
 
 @router.get("/kpis")
-def kpis_globales(modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
+def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Query(None)):
     """
     Totales globales para las tarjetas KPI del Studio.
 
     Args:
-        modo: 'hoy' | '15d' | '30d' | 'mes'
+        modo: 'hoy' | '15d' | '30d' | 'mes' | 'custom'
+        fi:   fecha inicio ISO (solo cuando modo='custom')
+        ff:   fecha fin ISO (solo cuando modo='custom')
 
     Returns:
         JSON con ventas_total, facturas_total, pedidos_activos, sucursales_activas.
     """
-    filtro, _, _ = _filtros_periodo(modo, "c.Fecha_Documento")
+    if fi and ff: modo = "custom"
+    filtro, _, _ = _filtros_periodo(modo, "c.Fecha_Documento", fi, ff)
 
     ventas_row = query(f"""
         SELECT COUNT(Cve_Folio) AS facturas_total, ISNULL(SUM(Monto), 0) AS ventas_total
@@ -1224,7 +1231,7 @@ def ventas_hoy():
 # ── Plantillas predefinidas ───────────────────────────────────────────────────
 
 @router.get("/plantilla/{tipo}")
-def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
+def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: str = Query(None)):
     """
     Devuelve datos listos para renderizar según la plantilla solicitada.
 
@@ -1236,9 +1243,10 @@ def plantilla(tipo: str, modo: str = Query("30d", regex="^(hoy|15d|30d|mes)$")):
       comparativo_meses → Línea: ventas por mes (últimos 6 meses)
     """
     hoy_fecha = f"CAST({hoy()} AS DATE)"
+    if fi and ff: modo = "custom"
 
     if tipo == "ventas_sucursal":
-        fa, fb, _ = _filtros_periodo(modo, "t.Fecha_Documento")
+        fa, fb, _ = _filtros_periodo(modo, "t.Fecha_Documento", fi, ff)
         rows = query(f"""
             SELECT s.Nombre AS label,
                    ISNULL(SUM(CASE WHEN {fa} THEN t.Monto END),0) AS actual,
@@ -2470,4 +2478,234 @@ def registrar_uso_selector(usuario=Depends(get_current_user)):
         "WHERE id = ? AND limite_ia > 0",
         (usuario["id"],),
     )
-    return JSONResponse({"ok": True})
+
+
+# ── Dashboard Vendedores ──────────────────────────────────────────────────────
+@router.get("/vendedores")
+def vendedores_dashboard(modo: str = "30d", mes: str = None):
+    """
+    Dashboard de Vendedores.
+
+    Retorna:
+      - total_ventas, lider_nombre, lider_importe, total_pedidos, vendedores_activos
+      - ranking: todos los vendedores del período con variación vs año anterior
+      - por_sucursal: vendedor líder por sucursal
+      - por_mes: ventas mensuales de los top 5 vendedores (últimos 6 meses)
+      - detalle: tabla completa con sucursal principal
+    """
+    _hoy = hoy()
+
+    # ── Construir filtro de fechas ────────────────────────────────────────────
+    if mes:
+        # mes = "YYYY-MM"
+        try:
+            anio_m, num_m = int(mes[:4]), int(mes[5:7])
+        except (ValueError, IndexError):
+            raise HTTPException(400, "Formato de mes inválido, use YYYY-MM")
+        fecha_ini   = f"CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE)"
+        # Último día del mes
+        fecha_fin   = f"EOMONTH(CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE))"
+        fecha_ini_a = f"CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE)"
+        fecha_fin_a = f"EOMONTH(CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE))"
+    elif modo == "mes":
+        # Mes en curso
+        fecha_ini   = f"DATEFROMPARTS(YEAR({_hoy}), MONTH({_hoy}), 1)"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(YEAR,-1,{_hoy})), MONTH(DATEADD(YEAR,-1,{_hoy})), 1)"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    elif modo == "hoy":
+        fecha_ini   = _hoy
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    elif modo == "15d":
+        dias = 15
+        fecha_ini   = f"DATEADD(DAY, -{dias}, {_hoy})"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEADD(DAY, -{dias}, DATEADD(YEAR, -1, {_hoy}))"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+    else:
+        # modo "30d" — últimos 30 días (default)
+        dias = 30
+        fecha_ini   = f"DATEADD(DAY, -{dias}, {_hoy})"
+        fecha_fin   = _hoy
+        fecha_ini_a = f"DATEADD(DAY, -{dias}, DATEADD(YEAR, -1, {_hoy}))"
+        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+
+    where_periodo   = f"c.Fecha_Documento >= {fecha_ini} AND c.Fecha_Documento <= {fecha_fin}"
+    where_anterior  = f"c.Fecha_Documento >= {fecha_ini_a} AND c.Fecha_Documento <= {fecha_fin_a}"
+    filtro_base     = "c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO' AND c.Cve_Sucursal <> 99"
+
+    # ── 1. Ventas del período por vendedor ────────────────────────────────────
+    try:
+        vend_rows = query(f"""
+            SELECT
+                v.Nombre                                         AS nombre,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)  AS importe,
+                COUNT(DISTINCT c.Cve_Folio)                     AS pedidos
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN GC_Vendedores v ON v.Cve_Vendedor = c.Cve_Vendedor
+            WHERE {filtro_base} AND {where_periodo}
+            GROUP BY v.Nombre
+            ORDER BY importe DESC
+        """)
+    except Exception as e:
+        raise HTTPException(500, f"vendedores-ranking: {e}")
+
+    # ── 2. Ventas año anterior por vendedor ───────────────────────────────────
+    try:
+        ant_rows = query(f"""
+            SELECT
+                v.Nombre                                         AS nombre,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0)  AS importe
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN GC_Vendedores v ON v.Cve_Vendedor = c.Cve_Vendedor
+            WHERE {filtro_base} AND {where_anterior}
+            GROUP BY v.Nombre
+        """)
+        ant_map = {r["nombre"]: float(r["importe"] or 0) for r in ant_rows}
+    except Exception as e:
+        raise HTTPException(500, f"vendedores-anterior: {e}")
+
+    # ── 3. Construir ranking con variación ────────────────────────────────────
+    ranking = []
+    for r in vend_rows:
+        importe   = round(float(r["importe"] or 0), 2)
+        pedidos   = int(r["pedidos"] or 0)
+        ant       = round(ant_map.get(r["nombre"], 0.0), 2)
+        if ant > 0:
+            variacion = round((importe - ant) / ant * 100, 1)
+        else:
+            variacion = None
+        ranking.append({
+            "nombre":           (r["nombre"] or "").strip(),
+            "importe":          importe,
+            "pedidos":          pedidos,
+            "ticket_promedio":  round(importe / pedidos, 2) if pedidos > 0 else 0.0,
+            "importe_anterior": ant,
+            "variacion":        variacion,
+        })
+
+    # ── 4. KPIs globales ──────────────────────────────────────────────────────
+    total_ventas       = round(sum(r["importe"] for r in ranking), 2)
+    total_pedidos_set  = sum(r["pedidos"] for r in ranking)
+    vendedores_activos = len(ranking)
+    lider = ranking[0] if ranking else {}
+    lider_nombre = lider.get("nombre", "—")
+    lider_importe = lider.get("importe", 0.0)
+
+    # ── 5. Top vendedor por sucursal ──────────────────────────────────────────
+    try:
+        suc_rows = query(f"""
+            SELECT
+                s.Nombre                                        AS sucursal,
+                v.Nombre                                        AS vendedor,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN GN_Sucursales s ON s.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN GC_Vendedores v ON v.Cve_Vendedor = c.Cve_Vendedor
+            WHERE {filtro_base} AND {where_periodo}
+            GROUP BY s.Nombre, v.Nombre
+        """)
+        # Para cada sucursal: quedarse con el vendedor de mayor importe
+        suc_dict: dict = {}
+        for r in suc_rows:
+            suc  = (r["sucursal"] or "").strip()
+            vend = (r["vendedor"]  or "").strip()
+            imp  = round(float(r["importe"] or 0), 2)
+            if suc not in suc_dict or imp > suc_dict[suc]["importe"]:
+                suc_dict[suc] = {"sucursal": suc, "vendedor": vend, "importe": imp}
+        por_sucursal = sorted(suc_dict.values(), key=lambda x: x["importe"], reverse=True)
+    except Exception as e:
+        raise HTTPException(500, f"vendedores-sucursal: {e}")
+
+    # ── 6. Ventas mensuales top 5 vendedores (últimos 6 meses) ───────────────
+    try:
+        top5_nombres = [r["nombre"] for r in ranking[:5]]
+        if top5_nombres:
+            placeholders = ", ".join(["?" for _ in top5_nombres])
+            mes_rows = query(f"""
+                SELECT
+                    FORMAT(c.Fecha_Documento, 'yyyy-MM') AS mes,
+                    v.Nombre                              AS vendedor,
+                    ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+                FROM FT_Pedidos_C c
+                INNER JOIN FT_Pedidos_Dia d
+                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+                INNER JOIN GC_Vendedores v ON v.Cve_Vendedor = c.Cve_Vendedor
+                WHERE {filtro_base}
+                  AND c.Cve_Sucursal <> 99
+                  AND c.Fecha_Documento >= DATEADD(MONTH, -6, {_hoy})
+                  AND v.Nombre IN ({placeholders})
+                GROUP BY FORMAT(c.Fecha_Documento, 'yyyy-MM'), v.Nombre
+                ORDER BY mes ASC
+            """, params=top5_nombres)
+            por_mes = [
+                {
+                    "mes":      r["mes"],
+                    "vendedor": (r["vendedor"] or "").strip(),
+                    "importe":  round(float(r["importe"] or 0), 2),
+                }
+                for r in mes_rows
+            ]
+        else:
+            por_mes = []
+    except Exception as e:
+        raise HTTPException(500, f"vendedores-por-mes: {e}")
+
+    # ── 7. Detalle: sucursal principal por vendedor ───────────────────────────
+    try:
+        det_rows = query(f"""
+            SELECT
+                v.Nombre                                        AS vendedor,
+                s.Nombre                                        AS sucursal,
+                ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+            FROM FT_Pedidos_C c
+            INNER JOIN FT_Pedidos_Dia d
+                ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
+            INNER JOIN GC_Vendedores v ON v.Cve_Vendedor = c.Cve_Vendedor
+            INNER JOIN GN_Sucursales s ON s.Cve_Sucursal = c.Cve_Sucursal
+            WHERE {filtro_base} AND {where_periodo}
+            GROUP BY v.Nombre, s.Nombre
+        """)
+        # Sucursal principal = la que más vendió para ese vendedor
+        vend_suc: dict = {}
+        for r in det_rows:
+            vend = (r["vendedor"] or "").strip()
+            suc  = (r["sucursal"] or "").strip()
+            imp  = float(r["importe"] or 0)
+            if vend not in vend_suc or imp > vend_suc[vend]["_max"]:
+                vend_suc[vend] = {"sucursal_principal": suc, "_max": imp}
+        suc_principal_map = {k: v["sucursal_principal"] for k, v in vend_suc.items()}
+    except Exception as e:
+        raise HTTPException(500, f"vendedores-detalle: {e}")
+
+    detalle = [
+        {
+            "nombre":             r["nombre"],
+            "importe":            r["importe"],
+            "pedidos":            r["pedidos"],
+            "ticket_promedio":    r["ticket_promedio"],
+            "variacion":          r["variacion"],
+            "sucursal_principal": suc_principal_map.get(r["nombre"], "—"),
+        }
+        for r in ranking
+    ]
+
+    return JSONResponse({
+        "total_ventas":        total_ventas,
+        "lider_nombre":        lider_nombre,
+        "lider_importe":       lider_importe,
+        "total_pedidos":       total_pedidos_set,
+        "vendedores_activos":  vendedores_activos,
+        "ranking":             ranking,
+        "por_sucursal":        por_sucursal,
+        "por_mes":             por_mes,
+        "detalle":             detalle,
+    })
