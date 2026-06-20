@@ -4225,118 +4225,123 @@ function guardarDashActivo() {
   }
 }
 
-// ── Generador de PDF con logo y metadatos ─────────────────────────────────────
+// ── Generador de PDF ejecutivo (fondo blanco, logo, metadatos, gráfica) ───────
 async function _generarPDFBase64(titulo, pregunta) {
   const { jsPDF } = window.jspdf;
-
-  // 1. Capturar el área del dashboard con html2canvas
   const contenido = document.getElementById('dashboard-ia-contenido');
   if (!contenido) return null;
 
+  // 1. Capturar imagen de la gráfica
   let imgData = null;
-  try {
-    const canvas = await html2canvas(contenido, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-    });
-    imgData = canvas.toDataURL('image/png');
-  } catch (e) {
-    console.error('[PDF] html2canvas error:', e);
-    return null;
+
+  // Caso A: chart_dinamico — el contenido es un iframe con Chart.js
+  const iframe = contenido.querySelector('iframe');
+  if (iframe) {
+    try {
+      // Esperar a que Chart.js haya terminado de dibujar
+      await new Promise(r => setTimeout(r, 600));
+      const iframeCanvas = iframe.contentDocument?.querySelector('canvas');
+      if (iframeCanvas) {
+        imgData = iframeCanvas.toDataURL('image/png');
+      }
+    } catch (e) {
+      console.warn('[PDF] iframe canvas capture failed:', e);
+    }
   }
 
-  // 2. Crear PDF A4 horizontal
+  // Caso B: dashboard predefinido — capturar con html2canvas
+  if (!imgData) {
+    try {
+      const snap = await html2canvas(contenido, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      imgData = snap.toDataURL('image/png');
+    } catch (e) {
+      console.error('[PDF] html2canvas error:', e);
+    }
+  }
+
+  if (!imgData) return null;
+
+  // 2. Crear PDF A4 horizontal, todo en blanco
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-  const PW = doc.internal.pageSize.getWidth();   // 297mm
-  const PH = doc.internal.pageSize.getHeight();  // 210mm
+  const PW  = doc.internal.pageSize.getWidth();   // 297
+  const PH  = doc.internal.pageSize.getHeight();  // 210
 
-  // 3. Fondo del encabezado
-  doc.setFillColor(26, 43, 90);   // azul marino corporativo
-  doc.rect(0, 0, PW, 28, 'F');
-
-  // 4. Logo (cargarlo desde el servidor)
+  // 3. Logo en esquina superior izquierda (sin fondo de color)
   try {
     const logoResp = await fetch('/static/logo_transparente.png');
     const logoBuf  = await logoResp.arrayBuffer();
     const logoB64  = btoa(String.fromCharCode(...new Uint8Array(logoBuf)));
-    doc.addImage('data:image/png;base64,' + logoB64, 'PNG', 8, 4, 40, 20);
+    doc.addImage('data:image/png;base64,' + logoB64, 'PNG', 8, 6, 36, 14);
   } catch {}
 
-  // 5. Título en el encabezado
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(13);
+  // 4. Título alineado a la derecha del logo
   doc.setFont('helvetica', 'bold');
-  const tituloCorto = titulo.length > 70 ? titulo.slice(0, 67) + '…' : titulo;
-  doc.text(tituloCorto, PW / 2, 12, { align: 'center' });
+  doc.setFontSize(13);
+  doc.setTextColor(26, 43, 90);
+  const tituloCorto = titulo.length > 80 ? titulo.slice(0, 77) + '…' : titulo;
+  doc.text(tituloCorto, PW - 8, 13, { align: 'right' });
 
-  // 6. Tabla de metadatos bajo el encabezado
+  // 5. Línea separadora bajo el encabezado
+  doc.setDrawColor(203, 213, 225);
+  doc.setLineWidth(0.4);
+  doc.line(8, 22, PW - 8, 22);
+
+  // 6. Fila de metadatos
   const ahora    = new Date();
-  const fechaStr = ahora.toLocaleDateString('es-MX', { day:'2-digit', month:'long', year:'numeric' });
-  const horaStr  = ahora.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+  const fechaStr = ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+  const horaStr  = ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const genPor   = _usuario ? _usuario.nombre : 'Usuario';
 
-  doc.setFillColor(245, 247, 250);
-  doc.rect(0, 28, PW, 14, 'F');
-  doc.setTextColor(30, 41, 59);
   doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-
-  const metaCols = [
-    { label: 'Generado por', valor: genPor },
-    { label: 'Fecha',        valor: fechaStr },
-    { label: 'Hora',         valor: horaStr },
-    { label: 'Sistema',      valor: 'Suite Analítica — Nentria' },
+  const metas = [
+    `Generado por: ${genPor}`,
+    `Fecha: ${fechaStr}`,
+    `Hora: ${horaStr}`,
+    'Suite Analítica · Nentria',
   ];
-  const colW = PW / metaCols.length;
-  metaCols.forEach((m, i) => {
-    const x = i * colW + colW / 2;
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(100, 116, 139);
-    doc.text(m.label.toUpperCase(), x, 34, { align: 'center' });
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(30, 41, 59);
-    doc.text(m.valor, x, 39, { align: 'center' });
+  const colW = (PW - 16) / metas.length;
+  metas.forEach((txt, i) => {
+    doc.setFont('helvetica', i === 3 ? 'bold' : 'normal');
+    doc.setTextColor(i === 3 ? 26 : 100, i === 3 ? 43 : 116, i === 3 ? 90 : 139);
+    doc.text(txt, 8 + i * colW, 28);
   });
 
-  // Línea separadora
-  doc.setDrawColor(203, 213, 225);
-  doc.line(8, 42, PW - 8, 42);
-
-  // 7. Pregunta / subtítulo (si existe)
-  let yImg = 46;
+  // 7. Consulta del usuario (si existe)
+  let yImg = 34;
   if (pregunta && pregunta.trim()) {
-    doc.setFontSize(8);
-    doc.setTextColor(71, 85, 105);
     doc.setFont('helvetica', 'italic');
-    const pq = pregunta.length > 120 ? pregunta.slice(0, 117) + '…' : pregunta;
-    doc.text('Consulta: ' + pq, PW / 2, yImg, { align: 'center' });
-    yImg += 6;
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    const pq = pregunta.length > 130 ? pregunta.slice(0, 127) + '…' : pregunta;
+    doc.text(`Consulta: ${pq}`, 8, yImg);
+    yImg += 7;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(8, yImg - 2, PW - 8, yImg - 2);
   }
 
-  // 8. Imagen del dashboard
-  if (imgData) {
-    const availH = PH - yImg - 10;
-    const availW = PW - 16;
-    // Mantener proporción
-    const tmpImg = new Image();
-    await new Promise(r => { tmpImg.onload = r; tmpImg.src = imgData; });
-    const ratio  = tmpImg.naturalWidth / tmpImg.naturalHeight;
-    let imgW = availW;
-    let imgH = imgW / ratio;
-    if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
-    const xImg = (PW - imgW) / 2;
-    doc.addImage(imgData, 'PNG', xImg, yImg, imgW, imgH);
-  }
+  // 8. Imagen de la gráfica centrada
+  const availH = PH - yImg - 12;
+  const availW = PW - 16;
+  const tmpImg = new Image();
+  await new Promise(r => { tmpImg.onload = r; tmpImg.src = imgData; });
+  const ratio = tmpImg.naturalWidth / tmpImg.naturalHeight;
+  let imgW = availW;
+  let imgH = imgW / ratio;
+  if (imgH > availH) { imgH = availH; imgW = imgH * ratio; }
+  doc.addImage(imgData, 'PNG', (PW - imgW) / 2, yImg, imgW, imgH);
 
   // 9. Pie de página
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(148, 163, 184);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Generado automáticamente por Suite Analítica · Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+  doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
 
-  return doc.output('datauristring').split(',')[1];  // base64 puro
+  return doc.output('datauristring').split(',')[1];
 }
 
 // ── Exportar PDF (botón PDF manual) ──────────────────────────────────────────
@@ -4528,7 +4533,7 @@ function renderDashboard(spec) {
   // Gráfica dinámica generada por IA — renderizar iframe en área de dashboards
   if (spec.tipo === 'chart_dinamico') {
     const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-scripts');
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
     iframe.srcdoc = spec.html || '';
     iframe.style.cssText = 'width:100%;border:none;border-radius:12px;min-height:380px;display:block;';
     iframe.onload = () => {
