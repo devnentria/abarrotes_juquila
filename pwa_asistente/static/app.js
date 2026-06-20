@@ -202,12 +202,21 @@ function showView(name) {
 // ── Dashboards guardados (solo lectura) ───────────────────────────────────────
 let _dashPWACargados = false;
 
+function refrescarDashboardsPWA(btn) {
+  _dashPWACargados = false;
+  if (btn) {
+    btn.classList.add('spinning');
+    setTimeout(() => btn.classList.remove('spinning'), 900);
+  }
+  cargarDashboardsPWA();
+}
+
 async function cargarDashboardsPWA() {
   const loading = document.getElementById('dash-pwa-loading');
   const lista   = document.getElementById('dash-pwa-list');
   const vacio   = document.getElementById('dash-pwa-empty');
 
-  // Solo recargar si la lista está vacía
+  // Solo recargar si la lista está vacía (se salta si _dashPWACargados=false)
   if (_dashPWACargados && lista.children.length > 0) return;
 
   loading.style.display = 'flex';
@@ -1410,6 +1419,124 @@ function toggleMicrofono() {
   };
 
   _recognition.start();
+}
+
+// ── Modo Llamada ──────────────────────────────────────────────────────────────
+let _llamadaConvId   = null;
+let _llamadaRecorder = null;
+let _llamadaAudio    = null;
+let _llamadaGrabando = false;
+let _llamadaStream   = null;
+
+function abrirLlamada() {
+  // Heredar la conversación activa del chat si existe
+  _llamadaConvId = (typeof chat !== 'undefined' && chat.conversacionId) ? chat.conversacionId : null;
+  document.getElementById('call-overlay').classList.remove('hidden');
+  _llamadaSetEstado('idle');
+}
+
+function cerrarLlamada() {
+  if (_llamadaRecorder && _llamadaGrabando) {
+    try { _llamadaRecorder.stop(); } catch(_) {}
+  }
+  if (_llamadaAudio) {
+    _llamadaAudio.pause();
+    _llamadaAudio = null;
+  }
+  if (_llamadaStream) {
+    _llamadaStream.getTracks().forEach(t => t.stop());
+    _llamadaStream = null;
+  }
+  _llamadaGrabando = false;
+  _llamadaRecorder = null;
+  document.getElementById('call-overlay').classList.add('hidden');
+}
+
+function _llamadaSetEstado(estado) {
+  const statusEl   = document.getElementById('call-status');
+  const avatarWrap = document.getElementById('call-avatar-wrap');
+  const micBtn     = document.getElementById('call-mic-btn');
+  avatarWrap.className = 'call-avatar-wrap ' + estado;
+  micBtn.classList.toggle('recording', estado === 'recording');
+  const msgs = {
+    idle:       'Toca el micrófono para hablar',
+    recording:  'Escuchando… toca para enviar',
+    processing: 'Procesando…',
+    speaking:   'IA hablando — toca para interrumpir',
+  };
+  statusEl.textContent = msgs[estado] || '';
+}
+
+async function toggleGrabacionLlamada() {
+  // Si la IA está hablando → interrumpir
+  if (_llamadaAudio && !_llamadaAudio.paused) {
+    _llamadaAudio.pause();
+    _llamadaAudio = null;
+  }
+
+  if (_llamadaGrabando) {
+    try { _llamadaRecorder.stop(); } catch(_) {}
+    return;
+  }
+
+  try {
+    if (!_llamadaStream) {
+      _llamadaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+    const chunks = [];
+    _llamadaRecorder = new MediaRecorder(_llamadaStream);
+    _llamadaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    _llamadaRecorder.onstop = () => {
+      _llamadaGrabando = false;
+      const blob = new Blob(chunks, { type: _llamadaRecorder.mimeType || 'audio/webm' });
+      _enviarAudioLlamada(blob);
+    };
+    _llamadaRecorder.start();
+    _llamadaGrabando = true;
+    _llamadaSetEstado('recording');
+  } catch (_) {
+    alert('No se pudo acceder al micrófono. Revisa los permisos.');
+  }
+}
+
+async function _enviarAudioLlamada(blob) {
+  _llamadaSetEstado('processing');
+  const form = new FormData();
+  form.append('audio', blob, 'audio.webm');
+  if (_llamadaConvId) form.append('conversacion_id', String(_llamadaConvId));
+
+  try {
+    const res = await authFetch('/api/chat/audio', { method: 'POST', body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      _llamadaSetEstado('idle');
+      document.getElementById('call-status').textContent =
+        res.status === 429 ? 'Límite de consultas alcanzado' : 'Error. Intenta de nuevo.';
+      return;
+    }
+    const data = await res.json();
+    _llamadaConvId = data.conversacion_id;
+
+    // Mostrar transcripción
+    const wrap = document.getElementById('call-transcript');
+    wrap.classList.add('visible');
+    wrap.innerHTML +=
+      `<div class="call-transcript-user">Tú: ${data.texto_usuario}</div>` +
+      `<div class="call-transcript-ia">IA: ${data.texto_ia}</div>`;
+    wrap.scrollTop = wrap.scrollHeight;
+
+    // Reproducir respuesta en audio
+    const bytes   = Uint8Array.from(atob(data.audio_b64), c => c.charCodeAt(0));
+    const aBlob   = new Blob([bytes], { type: 'audio/mpeg' });
+    const url     = URL.createObjectURL(aBlob);
+    _llamadaAudio = new Audio(url);
+    _llamadaSetEstado('speaking');
+    _llamadaAudio.onended = () => { URL.revokeObjectURL(url); _llamadaAudio = null; _llamadaSetEstado('idle'); };
+    _llamadaAudio.play();
+  } catch (_) {
+    _llamadaSetEstado('idle');
+    document.getElementById('call-status').textContent = 'Error. Intenta de nuevo.';
+  }
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

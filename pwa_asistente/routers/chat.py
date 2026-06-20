@@ -16,19 +16,23 @@ Endpoints:
   POST   /api/chat/mensaje/async            → Envía mensaje (procesamiento en background)
   GET    /api/chat/job/{id}                 → Consulta estado de un job async
   POST   /api/chat/feedback                 → Registra feedback 👍/👎 de una respuesta
+  POST   /api/chat/audio                    → Modo llamada: STT → agente → TTS (base64)
 """
+import base64
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
+from openai import OpenAI
 from pydantic import BaseModel
 
 from shared.auth import get_current_user
-from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA
+from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA, OPENAI_API_KEY
+from shared.database import query as query_erp
 from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
 from pwa_asistente.agente import director
 from pwa_asistente.agente import feedback as _feedback
@@ -39,6 +43,34 @@ from pwa_asistente.agente.especialistas import (
 from pwa_asistente.agente.funciones import matcher as _matcher, catalogo as _catalogo
 
 _pool = ThreadPoolExecutor(max_workers=4)
+
+# Cache de nombres de productos para el prompt de Whisper (se renueva cada 24h)
+_whisper_prompt_cache: dict = {"txt": "", "ts": 0.0}
+
+def _whisper_product_prompt() -> str:
+    """
+    Devuelve un string con los top 150 nombres de productos del catálogo,
+    para pasárselo a Whisper como contexto y mejorar la transcripción
+    de nombres farmacéuticos (ej: "Oblitrop" → "Omnitrope").
+    Cachea el resultado 24 horas para no consultar la BD en cada llamada.
+    """
+    import time
+    if time.time() - _whisper_prompt_cache["ts"] < 86400 and _whisper_prompt_cache["txt"]:
+        return _whisper_prompt_cache["txt"]
+    try:
+        rows = query_erp("""
+            SELECT TOP 150 Descripcion
+            FROM IM_Productos_Gral
+            WHERE Descripcion IS NOT NULL
+            ORDER BY Cve_Producto
+        """)
+        nombres = ", ".join(r["Descripcion"] for r in rows if r.get("Descripcion"))
+        prompt = f"Consulta de ventas e inventario de farmacia. Productos: {nombres}."
+        _whisper_prompt_cache["txt"] = prompt
+        _whisper_prompt_cache["ts"]  = time.time()
+        return prompt
+    except Exception:
+        return "Consulta de ventas e inventario de farmacia."
 
 
 def _intentar_funcion_fija(msg: str) -> tuple:
@@ -367,6 +399,146 @@ def registrar_feedback(body: FeedbackBody, usuario: dict = Depends(get_current_u
         respuesta=job["respuesta"] or "",
     )
     return JSONResponse({"ok": True})
+
+
+@router.post("/audio")
+async def enviar_audio_llamada(
+    audio: UploadFile = File(...),
+    conversacion_id: Optional[int] = Form(None),
+    usuario: dict = Depends(get_current_user),
+):
+    """
+    Modo llamada: recibe audio del usuario, transcribe con Whisper,
+    procesa con el agente y devuelve respuesta en audio TTS (base64).
+
+    Créditos: 1 por enviar + 3 por respuesta con audio = 4 por turno.
+    """
+    # Verificar límite de créditos
+    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
+    u = fetch_one(
+        "SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia "
+        "FROM usuarios WHERE id = ?",
+        (usuario["id"],),
+    )
+    if u and u["limite_ia"] > 0 and u["consultas_ia_r"] >= u["limite_ia"]:
+        raise HTTPException(
+            429,
+            "Has alcanzado tu límite de consultas de IA. "
+            "Contacta a tu administrador para ampliar el límite.",
+        )
+
+    # Leer bytes del audio
+    audio_bytes = await audio.read()
+
+    # ── 1. STT: Whisper ───────────────────────────────────────────────────────
+    client = OpenAI(api_key=OPENAI_API_KEY)
+
+    import io
+    audio_file = io.BytesIO(audio_bytes)
+    audio_file.name = audio.filename or "audio.webm"
+
+    # Obtener nombres de productos del catálogo para mejorar la transcripción
+    # (Whisper usa el prompt para reconocer nombres farmacéuticos correctamente)
+    _whisper_prompt = _whisper_product_prompt()
+
+    transcripcion = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=audio_file,
+        language="es",
+        prompt=_whisper_prompt,
+    )
+    msg = transcripcion.text.strip()
+    if not msg:
+        raise HTTPException(400, "No se pudo transcribir el audio")
+
+    # Cobrar 1 crédito por enviar (sin costo real)
+    execute(
+        "UPDATE usuarios SET "
+        "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
+        "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+        (1.0, 1.0, 0.0, usuario["id"]),
+    )
+
+    # ── 2. Crear / verificar conversación ────────────────────────────────────
+    conv_id = conversacion_id
+    if not conv_id:
+        conv_id = execute(
+            "INSERT INTO chat_conversaciones (usuario_id, titulo) VALUES (?, ?)",
+            (usuario["id"], msg[:80]),
+        )
+    else:
+        conv = fetch_one(
+            "SELECT id FROM chat_conversaciones WHERE id = ? AND usuario_id = ?",
+            (conv_id, usuario["id"]),
+        )
+        if not conv:
+            raise HTTPException(404, "Conversación no encontrada")
+
+    # Historial antes de guardar el mensaje actual
+    historial = fetch_all(
+        "SELECT rol, contenido FROM chat_mensajes WHERE conversacion_id = ? ORDER BY id",
+        (conv_id,),
+    )
+
+    # ── 3. Agente ────────────────────────────────────────────────────────────
+    costo_usd = 0.0
+    if _SALUDO.match(msg):
+        respuesta = _RESPUESTA_SALUDO
+    elif _CAPACIDADES.search(msg) and len(msg) < 120:
+        respuesta = _RESPUESTA_CAPACIDADES
+    else:
+        respuesta, costo_fija = _intentar_funcion_fija(msg)
+        if respuesta:
+            costo_usd = costo_fija
+        else:
+            area, costo_director = director.clasificar(msg, historial)
+            fn = _ESPECIALISTAS.get(area, mixto.responder)
+            resultado = fn(msg, historial)
+            respuesta = resultado.texto
+            costo_usd = costo_director + (
+                resultado.tokens_prompt * IA_PRECIO_INPUT
+                + resultado.tokens_completion * IA_PRECIO_OUTPUT
+            )
+
+    # Guardar mensajes en la conversación
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "user", msg),
+    )
+    execute(
+        "INSERT INTO chat_mensajes (conversacion_id, rol, contenido) VALUES (?, ?, ?)",
+        (conv_id, "assistant", respuesta),
+    )
+    execute(
+        "UPDATE chat_conversaciones SET ultimo_msg = ? WHERE id = ?",
+        (msg[:80], conv_id),
+    )
+
+    # ── 4. TTS: OpenAI TTS ───────────────────────────────────────────────────
+    tts_response = client.audio.speech.create(
+        model="tts-1-hd",
+        voice="onyx",
+        input=respuesta,
+        response_format="mp3",
+    )
+    audio_b64 = base64.b64encode(tts_response.content).decode("utf-8")
+
+    # Cobrar 3 créditos por respuesta con audio (+ costo real del agente y TTS)
+    execute(
+        "UPDATE usuarios SET "
+        "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 0) AS INTEGER), "
+        "consultas_ia_r = ROUND(COALESCE(consultas_ia_r, consultas_ia) + ?, 2), "
+        "costo_ia_usd   = ROUND(costo_ia_usd + ?, 6) WHERE id = ?",
+        (3.0, 3.0, costo_usd, usuario["id"]),
+    )
+
+    return JSONResponse({
+        "texto_usuario":   msg,
+        "texto_ia":        respuesta,
+        "audio_b64":       audio_b64,
+        "conversacion_id": conv_id,
+    })
 
 
 @router.get("/candidatas")

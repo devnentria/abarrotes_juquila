@@ -120,45 +120,63 @@ def ia_sucursal(
         return JSONResponse({"texto": "Sucursal no encontrada."})
     nombre_suc = suc[0]["Nombre"]
 
-    ventas = query(f"""
-        SELECT COUNT(*) AS facturas, COALESCE(SUM(Importe_Total), 0) AS importe
-        FROM FT_Facturas_C
-        WHERE Cve_Sucursal = ?
-          AND Status       <> 'C'
-          AND CAST(Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+    # Ventas de hoy (lo que va del día)
+    ventas_hoy = query(f"""
+        SELECT COUNT(DISTINCT c.Cve_Folio) AS pedidos,
+               COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+        FROM FT_Pedidos_C c
+        JOIN FT_Pedidos_Dia d
+          ON d.Cve_Folio     = c.Cve_Folio
+         AND d.Cve_Sucursal  = c.Cve_Sucursal
+        WHERE c.Cve_Sucursal        = ?
+          AND c.Referencia_Cliente  = 'PAGADO'
+          AND CAST(c.Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)
     """, (cve_sucursal,))
 
+    # Ventas de ayer (pedidos cobrados)
+    ventas_ay = query(f"""
+        SELECT COUNT(DISTINCT c.Cve_Folio) AS pedidos,
+               COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+        FROM FT_Pedidos_C c
+        JOIN FT_Pedidos_Dia d
+          ON d.Cve_Folio     = c.Cve_Folio
+         AND d.Cve_Sucursal  = c.Cve_Sucursal
+        WHERE c.Cve_Sucursal        = ?
+          AND c.Referencia_Cliente  = 'PAGADO'
+          AND CAST(c.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+    """, (cve_sucursal,))
+
+    # Ventas del mes en curso
+    ventas_mes = query(f"""
+        SELECT COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
+        FROM FT_Pedidos_C c
+        JOIN FT_Pedidos_Dia d
+          ON d.Cve_Folio     = c.Cve_Folio
+         AND d.Cve_Sucursal  = c.Cve_Sucursal
+        WHERE c.Cve_Sucursal        = ?
+          AND c.Referencia_Cliente  = 'PAGADO'
+          AND YEAR(c.Fecha_Documento)  = YEAR({hoy()})
+          AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
+    """, (cve_sucursal,))
+
+    # Top 3 productos del mes con importe y unidades vendidas
     top3 = query(f"""
         SELECT TOP 3
-            p.Descripcion                  AS producto,
-            ROUND(SUM(fd.Importe_Neto), 2) AS importe
-        FROM FT_Facturas_D fd
-        JOIN FT_Facturas_C fc
-          ON fd.Cve_Folio      = fc.Cve_Folio
-         AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-         AND fd.Cve_Movimiento = fc.Cve_Movimiento
-        LEFT JOIN IM_Productos_Gral p ON fd.Cve_Producto = p.Cve_Producto
-        WHERE fc.Cve_Sucursal = ?
-          AND fc.Status       <> 'C'
-          AND YEAR(fc.Fecha_Documento)  = YEAR({hoy()})
-          AND MONTH(fc.Fecha_Documento) = MONTH({hoy()})
+            p.Descripcion                              AS producto,
+            ROUND(SUM(d.Cantidad_Ordenada * d.Precio), 2) AS importe,
+            SUM(d.Cantidad_Ordenada)                   AS uds
+        FROM FT_Pedidos_C c
+        JOIN FT_Pedidos_Dia d
+          ON d.Cve_Folio     = c.Cve_Folio
+         AND d.Cve_Sucursal  = c.Cve_Sucursal
+        LEFT JOIN IM_Productos_Gral p ON d.Cve_Producto = p.Cve_Producto
+        WHERE c.Cve_Sucursal        = ?
+          AND c.Referencia_Cliente  = 'PAGADO'
+          AND YEAR(c.Fecha_Documento)  = YEAR({hoy()})
+          AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
           AND p.Descripcion IS NOT NULL
         GROUP BY p.Descripcion
-        ORDER BY SUM(fd.Importe_Neto) DESC
-    """, (cve_sucursal,))
-
-    pedidos = query(
-        "SELECT COUNT(*) AS total FROM FT_Pedidos_C WHERE Cve_Sucursal = ? AND Estatus = 'AC'",
-        (cve_sucursal,),
-    )
-
-    # Pedido activo más antiguo
-    pedido_viejo = query(f"""
-        SELECT TOP 1
-            DATEDIFF(DAY, Fecha_Documento, {hoy()}) AS dias_antiguo
-        FROM FT_Pedidos_C
-        WHERE Cve_Sucursal = ? AND Estatus = 'AC'
-        ORDER BY Fecha_Documento ASC
+        ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
     """, (cve_sucursal,))
 
     # Usar los mismos datos que las tarjetas de inventario (stock_detalle cache)
@@ -168,27 +186,32 @@ def ia_sucursal(
         stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
     sin_stock_list = stock_cache.get("sin_stock", [])
 
-    v          = ventas[0]       if ventas       else {}
-    ped        = pedidos[0]      if pedidos      else {}
-    viejo      = pedido_viejo[0] if pedido_viejo else {}
-    importe    = v.get("importe",      0)
-    facturas   = v.get("facturas",     0)
-    n_ped      = ped.get("total",      0)
-    dias_viejo = viejo.get("dias_antiguo", 0) or 0
-    n_sin      = len(sin_stock_list)
-    top_sin    = ", ".join(r["producto"] for r in sin_stock_list[:3]) or "ninguno"
-    top_txt    = ", ".join(f"{r['producto']} (${r['importe']:,.0f})" for r in top3) or "sin registros"
+    hoy_row     = ventas_hoy[0] if ventas_hoy else {}
+    ay          = ventas_ay[0]  if ventas_ay  else {}
+    mes         = ventas_mes[0] if ventas_mes else {}
+    importe_hoy = hoy_row.get("importe", 0)
+    pedidos_hoy = hoy_row.get("pedidos", 0)
+    importe_ay  = ay.get("importe",  0)
+    pedidos_ay  = ay.get("pedidos",  0)
+    importe_mes = mes.get("importe", 0)
+    n_sin       = len(sin_stock_list)
+    top_sin     = ", ".join(r["producto"] for r in sin_stock_list[:3]) or "ninguno"
+    top_txt     = ", ".join(
+        f"{r['producto']} ({int(r['uds'])} uds, ${r['importe']:,.0f})"
+        for r in top3
+    ) or "sin registros"
 
     prompt = (
         f"Eres el asistente analítico personal de {nombre}. "
         f"Redacta exactamente 2 oraciones de resumen ejecutivo para la sucursal {nombre_suc}, "
         f"dirigidas a {nombre}. "
-        f"Ventas de ayer: ${importe:,.0f} en {facturas} facturas. "
-        f"Pedidos activos: {n_ped} (el más antiguo lleva {dias_viejo} días sin surtir). "
-        f"Productos con demanda reciente sin existencia: {n_sin} (los más críticos: {top_sin}). "
+        f"Ventas de hoy hasta ahora: ${importe_hoy:,.0f} en {pedidos_hoy} pedidos cobrados. "
+        f"Ventas de ayer: ${importe_ay:,.0f} en {pedidos_ay} pedidos. "
+        f"Ventas acumuladas este mes: ${importe_mes:,.0f}. "
         f"Top productos del mes: {top_txt}. "
+        f"Productos con demanda reciente sin existencia: {n_sin} (los más críticos: {top_sin}). "
         f"Tono directo y profesional. Empieza con el nombre. "
-        f"Menciona el dato más alarmante. Sin títulos, sin viñetas, sin saludos extensos."
+        f"Menciona el dato más relevante o alarmante. Sin títulos, sin viñetas, sin saludos extensos."
     )
 
     texto, costo = _flash(prompt)
@@ -233,43 +256,32 @@ def ia_inventario(
         stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}") or {}
     sin_stock_list = stock_cache.get("sin_stock", [])
 
-    n_sin       = len(sin_stock_list)
-    top_sin_txt = ", ".join(
-        p["producto"] for p in sin_stock_list[:3] if p.get("producto")
+    # Usar exactamente los mismos datos que las tarjetas de inventario
+    n_sin = len(sin_stock_list)
+    # Detalle de los primeros 5 sin existencia: nombre + promedio mensual de ventas
+    top_sin_txt = "; ".join(
+        f"{p['producto']} (~${p.get('prom_importe_mensual', 0):,.0f}/mes)"
+        for p in sin_stock_list[:5] if p.get("producto")
     ) or "ninguno"
 
-    # Stock crítico solo en productos con ventas recientes
-    stock_critico = query(f"""
-        SELECT COUNT(DISTINCT ea.Cve_Producto) AS total
-        FROM IN_Existencias_Alm ea
-        WHERE ea.Cve_Sucursal = ? AND ea.Status = 'AC'
-          AND ea.Existencia > 0 AND ea.Existencia <= 5
-          AND EXISTS (
-              SELECT 1
-              FROM FT_Facturas_D fd
-              JOIN FT_Facturas_C fc
-                ON fd.Cve_Folio      = fc.Cve_Folio
-               AND fd.Cve_Sucursal   = fc.Cve_Sucursal
-               AND fd.Cve_Movimiento = fc.Cve_Movimiento
-              WHERE fd.Cve_Producto  = ea.Cve_Producto
-                AND fc.Cve_Sucursal  = ea.Cve_Sucursal
-                AND fc.Status       <> 'C'
-                AND fc.Fecha_Documento >= DATEADD(DAY, -90, {hoy()})
-          )
-    """, (cve_sucursal,))
-
-    n_critico = stock_critico[0]["total"] if stock_critico else 0
-
-    prompt = (
-        f"Eres el asistente analítico personal de {nombre}. "
-        f"Redacta exactamente 2 oraciones de alerta de inventario para {nombre_suc}, "
-        f"dirigidas a {nombre}. "
-        f"Datos: {n_sin} productos con demanda reciente (últimos 90 días) sin existencia, "
-        f"{n_critico} en stock crítico (menos de 5 piezas). "
-        f"Productos más vendidos sin existencia: {top_sin_txt}. "
-        f"Tono profesional y urgente si hay riesgo. Empieza con el nombre. "
-        f"Destaca el problema más grave. Sin títulos ni viñetas."
-    )
+    if n_sin == 0:
+        prompt = (
+            f"Eres el asistente analítico personal de {nombre}. "
+            f"Redacta exactamente 2 oraciones de situación de inventario para {nombre_suc}, "
+            f"dirigidas a {nombre}. "
+            f"No hay productos con demanda real sin existencia — el inventario está cubierto. "
+            f"Tono tranquilo pero sugiere mantener el monitoreo. Empieza con el nombre. Sin títulos ni viñetas."
+        )
+    else:
+        prompt = (
+            f"Eres el asistente analítico personal de {nombre}. "
+            f"Redacta exactamente 2 oraciones de alerta de inventario para {nombre_suc}, "
+            f"dirigidas a {nombre}. "
+            f"Hay {n_sin} producto(s) con ventas reales en los últimos 3 meses pero sin existencia disponible. "
+            f"Los más urgentes (por venta promedio mensual): {top_sin_txt}. "
+            f"Tono profesional y urgente. Empieza con el nombre. "
+            f"Destaca cuántos hay y nombra los más críticos. Sin títulos ni viñetas."
+        )
 
     texto, costo = _flash(prompt)
     _cache.set(_clave, {"texto": texto})
@@ -388,8 +400,8 @@ def tts(datos: TTSRequest, usuario: dict = Depends(get_current_user)):
     Retorna el audio como stream mp3 para reproducción directa en el navegador.
     """
     respuesta = _client.audio.speech.create(
-        model="tts-1",
-        voice="nova",
+        model="tts-1-hd",
+        voice="onyx",
         input=datos.texto[:4096],
         response_format="mp3",
     )

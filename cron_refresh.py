@@ -38,6 +38,7 @@ from shared.database import query as db_query
 from shared.database_local import get_connection
 from pwa_asistente.routers.vistas import stock_detalle
 from pwa_asistente.routers.ia_flash import ia_sucursal, ia_inventario
+import pwa_asistente.routers.chat as _chat_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -318,6 +319,13 @@ def main() -> None:
         guardar_snapshot_inventario()
     except Exception as e:
         log.error(f"Error en snapshot inventario: {e}")
+
+    # Precargar prompt de productos para Whisper (reconocimiento de nombres farmacéuticos)
+    try:
+        _chat_router._whisper_product_prompt()
+        log.info("Whisper product prompt precargado OK")
+    except Exception as e:
+        log.error(f"Error precargando Whisper prompt: {e}")
 
     # Geocodificación del mapa — al final para no interferir con el refresh principal
     try:

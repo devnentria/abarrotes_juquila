@@ -183,7 +183,7 @@ def stock_detalle(cve_sucursal: int):
             ROUND(ISNULL(SUM(v.importe), 0) / 3.0, 0)      AS prom_importe_mensual,
             ISNULL(SUM(v.m1_uds), 0)                        AS m1_uds,
             ISNULL(SUM(v.m2_uds), 0)                        AS m2_uds,
-            ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds,
+            ISNULL(SUM(v.m3_uds), 0)                        AS m3_uds
         FROM cb_canon
         JOIN IM_Productos_Gral p   ON p.Cve_Producto  = cb_canon.Cve_Producto
         JOIN IN_Existencias_Alm ea ON ea.Cve_Producto = cb_canon.Cve_Producto
