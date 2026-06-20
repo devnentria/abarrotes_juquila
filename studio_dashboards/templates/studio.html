@@ -6484,7 +6484,9 @@ function _vendSetMes(valor) {
 async function cargarVendedores() {
   _vendLoaded = true;
   let url = '/api/datos/vendedores';
-  if (_vendMes) {
+  if (_fi && _ff) {
+    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  } else if (_vendMes) {
     url += `?mes=${encodeURIComponent(_vendMes)}`;
   } else {
     url += `?modo=${encodeURIComponent(_vendModo || '30d')}`;
@@ -6672,7 +6674,7 @@ function _renderVendDetalle(data) {
       <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
       <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pedidos</th>
       <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Ticket</th>
-      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Var. %</th>
+      <th style="padding:4px 6px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500" title="vs período anterior">Var. %</th>
     </tr></thead>
     <tbody>${lista.map((v, i) => {
       const varCol = v.variacion === null ? 'var(--text-dim)'
@@ -6813,7 +6815,9 @@ function _medSetMes(valor) {
 async function cargarMedicos() {
   _medLoaded = true;
   let url = '/api/datos/medicos';
-  if (_medMes) {
+  if (_fi && _ff) {
+    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  } else if (_medMes) {
     url += `?mes=${encodeURIComponent(_medMes)}`;
   } else {
     url += `?modo=${encodeURIComponent(_medModo || '30d')}`;

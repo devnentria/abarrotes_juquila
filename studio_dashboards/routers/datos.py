@@ -2486,55 +2486,59 @@ def registrar_uso_selector(usuario=Depends(get_current_user)):
 
 # ── Dashboard Vendedores ──────────────────────────────────────────────────────
 @router.get("/vendedores")
-def vendedores_dashboard(modo: str = "30d", mes: str = None):
+def vendedores_dashboard(modo: str = "30d", mes: str = None, fi: str = None, ff: str = None):
     """
     Dashboard de Vendedores.
 
     Retorna:
       - total_ventas, lider_nombre, lider_importe, total_pedidos, vendedores_activos
-      - ranking: todos los vendedores del período con variación vs año anterior
+      - ranking: todos los vendedores del período con variación vs período anterior
       - por_sucursal: vendedor líder por sucursal
       - por_mes: ventas mensuales de los top 5 vendedores (últimos 6 meses)
       - detalle: tabla completa con sucursal principal
     """
     _hoy = hoy()
 
-    # ── Construir filtro de fechas ────────────────────────────────────────────
-    if mes:
+    # ── Construir filtro de fechas — anterior = período inmediatamente previo ──
+    if fi and ff:
+        # Rango personalizado: el anterior es el mismo número de días previos al rango
+        fecha_ini = f"CAST('{fi}' AS DATE)"
+        fecha_fin = f"CAST('{ff}' AS DATE)"
+        fecha_ini_a = f"DATEADD(DAY, -DATEDIFF(DAY, CAST('{fi}' AS DATE), CAST('{ff}' AS DATE)) - 1, CAST('{fi}' AS DATE))"
+        fecha_fin_a = f"DATEADD(DAY, -1, CAST('{fi}' AS DATE))"
+    elif mes:
         # mes = "YYYY-MM"
         try:
             anio_m, num_m = int(mes[:4]), int(mes[5:7])
         except (ValueError, IndexError):
             raise HTTPException(400, "Formato de mes inválido, use YYYY-MM")
+        anio_p = anio_m - 1 if num_m == 1 else anio_m
+        mes_p  = 12        if num_m == 1 else num_m - 1
         fecha_ini   = f"CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE)"
-        # Último día del mes
         fecha_fin   = f"EOMONTH(CAST('{anio_m:04d}-{num_m:02d}-01' AS DATE))"
-        fecha_ini_a = f"CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE)"
-        fecha_fin_a = f"EOMONTH(CAST('{anio_m-1:04d}-{num_m:02d}-01' AS DATE))"
+        fecha_ini_a = f"CAST('{anio_p:04d}-{mes_p:02d}-01' AS DATE)"
+        fecha_fin_a = f"EOMONTH(CAST('{anio_p:04d}-{mes_p:02d}-01' AS DATE))"
     elif modo == "mes":
-        # Mes en curso
         fecha_ini   = f"DATEFROMPARTS(YEAR({_hoy}), MONTH({_hoy}), 1)"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(YEAR,-1,{_hoy})), MONTH(DATEADD(YEAR,-1,{_hoy})), 1)"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEFROMPARTS(YEAR(DATEADD(MONTH,-1,{_hoy})), MONTH(DATEADD(MONTH,-1,{_hoy})), 1)"
+        fecha_fin_a = f"EOMONTH(DATEADD(MONTH,-1,{_hoy}))"
     elif modo == "hoy":
         fecha_ini   = _hoy
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEADD(YEAR, -1, {_hoy})"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEADD(DAY, -1, {_hoy})"
+        fecha_fin_a = f"DATEADD(DAY, -1, {_hoy})"
     elif modo == "15d":
-        dias = 15
-        fecha_ini   = f"DATEADD(DAY, -{dias}, {_hoy})"
+        fecha_ini   = f"DATEADD(DAY, -15, {_hoy})"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEADD(DAY, -{dias}, DATEADD(YEAR, -1, {_hoy}))"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEADD(DAY, -30, {_hoy})"
+        fecha_fin_a = f"DATEADD(DAY, -16, {_hoy})"
     else:
         # modo "30d" — últimos 30 días (default)
-        dias = 30
-        fecha_ini   = f"DATEADD(DAY, -{dias}, {_hoy})"
+        fecha_ini   = f"DATEADD(DAY, -30, {_hoy})"
         fecha_fin   = _hoy
-        fecha_ini_a = f"DATEADD(DAY, -{dias}, DATEADD(YEAR, -1, {_hoy}))"
-        fecha_fin_a = f"DATEADD(YEAR, -1, {_hoy})"
+        fecha_ini_a = f"DATEADD(DAY, -60, {_hoy})"
+        fecha_fin_a = f"DATEADD(DAY, -31, {_hoy})"
 
     where_periodo   = f"c.Fecha_Documento >= {fecha_ini} AND c.Fecha_Documento <= {fecha_fin}"
     where_anterior  = f"c.Fecha_Documento >= {fecha_ini_a} AND c.Fecha_Documento <= {fecha_fin_a}"
@@ -2754,7 +2758,7 @@ def vendedores_dashboard(modo: str = "30d", mes: str = None):
 
 
 @router.get("/medicos")
-def medicos_dashboard(modo: str = "30d", mes: str = None):
+def medicos_dashboard(modo: str = "30d", mes: str = None, fi: str = None, ff: str = None):
     """
     Dashboard de Médicos.
     Ventas atribuidas a médicos vía CM_Clientes.Cve_Ruta → GC_Medicos.Cve_Medico.
@@ -2762,7 +2766,12 @@ def medicos_dashboard(modo: str = "30d", mes: str = None):
     _hoy = hoy()
 
     # ── Filtros de período — anterior = período inmediatamente previo ────────────
-    if mes:
+    if fi and ff:
+        fecha_ini   = f"CAST('{fi}' AS DATE)"
+        fecha_fin   = f"CAST('{ff}' AS DATE)"
+        fecha_ini_a = f"DATEADD(DAY, -DATEDIFF(DAY, CAST('{fi}' AS DATE), CAST('{ff}' AS DATE)) - 1, CAST('{fi}' AS DATE))"
+        fecha_fin_a = f"DATEADD(DAY, -1, CAST('{fi}' AS DATE))"
+    elif mes:
         try:
             anio_m, num_m = int(mes[:4]), int(mes[5:7])
         except (ValueError, IndexError):
