@@ -81,15 +81,16 @@ def refresh_sucursal(cve: int) -> None:
 
 def _geocode_cp(cp: str):
     """Geocodifica un CP mexicano via Nominatim. Retorna (lat, lng) o None."""
-    import requests
+    import urllib.request as _urllib
+    import json as _json
     try:
-        r = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={"postalcode": cp, "country": "MX", "format": "json", "limit": 1},
-            headers={"User-Agent": "SuiteAnaliticaNentria/1.0"},
-            timeout=8,
+        url = (
+            f"https://nominatim.openstreetmap.org/search"
+            f"?postalcode={cp}&country=MX&format=json&limit=1"
         )
-        data = r.json()
+        req = _urllib.Request(url, headers={"User-Agent": "SuiteAnaliticaNentria/1.0"})
+        with _urllib.urlopen(req, timeout=8) as resp:
+            data = _json.loads(resp.read())
         if data:
             return float(data[0]["lat"]), float(data[0]["lon"])
     except Exception as e:
