@@ -4230,28 +4230,37 @@ async function _capturarImagen() {
   const contenido = document.getElementById('dashboard-ia-contenido');
   if (!contenido) return null;
 
-  // Caso A: chart_dinamico — iframe con Chart.js (con allow-same-origin podemos leer el canvas)
+  // Caso A: chart_dinamico — hay un iframe con Chart.js
+  // NO usar html2canvas con iframes (se cuelga). Solo leer el canvas directamente.
   const iframe = contenido.querySelector('iframe');
   if (iframe) {
+    await new Promise(r => setTimeout(r, 800));
     try {
-      await new Promise(r => setTimeout(r, 800));
       const cvs = iframe.contentDocument?.querySelector('canvas');
       if (cvs) return cvs.toDataURL('image/png');
     } catch {}
+    return null;   // si no se puede leer el canvas del iframe, no hay imagen
   }
 
-  // Caso B: dashboard predefinido — html2canvas con timeout de 8s
-  if (typeof html2canvas === 'undefined') return null;
-  try {
-    const snap = await Promise.race([
-      html2canvas(contenido, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false }),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 8000)),
-    ]);
-    return snap.toDataURL('image/png');
-  } catch (e) {
-    console.error('[PDF] captura fallida:', e.message);
-    return null;
+  // Caso B: dashboard predefinido — capturar canvases de Chart.js directamente
+  // (más rápido y confiable que html2canvas para este caso)
+  const canvases = contenido.querySelectorAll('canvas');
+  if (canvases.length > 0) {
+    // Usar el canvas más grande (el gráfico principal)
+    let best = null;
+    canvases.forEach(c => { if (!best || c.width * c.height > best.width * best.height) best = c; });
+    if (best && best.width > 0) return best.toDataURL('image/png');
   }
+
+  // Caso C: sin canvas — intentar html2canvas solo si está disponible
+  if (typeof html2canvas === 'undefined') return null;
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), 6000);
+    html2canvas(contenido, { scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
+                              ignoreElements: el => el.tagName === 'IFRAME' })
+      .then(snap => { clearTimeout(timer); resolve(snap.toDataURL('image/png')); })
+      .catch(() => { clearTimeout(timer); resolve(null); });
+  });
 }
 
 async function _generarPDFBase64(titulo, pregunta) {
