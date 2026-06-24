@@ -403,7 +403,7 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
 
     try:
         rows = query(f"""
-            SELECT TOP 150 con.CP,
+            SELECT con.CP,
                    COUNT(DISTINCT p.Cve_Folio)                                  AS pedidos,
                    CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint)  AS ventas
             FROM FT_Pedidos_C p

@@ -99,7 +99,7 @@ def _geocode_cp(cp: str):
 
 
 def _top_cps_mes(anio: int, mes: int) -> list:
-    """Devuelve los top 150 CPs con más ventas en el mes dado."""
+    """Devuelve los top 150 CPs con más ventas en el mes dado (backfill meses pasados)."""
     try:
         rows = db_query(f"""
             SELECT TOP 150 con.CP
@@ -123,20 +123,35 @@ def _top_cps_mes(anio: int, mes: int) -> list:
         return []
 
 
+def _cps_del_dia(fecha: date) -> list:
+    """Devuelve TODOS los CPs con pedidos en la fecha dada (sin límite)."""
+    try:
+        rows = db_query(f"""
+            SELECT DISTINCT con.CP
+            FROM FT_Pedidos_C p
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+            WHERE p.Estatus<>'CN'
+              AND p.Referencia_Cliente='PAGADO'
+              AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+              AND CAST(p.Fecha_Documento AS DATE) = '{fecha.isoformat()}'
+        """)
+        return [r["CP"] for r in (rows or []) if r.get("CP")]
+    except Exception as e:
+        log.error(f"  Error consultando CPs del día {fecha}: {e}")
+        return []
+
+
 def refresh_geocodificacion() -> None:
-    """Geocodifica los CPs sin coordenadas del mes actual y los 6 anteriores."""
+    """
+    Geocodifica CPs sin coordenadas.
+    - Día actual: TODOS los CPs de los pedidos de hoy (acumulativo diario)
+    - Meses pasados: top 150 por mes (backfill)
+    - Limpia coordenadas de CPs sin actividad en más de 6 meses
+    """
     log.info("--- Geocodificación mapa iniciada ---")
     hoy = date.today()
-
-    # Construir lista de (anio, mes): mes actual + 6 anteriores
-    meses = []
-    a, m = hoy.year, hoy.month
-    for _ in range(7):
-        meses.append((a, m))
-        m -= 1
-        if m == 0:
-            m = 12
-            a -= 1
 
     conn = get_connection()
     conn.execute("""
@@ -146,11 +161,10 @@ def refresh_geocodificacion() -> None:
     """)
     conn.commit()
 
-    total_nuevos = 0
-    for anio, mes in meses:
-        cps = _top_cps_mes(anio, mes)
+    def _geocodificar_lista(cps: list, etiqueta: str) -> int:
+        """Geocodifica los CPs de la lista que aún no estén en caché. Retorna nuevos guardados."""
         if not cps:
-            continue
+            return 0
         placeholders = ",".join(["?"] * len(cps))
         ya_cached = {
             r[0] for r in conn.execute(
@@ -159,9 +173,10 @@ def refresh_geocodificacion() -> None:
         }
         faltantes = [cp for cp in cps if cp not in ya_cached]
         if not faltantes:
-            log.info(f"  {anio}-{mes:02d}: todos los CPs ya en caché")
-            continue
-        log.info(f"  {anio}-{mes:02d}: geocodificando {len(faltantes)} CPs nuevos...")
+            log.info(f"  {etiqueta}: todos los CPs ya en caché ({len(cps)})")
+            return 0
+        log.info(f"  {etiqueta}: geocodificando {len(faltantes)} CPs nuevos...")
+        nuevos = 0
         for cp in faltantes:
             coords = _geocode_cp(cp)
             if coords:
@@ -171,8 +186,39 @@ def refresh_geocodificacion() -> None:
                     (cp, lat, lng),
                 )
                 conn.commit()
-                total_nuevos += 1
+                nuevos += 1
             time.sleep(1.1)  # Respetar rate limit Nominatim
+        return nuevos
+
+    total_nuevos = 0
+
+    # 1. CPs del día actual — todos sin límite
+    cps_hoy = _cps_del_dia(hoy)
+    log.info(f"  Hoy ({hoy}): {len(cps_hoy)} CPs en pedidos del día")
+    total_nuevos += _geocodificar_lista(cps_hoy, f"hoy {hoy}")
+
+    # 2. Meses pasados — top 150 como backfill
+    a, m = hoy.year, hoy.month
+    m -= 1
+    if m == 0:
+        m = 12; a -= 1
+    for _ in range(6):
+        cps = _top_cps_mes(a, m)
+        total_nuevos += _geocodificar_lista(cps, f"{a}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12; a -= 1
+
+    # 3. Limpiar CPs sin actividad en más de 6 meses
+    try:
+        cur = conn.execute(
+            "DELETE FROM cp_coords WHERE cached_at < date('now', '-180 days')"
+        )
+        if cur.rowcount:
+            conn.commit()
+            log.info(f"  Limpieza: {cur.rowcount} CPs eliminados (>6 meses sin uso)")
+    except Exception as e:
+        log.warning(f"  Error en limpieza de CPs: {e}")
 
     conn.close()
     log.info(f"--- Geocodificación terminada — {total_nuevos} CPs nuevos guardados ---")
