@@ -175,6 +175,7 @@ def ia_sucursal(
           AND YEAR(c.Fecha_Documento)  = YEAR({hoy()})
           AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
           AND p.Descripcion IS NOT NULL
+          AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
         GROUP BY p.Descripcion
         ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
     """, (cve_sucursal,))

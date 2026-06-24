@@ -104,7 +104,9 @@ def me(usuario: dict = Depends(get_current_user)):
         JSONResponse: { id, nombre, email, rol, modulos }
     """
     perfil = fetch_one(
-        "SELECT foto_perfil, debe_cambiar_password FROM usuarios WHERE id = ?",
+        "SELECT foto_perfil, debe_cambiar_password, "
+        "COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia "
+        "FROM usuarios WHERE id = ?",
         (usuario["id"],),
     )
     return JSONResponse({
@@ -115,6 +117,8 @@ def me(usuario: dict = Depends(get_current_user)):
         "modulos":               usuario["modulos"],
         "foto_perfil":           perfil["foto_perfil"] if perfil else None,
         "debe_cambiar_password": bool(perfil["debe_cambiar_password"]) if perfil else False,
+        "consultas_ia":          int(perfil["consultas_ia_r"] or 0) if perfil else 0,
+        "limite_ia":             int(perfil["limite_ia"] or 0) if perfil else 700,
     })
 
 
