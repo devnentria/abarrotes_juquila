@@ -53,14 +53,14 @@ _mapa_cache: dict = {}
 # CPs actualmente siendo geocodificados en background (evita lanzar 2 threads para el mismo mes)
 _geocodificando: set = set()
 
-# ── Inicialización de tabla de caché de coordenadas por CP ───────────────────
-_cp_table_ready = False
+# ── Inicialización de tablas de caché del mapa ───────────────────────────────
+_mapa_tables_ready = False
 
 
-def _init_cp_coords_table() -> None:
-    """Crea la tabla cp_coords en SQLite si no existe (se llama una sola vez)."""
-    global _cp_table_ready
-    if _cp_table_ready:
+def _init_mapa_tables() -> None:
+    """Crea las tablas de caché del mapa en SQLite si no existen (se llama una sola vez)."""
+    global _mapa_tables_ready
+    if _mapa_tables_ready:
         return
     execute("""
         CREATE TABLE IF NOT EXISTS cp_coords (
@@ -70,7 +70,16 @@ def _init_cp_coords_table() -> None:
             cached_at TEXT DEFAULT (datetime('now'))
         )
     """)
-    _cp_table_ready = True
+    # Resultado completo del mapa por mes — persiste entre reinicios del servicio
+    execute("""
+        CREATE TABLE IF NOT EXISTS mapa_resultado_cache (
+            key       TEXT PRIMARY KEY,   -- "YYYY-MM"
+            label     TEXT,
+            puntos    TEXT NOT NULL,      -- JSON array de puntos
+            cached_at REAL NOT NULL       -- Unix timestamp
+        )
+    """)
+    _mapa_tables_ready = True
 
 
 def _geocode_cp(cp: str):
@@ -375,32 +384,50 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
     """
     Ventas por código postal (domicilio de entrega) para el mapa de puntos.
     Parámetros anio+mes seleccionan un mes específico.
-    Meses históricos se cachean para siempre; el mes actual se refresca cada 10 min.
+    Meses históricos se cachean permanentemente en SQLite.
+    Mes actual: TTL 10 min en memoria + SQLite (persiste entre reinicios).
     Las coordenadas de cada CP se obtienen via Nominatim y se guardan en SQLite.
 
     Returns:
         JSON con anio, mes, label y lista de puntos con cp, lat, lng, ventas y pedidos.
     """
-    _init_cp_coords_table()
+    _init_mapa_tables()
 
-    from datetime import date as _date
     hoy_d  = _date.today()
     _anio  = anio or hoy_d.year
     _mes   = mes  or hoy_d.month
     key    = f"{_anio}-{_mes:02d}"
     es_actual = (_anio == hoy_d.year and _mes == hoy_d.month)
-
-    entrada = _mapa_cache.get(key)
-    if entrada:
-        # Histórico: cache permanente. Mes actual: TTL 10 min.
-        if not es_actual or (time.time() - entrada["ts"]) < 600:
-            return JSONResponse({"anio": _anio, "mes": _mes,
-                                 "label": entrada["label"], "puntos": entrada["data"]})
+    now    = time.time()
+    TTL    = 600  # 10 min para el mes actual
 
     MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
     label = f"{MESES_ES[_mes]} {_anio}"
 
+    # 1. Cache en memoria (más rápido — dentro de la misma sesión del proceso)
+    entrada = _mapa_cache.get(key)
+    if entrada:
+        if not es_actual or (now - entrada["ts"]) < TTL:
+            return JSONResponse({"anio": _anio, "mes": _mes,
+                                 "label": entrada["label"], "puntos": entrada["data"]})
+
+    # 2. Cache SQLite (persiste entre reinicios del servicio)
+    row_sqlite = fetch_one(
+        "SELECT label, puntos, cached_at FROM mapa_resultado_cache WHERE key=?", (key,)
+    )
+    if row_sqlite:
+        usar = True
+        if es_actual:
+            edad = now - (row_sqlite["cached_at"] or 0)
+            usar = edad < TTL
+        if usar:
+            puntos_cached = json.loads(row_sqlite["puntos"])
+            _mapa_cache[key] = {"ts": row_sqlite["cached_at"], "label": row_sqlite["label"], "data": puntos_cached}
+            return JSONResponse({"anio": _anio, "mes": _mes,
+                                 "label": row_sqlite["label"], "puntos": puntos_cached, "pendientes": 0})
+
+    # 3. Consultar SQL Server — todos los CPs del mes sin límite
     try:
         rows = query(f"""
             SELECT con.CP,
@@ -423,10 +450,9 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
     except Exception:
         rows = []
 
-    # Obtener CPs únicos con ventas
     cps_con_ventas = [r["CP"] for r in rows if r.get("CP")]
 
-    # Buscar en caché SQLite
+    # Buscar coords en cp_coords SQLite
     coords_cache = {}
     if cps_con_ventas:
         cached = fetch_all(
@@ -435,30 +461,9 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
         )
         coords_cache = {r["cp"]: (r["lat"], r["lng"]) for r in cached}
 
-    # CPs sin coordenadas en SQLite
     todos_faltantes = [cp for cp in cps_con_ventas if cp not in coords_cache]
 
-    # Lanzar geocodificación en background si hay faltantes y no está ya corriendo para este mes
-    if todos_faltantes and key not in _geocodificando:
-        def _geocodificar_bg(key_bg, faltantes_bg):
-            _geocodificando.add(key_bg)
-            try:
-                for cp in faltantes_bg:
-                    coords = _geocode_cp(cp)
-                    if coords:
-                        lat, lng = coords
-                        execute(
-                            "INSERT OR REPLACE INTO cp_coords (cp, lat, lng) VALUES (?, ?, ?)",
-                            (cp, lat, lng),
-                        )
-                    time.sleep(1.1)
-                # Invalidar caché en memoria para que la próxima visita vea los nuevos puntos
-                _mapa_cache.pop(key_bg, None)
-            finally:
-                _geocodificando.discard(key_bg)
-        threading.Thread(target=_geocodificar_bg, args=(key, todos_faltantes), daemon=True).start()
-
-    # Construir resultado con lo que ya está en SQLite — respuesta inmediata
+    # Construir resultado con coords ya disponibles — respuesta inmediata
     puntos = []
     for r in rows:
         cp = r.get("CP", "")
@@ -473,9 +478,39 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
             })
 
     pendientes = len(todos_faltantes)
-    # TTL: 0 (permanente) si ya están todos; 10 min si aún hay pendientes geocodificándose
+
+    # Guardar en cache SQLite + memoria
+    # Si hay pendientes: TTL 10 min (se refresca cuando geocodificación termine)
+    # Sin pendientes: permanente (ts=0 en memoria, sin expiración en SQLite)
+    ts_cache = now if pendientes else 0.0
     if puntos:
-        _mapa_cache[key] = {"ts": time.time() if pendientes else 0, "label": label, "data": puntos}
+        execute(
+            "INSERT OR REPLACE INTO mapa_resultado_cache (key, label, puntos, cached_at) VALUES (?, ?, ?, ?)",
+            (key, label, json.dumps(puntos), ts_cache),
+        )
+        _mapa_cache[key] = {"ts": ts_cache, "label": label, "data": puntos}
+
+    # Geocodificación en background para CPs sin coords
+    if todos_faltantes and key not in _geocodificando:
+        def _geocodificar_bg(key_bg, faltantes_bg):
+            _geocodificando.add(key_bg)
+            try:
+                for cp in faltantes_bg:
+                    coords = _geocode_cp(cp)
+                    if coords:
+                        lat, lng = coords
+                        execute(
+                            "INSERT OR REPLACE INTO cp_coords (cp, lat, lng) VALUES (?, ?, ?)",
+                            (cp, lat, lng),
+                        )
+                    time.sleep(1.1)
+                # Invalidar caches para que la próxima visita reconstruya con los nuevos puntos
+                _mapa_cache.pop(key_bg, None)
+                execute("DELETE FROM mapa_resultado_cache WHERE key=?", (key_bg,))
+            finally:
+                _geocodificando.discard(key_bg)
+        threading.Thread(target=_geocodificar_bg, args=(key, todos_faltantes), daemon=True).start()
+
     return JSONResponse({
         "anio": _anio, "mes": _mes, "label": label, "puntos": puntos,
         "pendientes": pendientes,
@@ -602,7 +637,7 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
     # Buscar coords en caché SQLite (sin geocodificar — el endpoint /mapa ya lo hace)
     puntos_mapa = []
     if cp_data:
-        _init_cp_coords_table()
+        _init_mapa_tables()
         cps = list(cp_data.keys())
         cached = fetch_all(
             f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({','.join(['?']*len(cps))})",

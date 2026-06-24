@@ -404,6 +404,13 @@ def main() -> None:
     # Geocodificación del mapa — al final para no interferir con el refresh principal
     try:
         refresh_geocodificacion()
+        # Invalidar resultado cacheado del mes actual para que la próxima visita
+        # reconstruya el mapa con todos los CPs nuevos geocodificados hoy
+        hoy_key = date.today().strftime("%Y-%m")
+        with get_connection() as conn:
+            conn.execute("DELETE FROM mapa_resultado_cache WHERE key=?", (hoy_key,))
+            conn.commit()
+        log.info(f"Cache resultado mapa invalidado para {hoy_key}")
     except Exception as e:
         log.error(f"Error en geocodificación mapa: {e}")
 
