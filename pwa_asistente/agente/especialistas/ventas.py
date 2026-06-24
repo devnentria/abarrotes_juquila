@@ -152,6 +152,12 @@ VENTAS DE UN PRODUCTO ESPECÍFICO:
   ⛔⛔ NUNCA generar "Reporte Ejecutivo" ni panorama general cuando se pidió un producto concreto.
   ✅ SIEMPRE hacer JOIN a FT_Facturas_D fd → IM_Productos_Gral p y filtrar por p.Descripcion LIKE '%nombre%'.
 
+  ⚠ ENVÍO ESPECIAL — excluir SIEMPRE de listas y rankings de productos:
+    "ENVIO ESPECIAL" es un cargo por flete, no un producto real. Sí se suma al total de ventas
+    pero NUNCA debe aparecer en tops, rankings ni detalles de productos.
+    ✅ FILTRO OBLIGATORIO en cualquier SELECT que liste productos:
+       AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
+
   ⚠ REGALÍAS — excluir SIEMPRE salvo que el usuario las pida explícitamente:
     Las regalías son piezas de $0.01 que el ERP registra como línea separada.
     Se identifican por PRECIO, no por nombre (un producto puede llamarse "PROMOCION" y tener precio real).

@@ -273,17 +273,37 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
 
     # ── 2. Generar dashboard predefinido si aplica ────────────────────────────
     # Tipos con tab dedicado en el Studio — redirigir al tab en lugar de generar chart
-    _TIPOS_CON_TAB = {"top_vendedores", "variacion_vendedores", "medicos_dashboard"}
-    if tipo_dash in _TIPOS_CON_TAB:
+    # Solo redirigir al tab cuando el usuario dice explícitamente "dashboard" o "tablero".
+    # Si dice "gráfica" → generar chart dinámico aunque el tipo tenga tab dedicado.
+    _es_dashboard = bool(re.search(r'\b(dash\w*|tablero)\b', msg, re.IGNORECASE))
+    _TIPOS_CON_TAB = {
+        "top_vendedores", "variacion_vendedores",              # → tab Vendedores
+        "medicos_dashboard",                                   # → tab Médicos
+        "ventas_sucursal", "comparativo_meses",                # → tab Ventas (resumen)
+        "ventas_diario",   "tendencia_anual", "reporte_ventas",# → tab Ventas (resumen)
+        "top_productos",                                       # → tab Productos
+        "reporte_inventario", "inventario_stock", "stockouts", # → tab Inventario
+    }
+    if tipo_dash in _TIPOS_CON_TAB and _es_dashboard:
         modo = spec_dash.get("modo", "30d")
         fi   = spec_dash.get("fecha_inicio")
         ff   = spec_dash.get("fecha_fin")
         if tipo_dash == "medicos_dashboard":
             dashboard = {"tipo": "switch_tab", "tab": "medicos", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
             respuesta = "Te muestro el dashboard de **Médicos** — ranking, tendencia mensual y ventas por representante."
-        else:
+        elif tipo_dash in ("top_vendedores", "variacion_vendedores"):
             dashboard = {"tipo": "switch_tab", "tab": "vendedores", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
             respuesta = "Te muestro el dashboard de **Vendedores** — ranking, tendencia mensual y líder por sucursal."
+        elif tipo_dash == "top_productos":
+            dashboard = {"tipo": "switch_tab", "tab": "productos", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
+            respuesta = "Te muestro el dashboard de **Productos** — top ventas, variación y tendencia mensual."
+        elif tipo_dash in ("reporte_inventario", "inventario_stock", "stockouts"):
+            dashboard = {"tipo": "switch_tab", "tab": "inventario", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
+            respuesta = "Te muestro el dashboard de **Inventario** — stock actual, críticos y valor por sucursal."
+        else:
+            # Ventas generales → tab Ventas (resumen)
+            dashboard = {"tipo": "switch_tab", "tab": "resumen", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
+            respuesta = "Análisis generado con datos del ERP en tiempo real."
         estado    = "done"
         tipo_dash = "con_tab"   # evitar que caiga al bloque siguiente
 

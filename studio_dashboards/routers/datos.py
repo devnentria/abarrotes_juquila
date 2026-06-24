@@ -144,7 +144,7 @@ def _filtros_periodo(modo: str, campo: str, fi: str = None, ff: str = None):
         return (
             f"{c} >= '{fi}' AND {c} <= '{ff}'",
             f"{c} < '{fi}' AND {c} >= DATEADD(DAY,-(DATEDIFF(DAY,'{fi}','{ff}')+1),'{fi}')",
-            f"{fi[5:]} → {ff[5:]}",
+            f"{fi[8:]}/{fi[5:7]}/{fi[:4]} → {ff[8:]}/{ff[5:7]}/{ff[:4]}",
         )
     # default: 30d
     return (
@@ -548,6 +548,7 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
             INNER JOIN IM_Productos_Gral prod ON prod.Cve_Producto=d.Cve_Producto
             WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
               AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
+              AND prod.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Cve_Sucursal, cb.barcode_canon
             ORDER BY p.Cve_Sucursal, ventas DESC
         """)
@@ -643,8 +644,12 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
     label = f"{MESES_ES_P[_mes]} {_anio}"
 
     # Mes anterior para variación
-    _mes_ant = _mes - 1 if _mes > 1 else 12
+    _mes_ant  = _mes - 1 if _mes > 1 else 12
     _anio_ant = _anio if _mes > 1 else _anio - 1
+
+    # Si estamos en el mes actual, comparar solo los días transcurridos
+    _es_mes_actual = (_anio == hoy_d.year and _mes == hoy_d.month)
+    _dia_corte     = hoy_d.day if _es_mes_actual else None
 
     # ── 1. Top 20 productos del período ──────────────────────────────────────
     try:
@@ -662,6 +667,7 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
               AND c.Cve_Sucursal <> 99
               AND YEAR(c.Fecha_Documento) = {_anio}
               AND MONTH(c.Fecha_Documento) = {_mes}
+              AND pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY d.Cve_Producto
             ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
         """)
@@ -669,6 +675,8 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
         raise HTTPException(500, f"productos top_rows error: {_e}")
 
     # Importe del mismo producto el mes anterior (para variación)
+    # Si es el mes actual, limitar al mismo día del mes anterior para comparar igual vs igual
+    _filtro_dia_ant = f"AND DAY(c.Fecha_Documento) <= {_dia_corte}" if _dia_corte else ""
     try:
         ant_rows = query(f"""
             SELECT d.Cve_Producto,
@@ -680,6 +688,7 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
               AND c.Cve_Sucursal <> 99
               AND YEAR(c.Fecha_Documento) = {_anio_ant}
               AND MONTH(c.Fecha_Documento) = {_mes_ant}
+              {_filtro_dia_ant}
               AND d.Cve_Producto IN ({','.join(str(r['Cve_Producto']) for r in top_rows) or '0'})
             GROUP BY d.Cve_Producto
         """)
@@ -717,6 +726,7 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
             WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
               AND c.Cve_Sucursal <> 99
               AND c.Fecha_Documento >= DATEADD(MONTH, -6, {hoy()})
+              AND pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY d.Cve_Producto
             ORDER BY MIN(pg.Descripcion)
         """)
@@ -727,8 +737,13 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
     except Exception as _e:
         raise HTTPException(500, f"productos lista error: {_e}")
 
+    _mes_ant_nombre = MESES_ES_P[_mes_ant]
+    label_ant = (f"1-{_dia_corte} {_mes_ant_nombre}" if _dia_corte
+                 else _mes_ant_nombre)
+
     return JSONResponse({
         "anio": _anio, "mes": _mes, "label": label,
+        "label_ant": label_ant,
         "top_productos":  top_productos,
         "lista_productos": lista_productos,
         "total_importe":  round(total_importe, 2),
@@ -740,19 +755,13 @@ def productos_prediccion(cve_producto: int):
     """
     Predicción de demanda para un producto específico.
 
-    Modelo:
-      Para cada paciente (Cve_Cliente) que haya comprado el producto en los
-      últimos 90 días (tratamiento activo), calculamos:
-        - meses_transcurridos = meses desde primera compra del producto
-        - meses_restantes = max(0, 24 - meses_transcurridos)   # tratamiento 2 años
-        - promedio_mensual = total_piezas / max(1, meses_con_compra)
-        - contribucion_pred = promedio_mensual × meses_restantes
-
-      La suma de contribuciones da la demanda proyectada del período restante.
-      Adicionalmente se desglosa por sucursal.
+    Modelo: regresión lineal sobre ventas mensuales (últimos 12 meses).
+    La proyección se basa en la tasa de crecimiento y tendencia de ventas,
+    no en supuestos de tratamiento.
 
     Returns:
-        JSON con resumen, desglose por paciente y por sucursal.
+        JSON con piezas vendidas, proyección 3m y 6m, desglose por sucursal
+        e historial mensual.
     """
     try:
         prod_row = query(f"""
@@ -764,17 +773,17 @@ def productos_prediccion(cve_producto: int):
     except Exception as e:
         raise HTTPException(500, f"prediccion-nombre: {e}")
 
+    hoy_d = _date.today()
+    fecha_corte_str = f"{hoy_d.year - 2}-{hoy_d.month:02d}-01"
+
     try:
         hist_rows = query(f"""
             SELECT
-                c.Cve_Cliente,
+                YEAR(c.Fecha_Documento)  AS anio,
+                MONTH(c.Fecha_Documento) AS mes,
                 c.Cve_Sucursal,
                 MIN(ISNULL(s.Nombre, CAST(c.Cve_Sucursal AS VARCHAR))) AS sucursal,
-                MIN(CONVERT(DATE, c.Fecha_Documento)) AS primera_compra,
-                MAX(CONVERT(DATE, c.Fecha_Documento)) AS ultima_compra,
-                COUNT(DISTINCT YEAR(c.Fecha_Documento) * 100 + MONTH(c.Fecha_Documento))
-                    AS meses_con_compra,
-                SUM(d.Cantidad_Ordenada) AS total_piezas
+                SUM(d.Cantidad_Ordenada) AS piezas
             FROM FT_Pedidos_C c
             INNER JOIN FT_Pedidos_Dia d
                 ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
@@ -782,79 +791,144 @@ def productos_prediccion(cve_producto: int):
             WHERE d.Cve_Producto = {cve_producto}
               AND c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
               AND c.Cve_Sucursal <> 99
-              AND c.Cve_Cliente IS NOT NULL
-            GROUP BY c.Cve_Cliente, c.Cve_Sucursal
+              AND CONVERT(DATE, c.Fecha_Documento) >= '{fecha_corte_str}'
+            GROUP BY YEAR(c.Fecha_Documento), MONTH(c.Fecha_Documento), c.Cve_Sucursal
+            ORDER BY anio, mes
         """)
     except Exception as e:
         raise HTTPException(500, f"prediccion-hist: {e}")
 
-    hoy_d = _date.today()
-    pred_90 = pred_6m = 0.0
-    clientes_activos = 0
-    suc_map: dict = defaultdict(lambda: {"sucursal": "", "clientes": 0, "pred_3m": 0.0, "pred_6m": 0.0})
-    detalle = []
-
-    def _to_date(val):
-        if val is None:
-            return hoy_d
-        if hasattr(val, "date"):
-            return val.date()
-        if isinstance(val, _date):
-            return val
-        return _date.fromisoformat(str(val)[:10])
-
-    for r in hist_rows:
-        # Solo clientes activos: última compra en los últimos 90 días
-        ult  = _to_date(r["ultima_compra"])
-        prim = _to_date(r["primera_compra"])
-        if (hoy_d - ult).days > 90:
-            continue
-
-        meses_transcurridos = max(1, (hoy_d.year - prim.year) * 12 + (hoy_d.month - prim.month))
-        meses_restantes     = max(0, 24 - meses_transcurridos)
-        meses_con_compra    = max(1, int(r["meses_con_compra"] or 1))
-        piezas_total        = float(r["total_piezas"] or 0)
-        prom_mensual        = piezas_total / meses_con_compra
-
-        contrib_3m = prom_mensual * min(3, meses_restantes)
-        contrib_6m = prom_mensual * min(6, meses_restantes)
-
-        pred_90 += contrib_3m
-        pred_6m += contrib_6m
-        clientes_activos += 1
-
-        cve_suc = r["Cve_Sucursal"]
-        suc_map[cve_suc]["sucursal"] = (r["sucursal"] or f"Suc {cve_suc}").strip()
-        suc_map[cve_suc]["clientes"] += 1
-        suc_map[cve_suc]["pred_3m"]  += contrib_3m
-        suc_map[cve_suc]["pred_6m"]  += contrib_6m
-
-        detalle.append({
-            "cliente":           r["Cve_Cliente"],
-            "sucursal":          (r["sucursal"] or "").strip(),
-            "primera_compra":    str(prim),
-            "ultima_compra":     str(ult),
-            "meses_transcurridos": meses_transcurridos,
-            "meses_restantes":   meses_restantes,
-            "prom_mensual":      round(prom_mensual, 1),
-            "pred_3m":           round(contrib_3m, 1),
-            "pred_6m":           round(contrib_6m, 1),
+    if not hist_rows:
+        return JSONResponse({
+            "cve_producto":      cve_producto,
+            "producto":          nombre_producto,
+            "ultimo_mes_label":  "",
+            "ultimo_mes_piezas": 0,
+            "pred_mes_3":        0,
+            "pred_mes_3_label":  "",
+            "pred_mes_6":        0,
+            "pred_mes_6_label":  "",
+            "yoy_factor":        1.0,
+            "por_sucursal":      [],
+            "detalle":           [],
+            "proyeccion":        [],
         })
 
-    por_sucursal = sorted(
-        [{"cve": k, **v, "pred_3m": round(v["pred_3m"], 1), "pred_6m": round(v["pred_6m"], 1)}
-         for k, v in suc_map.items()],
-        key=lambda x: x["pred_6m"], reverse=True,
-    )
+    # Aggregate monthly totals (all sucursales)
+    mes_totales: dict = defaultdict(float)              # (anio, mes) -> piezas
+    suc_mes: dict = defaultdict(lambda: defaultdict(float))  # cve_suc -> (anio,mes) -> piezas
+    suc_nombre: dict = {}
+
+    for r in hist_rows:
+        key = (int(r["anio"]), int(r["mes"]))
+        mes_totales[key] += float(r["piezas"] or 0)
+        cve_suc = r["Cve_Sucursal"]
+        suc_mes[cve_suc][key] += float(r["piezas"] or 0)
+        suc_nombre[cve_suc] = (r["sucursal"] or f"Suc {cve_suc}").strip()
+
+    # Sort keys chronologically
+    sorted_keys = sorted(mes_totales.keys())
+    # Use only last 12 complete months for trend (exclude current partial month)
+    mes_actual = (hoy_d.year, hoy_d.month)
+    trend_keys = [k for k in sorted_keys if k != mes_actual][-12:]
+    trend_vals = [mes_totales[k] for k in trend_keys]
+
+    MESES_ES_C = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+    # Last complete month actual sales
+    ultimo_mes_key    = trend_keys[-1] if trend_keys else None
+    ultimo_mes_piezas = round(mes_totales[ultimo_mes_key], 1) if ultimo_mes_key else 0
+    ultimo_mes_label  = f"{MESES_ES_C[ultimo_mes_key[1]]} {ultimo_mes_key[0]}" if ultimo_mes_key else ""
+
+    def _calc_yoy_factor(keys: list, totals: dict) -> float:
+        """Calcula el factor YoY promedio de los últimos 6 ratios disponibles."""
+        ratios = []
+        for k in keys:
+            anio_ant, mes_k = k[0] - 1, k[1]
+            key_ant = (anio_ant, mes_k)
+            if key_ant in totals and totals[key_ant] > 0:
+                ratios.append(totals[k] / totals[key_ant])
+        last_6 = ratios[-6:] if len(ratios) >= 6 else ratios
+        if not last_6:
+            return 1.0
+        yoy = sum(last_6) / len(last_6)
+        return max(0.1, min(5.0, yoy))
+
+    def _seasonal_proyeccion(keys: list, totals: dict, yoy: float) -> list:
+        """Proyecta 6 meses usando factor YoY estacional."""
+        if not keys:
+            return []
+        last_key = keys[-1]
+        vals_trend = [totals[k] for k in keys]
+        avg_last3 = sum(vals_trend[-3:]) / max(1, len(vals_trend[-3:]))
+        result = []
+        for k in range(1, 7):
+            mes_p = last_key[1] + k
+            anio_p = last_key[0] + (mes_p - 1) // 12
+            mes_p  = ((mes_p - 1) % 12) + 1
+            key_ant = (anio_p - 1, mes_p)
+            if key_ant in totals and totals[key_ant] > 0:
+                val_p = totals[key_ant] * yoy
+            else:
+                val_p = avg_last3
+            val_p = max(0.0, val_p)
+            result.append({
+                "mes_label": f"{MESES_ES_C[mes_p]} {anio_p}",
+                "piezas":    round(val_p, 1),
+            })
+        return result
+
+    # Global YoY factor
+    yoy_factor = _calc_yoy_factor(trend_keys, mes_totales)
+
+    # Global projection (6 months)
+    proyeccion = _seasonal_proyeccion(trend_keys, mes_totales, yoy_factor)
+
+    # pred_mes_3 = valor puntual del mes 3 (índice 2)
+    pred_mes_3       = int(round(proyeccion[2]["piezas"])) if len(proyeccion) >= 3 else 0
+    pred_mes_3_label = proyeccion[2]["mes_label"] if len(proyeccion) >= 3 else ""
+    pred_mes_6       = int(round(proyeccion[5]["piezas"])) if len(proyeccion) >= 6 else 0
+    pred_mes_6_label = proyeccion[5]["mes_label"] if len(proyeccion) >= 6 else ""
+
+    # Per-sucursal projection (seasonal model)
+    por_sucursal = []
+    for cve_suc, mes_dict in suc_mes.items():
+        suc_keys = sorted(mes_dict.keys())
+        suc_trend_keys = [k for k in suc_keys if k != mes_actual][-12:]
+        suc_yoy = _calc_yoy_factor(suc_trend_keys, mes_dict)
+        suc_proj = _seasonal_proyeccion(suc_trend_keys, mes_dict, suc_yoy)
+        suc_vals_trend = [mes_dict[k] for k in suc_trend_keys]
+        s_pred_3 = int(round(suc_proj[2]["piezas"])) if len(suc_proj) >= 3 else 0
+        s_pred_6 = int(round(suc_proj[5]["piezas"])) if len(suc_proj) >= 6 else 0
+        por_sucursal.append({
+            "cve":       cve_suc,
+            "sucursal":  suc_nombre.get(cve_suc, f"Suc {cve_suc}"),
+            "piezas_12m": round(sum(suc_vals_trend), 1),
+            "pred_mes_3": s_pred_3,
+            "pred_mes_6": s_pred_6,
+        })
+    por_sucursal.sort(key=lambda x: x["pred_mes_6"], reverse=True)
+
+    # Monthly history
+    detalle = [
+        {"mes_label": f"{MESES_ES_C[k[1]]} {k[0]}", "piezas": round(mes_totales[k], 1)}
+        for k in sorted_keys
+    ]
 
     return JSONResponse({
-        "cve_producto":    cve_producto,
-        "producto":        nombre_producto,
-        "clientes_activos": clientes_activos,
-        "pred_3m":         round(pred_90, 1),
-        "pred_6m":         round(pred_6m, 1),
-        "por_sucursal":    por_sucursal,
-        "detalle":         detalle,
+        "cve_producto":      cve_producto,
+        "producto":          nombre_producto,
+        "ultimo_mes_label":  ultimo_mes_label,
+        "ultimo_mes_piezas": ultimo_mes_piezas,
+        "pred_mes_3":        pred_mes_3,
+        "pred_mes_3_label":  pred_mes_3_label,
+        "pred_mes_6":        pred_mes_6,
+        "pred_mes_6_label":  pred_mes_6_label,
+        "yoy_factor":        round(yoy_factor, 4),
+        "por_sucursal":      por_sucursal,
+        "detalle":           detalle,
+        "proyeccion":        proyeccion,
     })
 
 
@@ -956,6 +1030,7 @@ def inventario_dashboard():
             FROM IN_Existencias_Alm e
             INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+              AND pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY e.Cve_Producto
             ORDER BY SUM(e.Existencia) DESC
         """)
@@ -998,6 +1073,7 @@ def inventario_dashboard():
                 GROUP BY d.Cve_Producto
             ) v ON v.Cve_Producto = sin_stock.Cve_Producto
             INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = sin_stock.Cve_Producto
+              AND pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY sin_stock.Cve_Producto
             ORDER BY SUM(v.importe_90d) DESC
         """)
@@ -1020,6 +1096,7 @@ def inventario_dashboard():
             FROM IN_Existencias_Alm e
             INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+              AND pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY e.Cve_Producto
             ORDER BY MIN(pg.Descripcion)
         """)
@@ -1043,19 +1120,18 @@ def inventario_dashboard():
 
 
 @router.get("/inventario/consulta")
-def inventario_consulta(cve_producto: str, fecha: str, cve_sucursal: Optional[int] = None):
+def inventario_consulta(cve_producto: str, fecha: str):
     """
     Consulta el stock histórico de un producto en una fecha dada.
     Si no hay dato = no había existencia ese día.
-    Filtra opcionalmente por sucursal.
     """
-    base_q = ("SELECT cve_sucursal, sucursal, descripcion, existencia, "
-              "precio1, precio2, precio3 "
-              "FROM inventario_historico_productos WHERE cve_producto=? AND fecha=?")
-    if cve_sucursal:
-        rows = fetch_all(base_q + " AND cve_sucursal=? ORDER BY existencia DESC", (cve_producto, fecha, cve_sucursal))
-    else:
-        rows = fetch_all(base_q + " ORDER BY existencia DESC", (cve_producto, fecha))
+    rows = fetch_all(
+        "SELECT cve_sucursal, sucursal, descripcion, existencia, "
+        "precio1, precio2, precio3 "
+        "FROM inventario_historico_productos WHERE cve_producto=? AND fecha=? "
+        "ORDER BY existencia DESC",
+        (cve_producto, fecha)
+    )
 
     if not rows:
         descripcion = (fetch_one(
@@ -1070,7 +1146,6 @@ def inventario_consulta(cve_producto: str, fecha: str, cve_sucursal: Optional[in
 
     r0 = rows[0]
     descripcion = (r0.get("descripcion") or f"Producto {cve_producto}").strip()
-    # Los precios son del producto, iguales en todas las sucursales
     precios = {
         "precio1": round(float(r0.get("precio1") or 0), 2),
         "precio2": round(float(r0.get("precio2") or 0), 2),
@@ -2049,6 +2124,7 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         }
 
     elif tipo == "tendencia_anual":
+        # Fetch 24 months to enable YoY seasonal projection
         rows = query(f"""
             SELECT anio, mes, mes_nombre, SUM(valor) AS valor, COUNT(folio) AS pedidos FROM (
                 SELECT YEAR(c.Fecha_Documento) AS anio, MONTH(c.Fecha_Documento) AS mes,
@@ -2057,7 +2133,7 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
                 FROM FT_Pedidos_C c
                 INNER JOIN FT_Pedidos_Dia d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal
                 WHERE c.Estatus<>'CN' AND c.Referencia_Cliente='PAGADO'
-                  AND c.Fecha_Documento >= DATEADD(MONTH,-11,
+                  AND c.Fecha_Documento >= DATEADD(MONTH,-23,
                       DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
                 GROUP BY YEAR(c.Fecha_Documento), MONTH(c.Fecha_Documento),
                          DATENAME(MONTH, c.Fecha_Documento), c.Cve_Folio
@@ -2066,14 +2142,62 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         import calendar as _cal2
         from datetime import date as _d3
         _hd2 = _d3.today()
-        _ms2 = _hd2.month % 12 + 1
-        total = sum(float(r.get("valor") or 0) for r in rows)
-        proyeccion = _proyectar([float(r.get("valor") or 0) for r in rows])
+        _mes_actual = (_hd2.year, _hd2.month)
+
+        # Build dict (anio, mes) -> valor
+        mes_val: dict = {}
+        for r in rows:
+            k = (int(r["anio"]), int(r["mes"]))
+            mes_val[k] = float(r.get("valor") or 0)
+
+        # Last 12 complete months (exclude current partial month)
+        all_keys = sorted(mes_val.keys())
+        trend_keys_ta = [k for k in all_keys if k != _mes_actual][-12:]
+
+        # YoY factor: compare each trend month vs same month previous year
+        yoy_ratios_ta = []
+        for k in trend_keys_ta:
+            prev_k = (k[0] - 1, k[1])
+            if prev_k in mes_val and mes_val[prev_k] > 0:
+                yoy_ratios_ta.append(mes_val[k] / mes_val[prev_k])
+        yoy_ta = sum(yoy_ratios_ta[-6:]) / len(yoy_ratios_ta[-6:]) if yoy_ratios_ta else 1.0
+        yoy_ta = min(max(yoy_ta, 0.1), 5.0)
+
+        # Recent 3-month average as fallback
+        recent_avg_ta = sum(mes_val[k] for k in trend_keys_ta[-3:]) / 3 if len(trend_keys_ta) >= 3 else (mes_val[trend_keys_ta[-1]] if trend_keys_ta else 0)
+
+        # Project next 3 months seasonally
+        MESES_ES_TA = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+                       "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        last_k_ta = trend_keys_ta[-1] if trend_keys_ta else (_hd2.year, _hd2.month - 1)
+        proyeccion_meses = []
+        for step in range(1, 4):
+            mp = last_k_ta[1] + step
+            ap = last_k_ta[0] + (mp - 1) // 12
+            mp = ((mp - 1) % 12) + 1
+            prev_year_k = (ap - 1, mp)
+            val_p = mes_val[prev_year_k] * yoy_ta if prev_year_k in mes_val and mes_val[prev_year_k] > 0 else recent_avg_ta
+            val_p = max(0.0, val_p)
+            proyeccion_meses.append({
+                "mes_label": f"{MESES_ES_TA[mp]} {ap}",
+                "valor": round(val_p, 2),
+            })
+
+        # Keep single proyeccion for backward compat (next month)
+        proyeccion = proyeccion_meses[0]["valor"] if proyeccion_meses else 0.0
+
+        # Only expose last 12 months in datos for chart
+        datos_12 = [r for r in rows if (int(r["anio"]), int(r["mes"])) in set(trend_keys_ta)]
+        total = sum(float(r.get("valor") or 0) for r in datos_12)
+
         return {
             "tipo": tipo, "titulo": "Tendencia anual de ventas",
-            "total": total, "proyeccion": proyeccion,
-            "proyeccion_label": _cal2.month_abbr[_ms2],
-            "datos": rows,
+            "total": total,
+            "proyeccion": proyeccion,
+            "proyeccion_label": proyeccion_meses[0]["mes_label"] if proyeccion_meses else "",
+            "proyeccion_meses": proyeccion_meses,
+            "yoy_factor": round(yoy_ta, 2),
+            "datos": datos_12,
         }
 
     elif tipo == "top_productos":
@@ -2417,7 +2541,8 @@ def listar_dashboards(usuario=Depends(get_current_user)):
     rows = fetch_all(
         "SELECT id, titulo, pregunta, tipo, datos_json, creado_en, "
         "       CASE WHEN pdf_b64 <> '' THEN 1 ELSE 0 END AS has_pdf "
-        "FROM dashboards WHERE guardado=1 ORDER BY creado_en DESC"
+        "FROM dashboards WHERE guardado=1 AND creado_por=? ORDER BY creado_en DESC",
+        (usuario["id"],)
     )
     for r in rows:
         try:

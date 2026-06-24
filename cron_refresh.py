@@ -236,7 +236,7 @@ def guardar_snapshot_inventario() -> None:
             for r in (rows_suc or [])
         ]
 
-        # Snapshot por producto × sucursal (solo existencia > 0)
+        # Snapshot por producto × sucursal (todos los productos, sin importar existencia)
         rows_prod = db_query("""
             SELECT e.Cve_Sucursal,
                    MIN(ISNULL(s.Nombre, CAST(e.Cve_Sucursal AS VARCHAR))) AS sucursal,
@@ -250,9 +250,8 @@ def guardar_snapshot_inventario() -> None:
             FROM IN_Existencias_Alm e
             INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             LEFT JOIN GN_Sucursales s ON s.Cve_Sucursal = e.Cve_Sucursal
-            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99 AND e.Existencia > 0
+            WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
             GROUP BY e.Cve_Sucursal, e.Cve_Producto
-            HAVING SUM(e.Existencia) > 0
         """)
 
         conn = get_connection()
@@ -327,6 +326,34 @@ def main() -> None:
         log.info("Whisper product prompt precargado OK")
     except Exception as e:
         log.error(f"Error precargando Whisper prompt: {e}")
+
+    # Limpiar conversaciones e historial de IA con más de 60 días
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "DELETE FROM mensajes WHERE conversacion_id IN "
+                "(SELECT id FROM conversaciones WHERE creado_at < date('now', '-60 days'))"
+            )
+            cur.execute(
+                "DELETE FROM conversaciones WHERE creado_at < date('now', '-60 days')"
+            )
+            conn.commit()
+            log.info(f"Limpieza historial: {cur.rowcount} conversaciones eliminadas (>60 días)")
+    except Exception as e:
+        log.error(f"Error en limpieza historial: {e}")
+
+    # Limpiar dashboards guardados con más de 90 días
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "DELETE FROM dashboards WHERE creado_en < date('now', '-90 days')"
+            )
+            conn.commit()
+            log.info(f"Limpieza dashboards: {cur.rowcount} dashboards eliminados (>90 días)")
+    except Exception as e:
+        log.error(f"Error en limpieza dashboards: {e}")
 
     # Geocodificación del mapa — al final para no interferir con el refresh principal
     try:

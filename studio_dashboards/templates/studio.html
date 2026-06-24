@@ -927,26 +927,26 @@
       </div>
     </div>
 
+    <!-- Barra de navegación de dashboards — siempre visible -->
+    <div id="dash-tab-bar" style="position:sticky;top:var(--header-h);z-index:50;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 0 10px;margin-bottom:16px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)">
+      <span id="tab-resumen" onclick="_switchTab('resumen')" style="cursor:pointer;font-weight:600;color:var(--blue-mid)">Ventas</span>
+      <span style="opacity:.4">|</span>
+      <span id="tab-zonas" onclick="_switchTab('zonas')" style="cursor:pointer">Zonas</span>
+      <span style="opacity:.4">|</span>
+      <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
+      <span style="opacity:.4">|</span>
+      <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
+      <span style="opacity:.4">|</span>
+      <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
+      <span style="opacity:.4">|</span>
+      <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Médicos</span>
+    </div>
+
     <!-- Contenido estático (resumen ejecutivo) -->
     <div id="static-dash-area">
 
     <!-- Dashboards -->
     <div class="dashboard-section">
-
-      <!-- Breadcrumb de sección (navegación interna) -->
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;font-size:12px;color:var(--text-dim)">
-        <span id="tab-resumen" onclick="_switchTab('resumen')" style="cursor:pointer;font-weight:600;color:var(--blue-mid)">Ventas</span>
-        <span style="opacity:.4">|</span>
-        <span id="tab-zonas" onclick="_switchTab('zonas')" style="cursor:pointer">Zonas</span>
-        <span style="opacity:.4">|</span>
-        <span id="tab-productos" onclick="_switchTab('productos')" style="cursor:pointer">Productos</span>
-        <span style="opacity:.4">|</span>
-        <span id="tab-inventario" onclick="_switchTab('inventario')" style="cursor:pointer">Inventario</span>
-        <span style="opacity:.4">|</span>
-        <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
-        <span style="color:var(--border)">·</span>
-        <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Médicos</span>
-      </div>
 
       <!-- Header con toggle de período -->
       <div id="header-periodo" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -1242,7 +1242,7 @@
 
         <!-- Comparativo ventas + piezas -->
         <div class="chart-card">
-          <div class="chart-card-title" style="margin-bottom:12px">Ventas y volumen por sucursal</div>
+          <div class="chart-card-title" style="margin-bottom:12px">Ventas por sucursal</div>
           <div id="zonas-chart-wrap" class="chart-loading">
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
               <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
@@ -1296,8 +1296,8 @@
       <div class="chart-card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <div>
-            <div class="chart-card-title" style="margin-bottom:2px">Predicción de demanda por tratamiento</div>
-            <div style="font-size:11px;color:var(--text-dim)">Pacientes activos (compra en últimos 90 días) · Tratamiento estimado 24 meses</div>
+            <div class="chart-card-title" style="margin-bottom:2px">Predicción de demanda por producto</div>
+            <div style="font-size:11px;color:var(--text-dim)">Piezas vendidas (últimos 24 meses) · Proyección por regresión lineal de tendencia</div>
           </div>
           <select id="prod-selector"
             onchange="_prodSeleccionarProducto(this.value)"
@@ -1363,13 +1363,6 @@
               style="width:100%;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)"
               max="">
           </div>
-          <div style="flex:1;min-width:130px">
-            <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Sucursal (opcional)</div>
-            <select id="inv-consulta-suc"
-              style="width:100%;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text)">
-              <option value="">Todas</option>
-            </select>
-          </div>
           <button onclick="_invConsultar()"
             style="padding:7px 18px;background:var(--blue-mid);color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">
             Consultar
@@ -1406,9 +1399,28 @@
             style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
             Mes actual
           </button>
-          <input type="month" id="vend-mes-input"
-            style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
-            onchange="_vendSetMes(this.value)">
+          <button id="vend-btn-rango" onclick="_vendSetModo('rango')"
+            style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+            Rango
+          </button>
+          <input type="hidden" id="vend-mes-input">
+          <select id="vend-mes-sel" onchange="_onMesSelChange('vend')"
+            style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+            <option value="1">Ene</option><option value="2">Feb</option><option value="3">Mar</option>
+            <option value="4">Abr</option><option value="5">May</option><option value="6">Jun</option>
+            <option value="7">Jul</option><option value="8">Ago</option><option value="9">Sep</option>
+            <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+          </select>
+          <select id="vend-anio-sel" onchange="_onMesSelChange('vend')"
+            style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+          </select>
+          <!-- Rango personalizado -->
+          <span id="vend-rango-wrap" style="display:none;align-items:center;gap:4px">
+            <input type="date" id="vend-fi" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+            <span style="font-size:11px;color:var(--text-dim)">→</span>
+            <input type="date" id="vend-ff" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+            <button onclick="_vendAplicarRango()" style="font-size:11px;padding:3px 8px;border-radius:6px;border:none;background:var(--blue-mid);color:#fff;cursor:pointer">Aplicar</button>
+          </span>
           <span id="vend-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
         </div>
       </div>
@@ -1456,7 +1468,7 @@
       <div class="chart-card" style="margin-top:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
           <span class="chart-card-title">Productos más vendidos por vendedor</span>
-          <div id="vend-pvv-leyenda" style="display:flex;flex-wrap:wrap;gap:10px;font-size:10px"></div>
+          <div id="vend-pvv-leyenda" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px 16px;font-size:10px;margin-top:10px"></div>
         </div>
         <div id="vend-pvv-wrap" style="position:relative;height:300px">
           <canvas id="vend-pvv-chart"></canvas>
@@ -1481,9 +1493,28 @@
         style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
         Mes actual
       </button>
-      <input type="month" id="med-mes-input"
-        style="font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer"
-        onchange="_medSetMes(this.value)">
+      <button id="med-btn-rango" onclick="_medSetModo('rango')"
+        style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+        Rango
+      </button>
+      <input type="hidden" id="med-mes-input">
+      <select id="med-mes-sel" onchange="_onMesSelChange('med')"
+        style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+        <option value="1">Ene</option><option value="2">Feb</option><option value="3">Mar</option>
+        <option value="4">Abr</option><option value="5">May</option><option value="6">Jun</option>
+        <option value="7">Jul</option><option value="8">Ago</option><option value="9">Sep</option>
+        <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+      </select>
+      <select id="med-anio-sel" onchange="_onMesSelChange('med')"
+        style="font-size:11px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer">
+      </select>
+      <!-- Rango personalizado -->
+      <span id="med-rango-wrap" style="display:none;align-items:center;gap:4px">
+        <input type="date" id="med-fi" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+        <span style="font-size:11px;color:var(--text-dim)">→</span>
+        <input type="date" id="med-ff" style="font-size:11px;padding:3px 6px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+        <button onclick="_medAplicarRango()" style="font-size:11px;padding:3px 8px;border-radius:6px;border:none;background:var(--blue-mid);color:#fff;cursor:pointer">Aplicar</button>
+      </span>
       <span id="med-label" style="font-size:11px;color:var(--text-dim);min-width:90px">Últimos 30 días</span>
     </div>
   </div>
@@ -1877,6 +1908,8 @@ function debeUsarPWA() {
 let _usuario = null;
 let _resetEquipoId = null;
 let _logoCached = null;         // logo pre-cargado en base64 para PDF
+let _logoNatW   = 0;            // ancho natural en px
+let _logoNatH   = 0;            // alto natural en px
 let _iframeSnapshot = null;     // snapshot cacheado del chart_dinamico activo
 
 // Escuchar mensajes del iframe (snapshot de captura + altura del body)
@@ -1936,7 +1969,14 @@ async function _precargarLogo() {
       fr.onerror = rej;
       fr.readAsDataURL(new Blob([buf]));
     });
-    console.log('[Studio] logo pre-cargado para PDF');
+    // Guardar dimensiones naturales para respetar aspect ratio en PDF
+    await new Promise(res => {
+      const img = new Image();
+      img.onload = () => { _logoNatW = img.naturalWidth; _logoNatH = img.naturalHeight; res(); };
+      img.onerror = res;
+      img.src = _logoCached;
+    });
+    console.log('[Studio] logo pre-cargado para PDF', _logoNatW, 'x', _logoNatH);
   } catch (e) {
     console.warn('[Studio] logo no disponible:', e.message);
   }
@@ -2421,16 +2461,38 @@ async function _scPollJob(jobId, hasDashHint) {
       const tab  = data.dashboard.tab;
       const modo = data.dashboard.modo;
       const fi   = data.dashboard.fecha_inicio;
-      if (tab === 'vendedores') {
+      if (tab === 'resumen') {
+        const ff = data.dashboard.fecha_fin;
+        if (fi && ff) {
+          _fi = fi; _ff = ff;
+          _cargarDashboardsConRango('custom', fi, ff);
+        } else {
+          cargarDashboards(modo || '30d');
+        }
+        _switchTab('resumen');
+        return;
+      } else if (tab === 'productos') {
+        // Si viene con fecha_inicio, usar ese mes/año
+        if (fi) {
+          const [y, m] = fi.split('-');
+          _prodAnio = parseInt(y);
+          _prodMes  = parseInt(m);
+        }
+        _switchTab('productos');
+        return;
+      } else if (tab === 'inventario') {
+        _switchTab('inventario');
+        return;
+      } else if (tab === 'vendedores') {
         if (fi) { _vendMes = fi.slice(0,7); _vendModo = ''; }
         else    { _vendModo = modo || '30d'; _vendMes = null; }
         const mesInput = document.getElementById('vend-mes-input');
-        if (mesInput && _vendMes) mesInput.value = _vendMes;
+        if (mesInput && _vendMes) { mesInput.value = _vendMes; _syncMesSels('vend', _vendMes); }
       } else if (tab === 'medicos') {
         if (fi) { _medMes = fi.slice(0,7); _medModo = ''; }
         else    { _medModo = modo || '30d'; _medMes = null; }
         const mesInput = document.getElementById('med-mes-input');
-        if (mesInput && _medMes) mesInput.value = _medMes;
+        if (mesInput && _medMes) { mesInput.value = _medMes; _syncMesSels('med', _medMes); }
       }
       _switchTab(tab);
     } else if (hasDash) {
@@ -2572,7 +2634,7 @@ async function _scEnviar() {
         _medMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
         _medModo = '';
         const mesInput = document.getElementById('med-mes-input');
-        if (mesInput) mesInput.value = _medMes;
+        if (mesInput) { mesInput.value = _medMes; _syncMesSels('med', _medMes); }
       } else {
         _medModo = '30d';
         _medMes  = null;
@@ -2600,7 +2662,7 @@ async function _scEnviar() {
         _vendMes  = `${_anio}-${String(_numMes).padStart(2,'0')}`;
         _vendModo = '';
         const mesInput = document.getElementById('vend-mes-input');
-        if (mesInput) mesInput.value = _vendMes;
+        if (mesInput) { mesInput.value = _vendMes; _syncMesSels('vend', _vendMes); }
       } else {
         _vendModo = '30d';
         _vendMes  = null;
@@ -2719,6 +2781,8 @@ function _scSeleccionarConv(sel) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  _initMesSels('vend');
+  _initMesSels('med');
   document.getElementById('sc-send-btn').addEventListener('click', _scEnviar);
   document.getElementById('sc-input').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _scEnviar(); }
@@ -2757,6 +2821,12 @@ const COLORES = [
 
 function _formatMXN(n) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(n);
+}
+/** Convierte 'YYYY-MM-DD' → 'DD/MM/AAAA' */
+function _fmtFecha(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
 }
 
 // ── Mapa de ventas por estado ─────────────────────────────────────────────────
@@ -3197,10 +3267,11 @@ function _renderZonasChart(sucursales) {
 
   if (_zonasChart) { _zonasChart.destroy(); _zonasChart = null; }
 
-  const labels  = sucursales.map(s => s.nombre);
-  const ventas  = sucursales.map(s => s.ventas);
-  const piezas  = sucursales.map(s => s.piezas);
-  const colores = sucursales.map((_, i) => COLORES_ZONAS[i % COLORES_ZONAS.length]);
+  const sorted  = [...sucursales].sort((a, b) => b.ventas - a.ventas);
+  const labels  = sorted.map(s => s.nombre);
+  const ventas  = sorted.map(s => s.ventas);
+  const piezas  = sorted.map(s => s.piezas);
+  const colores = sorted.map((_, i) => COLORES_ZONAS[i % COLORES_ZONAS.length]);
   const esDark  = document.documentElement.getAttribute('data-theme') === 'dark';
   const textCol = esDark ? '#e2e8f0' : '#1D1D1F';
   const gridCol = esDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.06)';
@@ -3216,38 +3287,36 @@ function _renderZonasChart(sucursales) {
           backgroundColor: colores.map(c => c + 'CC'),
           borderColor: colores,
           borderWidth: 1,
-          yAxisID: 'y',
-        },
-        {
-          label: 'Piezas',
-          data: piezas,
-          backgroundColor: colores.map(c => c + '55'),
-          borderColor: colores,
-          borderWidth: 1,
-          borderDash: [4, 2],
-          yAxisID: 'y2',
-          type: 'line',
-          tension: 0.3,
-          pointRadius: 4,
+          borderRadius: 4,
         },
       ],
     },
     options: {
+      indexAxis: 'y',
       responsive: true,
       plugins: {
-        legend: { labels: { color: textCol, font: { size: 11 } } },
+        legend: { display: false },
         tooltip: {
           callbacks: {
-            label: ctx => ctx.datasetIndex === 0
-              ? ` ${_formatMXN(ctx.raw)}`
-              : ` ${ctx.raw.toLocaleString('es-MX')} pzs`,
+            label: (ctx) => {
+              const s = sorted[ctx.dataIndex];
+              return [
+                ` Ventas: ${_formatMXN(ctx.raw)}`,
+                ` Piezas: ${s.piezas.toLocaleString('es-MX')} pzs`,
+              ];
+            },
           },
         },
       },
       scales: {
-        x:  { ticks: { color: textCol, font: { size: 10 } }, grid: { color: gridCol } },
-        y:  { ticks: { color: textCol, font: { size: 10 }, callback: v => _formatMXN(v) }, grid: { color: gridCol }, position: 'left' },
-        y2: { ticks: { color: textCol, font: { size: 10 } }, grid: { display: false }, position: 'right' },
+        x: {
+          ticks: { color: textCol, font: { size: 10 }, callback: v => _formatMXN(v) },
+          grid: { color: gridCol },
+        },
+        y: {
+          ticks: { color: textCol, font: { size: 11 } },
+          grid: { display: false },
+        },
       },
     },
   });
@@ -3294,7 +3363,7 @@ function _aplicarProductosData(data) {
   if (labelEl) labelEl.textContent = data.label || '';
   _renderProdKPIs(data);
   _renderProdGainersLosers(data.top_productos || []);
-  _renderProdTopTabla(data.top_productos || [], data.total_importe || 0);
+  _renderProdTopTabla(data.top_productos || [], data.total_importe || 0, data.label_ant || 'mes ant.');
   _poblarProdSelector(data.lista_productos || []);
 }
 
@@ -3356,7 +3425,7 @@ async function cargarProductos() {
   }
 }
 
-function _renderProdTopTabla(productos, totalImporte) {
+function _renderProdTopTabla(productos, totalImporte, labelAnt) {
   const el = document.getElementById('prod-top-tabla');
   if (!el) return;
   if (!productos.length) { el.innerHTML = '<div style="color:var(--text-dim);padding:12px 0">Sin datos para este período</div>'; return; }
@@ -3390,7 +3459,7 @@ function _renderProdTopTabla(productos, totalImporte) {
         <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Producto</th>
         <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Importe</th>
         <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Piezas</th>
-        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">vs mes ant.</th>
+        <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">vs ${labelAnt}</th>
         <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">% total</th>
       </tr>
     </thead>
@@ -3426,34 +3495,71 @@ async function _prodSeleccionarProducto(cveProducto) {
   }
 }
 
+let _predChart = null;
+
 function _renderProdPrediccion(data) {
   const el = document.getElementById('prod-prediccion');
   if (!el) return;
 
-  if (!data.clientes_activos) {
+  if (!data.ultimo_mes_piezas && !data.pred_mes_3) {
+    if (_predChart) { _predChart.destroy(); _predChart = null; }
     el.innerHTML = `<div style="color:var(--text-dim);padding:20px 0;text-align:center">
-      Sin pacientes activos en los últimos 90 días para <strong>${data.producto}</strong>.
+      Sin ventas registradas en los últimos 24 meses para <strong>${data.producto}</strong>.
     </div>`;
     return;
+  }
+
+  const esDark   = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = esDark ? '#94a3b8' : '#6E6E73';
+  const gridColor = esDark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)';
+
+  // Detectar tendencia para el badge
+  const det = data.detalle || [];
+  const proj = data.proyeccion || [];
+  let tendencia = '';
+  if (det.length >= 3) {
+    const ultimos = det.slice(-3).map(d => d.piezas);
+    const primeros = det.slice(0, 3).map(d => d.piezas);
+    const avgUlt = ultimos.reduce((a, b) => a + b, 0) / ultimos.length;
+    const avgPrim = primeros.reduce((a, b) => a + b, 0) / primeros.length;
+    const delta = avgPrim > 0 ? ((avgUlt - avgPrim) / avgPrim * 100) : 0;
+    if (delta > 5)       tendencia = `<span style="color:#00897B;font-size:11px;font-weight:600">↑ ${delta.toFixed(0)}% crecimiento</span>`;
+    else if (delta < -5) tendencia = `<span style="color:#EF6C3A;font-size:11px;font-weight:600">↓ ${Math.abs(delta).toFixed(0)}% caída</span>`;
+    else                 tendencia = `<span style="color:var(--text-dim);font-size:11px">→ tendencia estable</span>`;
   }
 
   // KPIs
   const kpis = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
       <div style="background:var(--blue-light);border-radius:10px;padding:14px">
-        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Pacientes activos</div>
-        <div style="font-size:22px;font-weight:700;color:var(--text)">${data.clientes_activos}</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">con compra en últimos 90 días</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Último mes — ${data.ultimo_mes_label}</div>
+        <div style="font-size:26px;font-weight:700;color:var(--text)">${Math.round(data.ultimo_mes_piezas).toLocaleString('es-MX')} <span style="font-size:13px;font-weight:500">pzs</span></div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">vendidas en el último mes completo · ${tendencia}</div>
       </div>
       <div style="background:var(--blue-light);border-radius:10px;padding:14px">
-        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Demanda proyectada 3 meses</div>
-        <div style="font-size:22px;font-weight:700;color:var(--blue-mid)">${Math.round(data.pred_3m).toLocaleString('es-MX')} pzs</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">basado en ritmo actual de tratamientos</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">En 3 meses — ${data.pred_mes_3_label}</div>
+        <div style="font-size:26px;font-weight:700;color:var(--blue-mid)">${Math.round(data.pred_mes_3).toLocaleString('es-MX')} <span style="font-size:13px;font-weight:500">pzs</span></div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">se espera vender este mes · ajuste estacional</div>
       </div>
       <div style="background:var(--blue-light);border-radius:10px;padding:14px">
-        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">Demanda proyectada 6 meses</div>
-        <div style="font-size:22px;font-weight:700;color:var(--warn)">${Math.round(data.pred_6m).toLocaleString('es-MX')} pzs</div>
-        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">acumulado restante de tratamientos activos</div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:4px">En 6 meses — ${data.pred_mes_6_label}</div>
+        <div style="font-size:26px;font-weight:700;color:var(--warn)">${Math.round(data.pred_mes_6).toLocaleString('es-MX')} <span style="font-size:13px;font-weight:500">pzs</span></div>
+        <div style="font-size:10px;color:var(--text-dim);margin-top:2px">se espera vender este mes · ajuste estacional</div>
+      </div>
+    </div>`;
+
+  // Gráfica histórico + proyección
+  const graficaHtml = `
+    <div style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="font-size:11px;font-weight:600;color:var(--text)">Tendencia de ventas</div>
+        <div style="display:flex;gap:12px;font-size:10px;color:var(--text-dim)">
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1A2B5A;margin-right:4px"></span>Histórico</span>
+          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#EF6C3A;opacity:.7;margin-right:4px"></span>Proyección</span>
+        </div>
+      </div>
+      <div style="position:relative;height:180px">
+        <canvas id="pred-chart-canvas"></canvas>
       </div>
     </div>`;
 
@@ -3461,67 +3567,118 @@ function _renderProdPrediccion(data) {
   const sucRows = (data.por_sucursal || []).map(s => `
     <tr>
       <td style="padding:5px 8px;color:var(--text)">${s.sucursal}</td>
-      <td style="padding:5px 8px;text-align:right;color:var(--text-dim)">${s.clientes}</td>
-      <td style="padding:5px 8px;text-align:right;color:var(--blue-mid);font-weight:600">${Math.round(s.pred_3m).toLocaleString('es-MX')} pzs</td>
-      <td style="padding:5px 8px;text-align:right;color:var(--warn)">${Math.round(s.pred_6m).toLocaleString('es-MX')} pzs</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text-dim)">${Math.round(s.piezas_12m).toLocaleString('es-MX')}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--blue-mid);font-weight:600">${Math.round(s.pred_mes_3).toLocaleString('es-MX')} pzs</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--warn)">${Math.round(s.pred_mes_6).toLocaleString('es-MX')} pzs</td>
     </tr>`).join('');
 
   const tabla_suc = sucRows ? `
-    <div style="margin-bottom:16px">
+    <div>
       <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">Proyección por sucursal</div>
       <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="border-bottom:1px solid var(--border)">
             <th style="padding:4px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
-            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pacientes</th>
-            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 3m</th>
-            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 6m</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Vendido (12m)</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Esperado ${data.pred_mes_3_label}</th>
+            <th style="padding:4px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Esperado ${data.pred_mes_6_label}</th>
           </tr>
         </thead>
         <tbody>${sucRows}</tbody>
       </table>
     </div>` : '';
 
-  // Detalle pacientes (colapsable, top 20)
-  const det = (data.detalle || []).slice(0, 20);
-  const detRows = det.map(d => `
-    <tr>
-      <td style="padding:4px 8px;color:var(--text-dim);font-size:11px">${d.sucursal}</td>
-      <td style="padding:4px 8px;color:var(--text-dim);font-size:11px">${d.primera_compra}</td>
-      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text)">${d.meses_transcurridos}m</td>
-      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text)">${d.meses_restantes}m</td>
-      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--text-dim)">${d.prom_mensual} pzs/m</td>
-      <td style="padding:4px 8px;text-align:right;font-size:11px;color:var(--blue-mid)">${Math.round(d.pred_3m)} pzs</td>
-    </tr>`).join('');
-
-  const tabla_det = detRows ? `
-    <details style="margin-top:4px">
-      <summary style="font-size:11px;font-weight:600;color:var(--text);cursor:pointer;padding:6px 0">
-        Detalle por paciente (top ${det.length})
-      </summary>
-      <table style="width:100%;border-collapse:collapse;margin-top:8px">
-        <thead>
-          <tr style="border-bottom:1px solid var(--border)">
-            <th style="padding:3px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">Sucursal</th>
-            <th style="padding:3px 8px;text-align:left;font-size:10px;color:var(--text-dim);font-weight:500">1ª compra</th>
-            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Meses en tx</th>
-            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Meses rest.</th>
-            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Prom/mes</th>
-            <th style="padding:3px 8px;text-align:right;font-size:10px;color:var(--text-dim);font-weight:500">Pred. 3m</th>
-          </tr>
-        </thead>
-        <tbody>${detRows}</tbody>
-      </table>
-      <div style="margin-top:6px;font-size:10px;color:var(--text-dim)">
-        * Solo pacientes con compra en los últimos 90 días. Tratamiento estimado: 24 meses.
-      </div>
-    </details>` : '';
-
   el.innerHTML = `
     <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:14px">${data.producto}</div>
     ${kpis}
-    ${tabla_suc}
-    ${tabla_det}`;
+    ${graficaHtml}
+    ${tabla_suc}`;
+
+  // Destruir chart anterior si existe
+  if (_predChart) { _predChart.destroy(); _predChart = null; }
+
+  const canvas = document.getElementById('pred-chart-canvas');
+  if (!canvas) return;
+
+  // Show only last 12 months of history + 6 projected (same window as model)
+  const det12    = det.slice(-12);
+  const histLabels = det12.map(d => d.mes_label);
+  const histVals   = det12.map(d => d.piezas);
+  const projLabels = proj.map(d => d.mes_label);
+  const projVals   = proj.map(d => d.piezas);
+
+  // Combine: 12 history bars + 6 projected bars (null-padded for alignment)
+  const allLabels = [...histLabels, ...projLabels];
+  const histData  = [...histVals, ...projLabels.map(() => null)];
+  const projData  = [...histLabels.map(() => null), ...projVals];
+
+  _predChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Histórico',
+          data: histData,
+          backgroundColor: '#1A2B5A',
+          borderRadius: 4,
+          borderSkipped: false,
+          order: 2,
+        },
+        {
+          label: 'Proyección',
+          data: projData,
+          backgroundColor: 'rgba(239,108,58,.65)',
+          borderRadius: 4,
+          borderSkipped: false,
+          order: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString('es-MX')} pzs`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: textColor, font: { size: 10 }, maxRotation: 45 },
+          grid: { display: false },
+        },
+        y: {
+          ticks: { color: textColor, font: { size: 10 }, callback: v => v.toLocaleString('es-MX') },
+          grid: { color: gridColor },
+          border: { display: false },
+          suggestedMin: 0,
+        },
+      },
+      animation: {
+        onComplete() {
+          // Draw value labels on projected (orange) bars
+          const chart = this;
+          const ctx2  = chart.ctx;
+          const ds    = chart.data.datasets[1];  // proyección dataset
+          const meta  = chart.getDatasetMeta(1);
+          ctx2.save();
+          ctx2.fillStyle = esDark ? '#cbd5e1' : '#374151';
+          ctx2.font = 'bold 10px sans-serif';
+          ctx2.textAlign = 'center';
+          meta.data.forEach((bar, i) => {
+            const val = ds.data[i];
+            if (val == null || val === 0) return;
+            ctx2.fillText(Math.round(val), bar.x, bar.y - 4);
+          });
+          ctx2.restore();
+        },
+      },
+    },
+  });
 }
 
 async function cargarDashboards(modo) {
@@ -3562,7 +3719,7 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
 
   const _modoLabels = { hoy: 'Hoy', '15d': 'Últ. 15 días', '30d': 'Últ. 30 días', mes: 'Mes actual' };
   const periodoLabel = esModoCustom
-    ? `${fi.slice(5)} → ${ff.slice(5)}`
+    ? `${_fmtFecha(fi)} → ${_fmtFecha(ff)}`
     : (_modoLabels[modo] || modo);
   const compLabel = document.getElementById('comp-periodo-label');
   if (compLabel) compLabel.textContent = periodoLabel;
@@ -4600,9 +4757,14 @@ async function _generarPDFBase64(titulo, pregunta) {
   const PW  = doc.internal.pageSize.getWidth();   // 210mm
   const PH  = doc.internal.pageSize.getHeight();  // 297mm
 
-  // Logo — usar el pre-cargado (no fetch en tiempo de generación)
+  // Logo — usar el pre-cargado respetando aspect ratio original
   if (_logoCached) {
-    try { doc.addImage(_logoCached, 'PNG', 8, 6, 36, 14); } catch {}
+    try {
+      const logoW  = 40; // ancho fijo en mm
+      const logoH  = _logoNatW > 0 ? logoW * (_logoNatH / _logoNatW) : 12;
+      const logoY  = (22 - logoH) / 2; // centrado vertical en el header (línea en y=22)
+      doc.addImage(_logoCached, 'PNG', 8, logoY, logoW, logoH);
+    } catch {}
   }
 
   // Título
@@ -4678,7 +4840,24 @@ async function _generarPDFBase64(titulo, pregunta) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
-    doc.text('Suite Analítica — Nentria Intelligent Solutions', PW / 2, PH - 4, { align: 'center' });
+    // Línea separadora del footer
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.line(8, PH - 10, PW - 8, PH - 10);
+    // Lado izquierdo — cliente
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Supra Global Consulting', 8, PH - 6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text('supragc.com.mx', 8, PH - 3);
+    // Lado derecho — Nentria
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Nentria Intelligent Solutions', PW - 8, PH - 6.5, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text('nentria.com', PW - 8, PH - 3, { align: 'right' });
   };
 
   if (imgH <= availH) {
@@ -5275,6 +5454,8 @@ function renderLayoutTrendArea(container, spec) {
   const total      = parseFloat(datos.total || lista.reduce((s, r) => s + parseFloat(r.valor || 0), 0));
   const proyeccion = parseFloat(datos.proyeccion || 0);
   const proyLabel  = datos.proyeccion_label || 'Proyección';
+  const proyMeses  = datos.proyeccion_meses || [];   // [{mes_label, valor}, ...]
+  const yoyFactor  = datos.yoy_factor || null;
   const vals       = lista.map(r => parseFloat(r.valor || 0));
   const maxVal     = vals.length ? Math.max(...vals) : 0;
 
@@ -5288,34 +5469,54 @@ function renderLayoutTrendArea(container, spec) {
     r.mes_nombre || String(r.fecha || `${r.mes || ''}/${r.anio || ''}`).substring(0, 10)
   );
 
-  // KPI strip
+  // YoY badge
+  const yoyBadge = yoyFactor != null
+    ? `<span style="font-size:10px;color:${yoyFactor >= 1 ? 'var(--success)' : 'var(--danger)'};margin-left:6px">
+        ${yoyFactor >= 1 ? '↑' : '↓'} ${Math.abs((yoyFactor - 1) * 100).toFixed(0)}% vs año anterior
+       </span>`
+    : '';
+
+  // KPI strip — proyeccion_meses: mostrar mes 1 y mes 3 si existen
+  const kpi3m = proyMeses[2] || proyMeses[0] || null;
+  const kpiProyHtml = proyMeses.length > 0 ? `
+    <div class="trend-kpi dash-animate" style="animation-delay:.18s">
+      <div class="trend-kpi-val" style="color:#7C3AED">${_formatMXN(proyMeses[0].valor)}</div>
+      <div class="trend-kpi-lbl">Esperado ${proyMeses[0].mes_label}</div>
+    </div>
+    ${kpi3m && kpi3m !== proyMeses[0] ? `
+    <div class="trend-kpi dash-animate" style="animation-delay:.22s">
+      <div class="trend-kpi-val" style="color:#EF6C3A">${_formatMXN(kpi3m.valor)}</div>
+      <div class="trend-kpi-lbl">Esperado ${kpi3m.mes_label}</div>
+    </div>` : ''}` : (proyeccion > 0 ? `
+    <div class="trend-kpi dash-animate" style="animation-delay:.18s">
+      <div class="trend-kpi-val" style="color:#7C3AED">${_formatMXN(proyeccion)}</div>
+      <div class="trend-kpi-lbl">Proyección ${proyLabel}</div>
+    </div>` : '');
+
   const kpiHtml = `
     <div class="trend-kpi-row">
       <div class="trend-kpi dash-animate" style="animation-delay:0s">
         <div class="trend-kpi-val">${_formatMXN(total)}</div>
-        <div class="trend-kpi-lbl">Total período</div>
+        <div class="trend-kpi-lbl">Total período (12m)</div>
       </div>
       <div class="trend-kpi dash-animate" style="animation-delay:.06s">
         <div class="trend-kpi-val">${_formatMXN(maxVal)}</div>
-        <div class="trend-kpi-lbl">Punto más alto</div>
+        <div class="trend-kpi-lbl">Mes más alto</div>
       </div>
       <div class="trend-kpi dash-animate" style="animation-delay:.12s">
         <div class="trend-kpi-val" style="color:${crecimiento >= 0 ? 'var(--success)' : 'var(--danger)'}">
           ${crecimiento !== null ? `${crecimiento >= 0 ? '+' : ''}${crecimiento}%` : '—'}
         </div>
-        <div class="trend-kpi-lbl">Crecimiento período</div>
+        <div class="trend-kpi-lbl">Crecimiento período${yoyBadge}</div>
       </div>
-      ${proyeccion > 0 ? `
-      <div class="trend-kpi dash-animate" style="animation-delay:.18s">
-        <div class="trend-kpi-val" style="color:#7C3AED">${_formatMXN(proyeccion)}</div>
-        <div class="trend-kpi-lbl">Proyección ${proyLabel}</div>
-      </div>` : ''}
+      ${kpiProyHtml}
     </div>`;
 
+  const tieneProyMeses = proyMeses.length > 0;
   container.innerHTML = `
     ${kpiHtml}
-    <div class="dash-card dash-animate" style="animation-delay:.22s">
-      <div class="dash-card-title">Evolución en el tiempo${proyeccion > 0 ? ' <span style="font-size:10px;color:#7C3AED;margin-left:6px">— — proyección · banda = ±10%</span>' : ''}</div>
+    <div class="dash-card dash-animate" style="animation-delay:.26s">
+      <div class="dash-card-title">Evolución en el tiempo${tieneProyMeses ? ' <span style="font-size:10px;color:#7C3AED;margin-left:6px">— — proyección estacional · banda = ±15%</span>' : ''}</div>
       <canvas id="dash-main-chart" style="max-height:340px"></canvas>
     </div>`;
 
@@ -5328,50 +5529,100 @@ function renderLayoutTrendArea(container, spec) {
     return g;
   })();
 
-  // Agregar punto de proyección al final
-  const labelsChart = [...labels, ...(proyeccion > 0 ? [proyLabel] : [])];
-  const valsChart   = [...vals,   ...(proyeccion > 0 ? [null] : [])];
-  // Banda de confianza ±15% alrededor de la proyección
-  // índices en datasets[]: 0=Ventas, 1=Proyección, 2=_banda_sup, 3=_banda_inf
-  // _banda_inf usa fill.target:2 (hacia _banda_sup) — más confiable en Chart.js v4
-  const _tol       = 0.15;
-  const _bandaClr  = esDark ? 'rgba(124,58,237,0.20)' : 'rgba(124,58,237,0.14)';
-  const _nullsPrev = new Array(vals.length - 1).fill(null);
-  const proyDataset = proyeccion > 0 ? [
-    {
-      label: `Proyección ${proyLabel}`,
-      data: [..._nullsPrev, vN, proyeccion],
-      borderColor: '#7C3AED',
-      borderDash: [6, 4],
-      borderWidth: 2,
-      pointRadius: [..._nullsPrev.map(() => 0), 0, 5],
-      pointBackgroundColor: '#7C3AED',
-      fill: false,
-      tension: 0,
-    },
-    {
-      label: '_banda_sup',
-      data: [..._nullsPrev, vN, proyeccion * (1 + _tol)],
-      borderColor: 'rgba(124,58,237,0.25)',
-      borderWidth: 1,
-      borderDash: [3, 3],
-      pointRadius: 0,
-      pointHoverRadius: 0,
-      fill: false,
-      tension: 0,
-    },
-    {
-      label: '_banda_inf',
-      data: [..._nullsPrev, vN, proyeccion * (1 - _tol)],
-      borderColor: 'rgba(124,58,237,0.25)',
-      borderWidth: 1,
-      borderDash: [3, 3],
-      pointRadius: 0,
-      pointHoverRadius: 0,
-      fill: { target: 2, above: _bandaClr, below: 'transparent' },
-      tension: 0,
-    },
-  ] : [];
+  // Build chart data — extend with projected months
+  const _tol      = 0.15;
+  const _bandaClr = esDark ? 'rgba(124,58,237,0.20)' : 'rgba(124,58,237,0.14)';
+
+  let labelsChart, valsChart, proyDataset;
+
+  if (tieneProyMeses) {
+    const projLabels = proyMeses.map(p => p.mes_label);
+    const projVals   = proyMeses.map(p => p.valor);
+    labelsChart = [...labels, ...projLabels];
+    // Historical line ends at vN, then null for projected slots
+    valsChart = [...vals, ...projLabels.map(() => null)];
+    // Projected line: nulls for historical slots, then vN as bridge, then projections
+    const _nullsHist = new Array(vals.length - 1).fill(null);
+    const projLineData = [..._nullsHist, vN, ...projVals];
+    const bandaSupData = [..._nullsHist, vN, ...projVals.map(v => v * (1 + _tol))];
+    const bandaInfData = [..._nullsHist, vN, ...projVals.map(v => v * (1 - _tol))];
+    const projPointRadius = [..._nullsHist.map(() => 0), 0, ...projVals.map(() => 4)];
+    proyDataset = [
+      {
+        label: 'Proyección estacional',
+        data: projLineData,
+        borderColor: '#7C3AED',
+        borderDash: [6, 4],
+        borderWidth: 2,
+        pointRadius: projPointRadius,
+        pointBackgroundColor: '#7C3AED',
+        fill: false,
+        tension: 0.2,
+      },
+      {
+        label: '_banda_sup',
+        data: bandaSupData,
+        borderColor: 'rgba(124,58,237,0.25)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0.2,
+      },
+      {
+        label: '_banda_inf',
+        data: bandaInfData,
+        borderColor: 'rgba(124,58,237,0.25)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: { target: 2, above: _bandaClr, below: 'transparent' },
+        tension: 0.2,
+      },
+    ];
+  } else {
+    // Fallback: single projected point (old behavior)
+    const _nullsPrev = new Array(vals.length - 1).fill(null);
+    labelsChart = [...labels, ...(proyeccion > 0 ? [proyLabel] : [])];
+    valsChart   = [...vals,   ...(proyeccion > 0 ? [null] : [])];
+    proyDataset = proyeccion > 0 ? [
+      {
+        label: `Proyección ${proyLabel}`,
+        data: [..._nullsPrev, vN, proyeccion],
+        borderColor: '#7C3AED',
+        borderDash: [6, 4],
+        borderWidth: 2,
+        pointRadius: [..._nullsPrev.map(() => 0), 0, 5],
+        pointBackgroundColor: '#7C3AED',
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: '_banda_sup',
+        data: [..._nullsPrev, vN, proyeccion * (1 + _tol)],
+        borderColor: 'rgba(124,58,237,0.25)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: false,
+        tension: 0,
+      },
+      {
+        label: '_banda_inf',
+        data: [..._nullsPrev, vN, proyeccion * (1 - _tol)],
+        borderColor: 'rgba(124,58,237,0.25)',
+        borderWidth: 1,
+        borderDash: [3, 3],
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        fill: { target: 2, above: _bandaClr, below: 'transparent' },
+        tension: 0,
+      },
+    ] : [];
+  }
 
   _dashCharts['main'] = new Chart(canvas, {
     type: 'line',
@@ -6874,12 +7125,6 @@ function _invPoblarConsulta(listaProductos, porSucursal) {
     prodEl.innerHTML = '<option value="">— Selecciona un producto —</option>'
       + listaProductos.map(p => `<option value="${p.cve_producto}">${p.descripcion}</option>`).join('');
   }
-  // Sucursales
-  const sucEl = document.getElementById('inv-consulta-suc');
-  if (sucEl && porSucursal.length) {
-    sucEl.innerHTML = '<option value="">Todas</option>'
-      + porSucursal.map(s => `<option value="">${s.sucursal}</option>`).join('');
-  }
 }
 
 async function _invConsultar() {
@@ -7009,25 +7254,34 @@ function _renderInvCriticos(lista, el) {
 let _medLoaded  = false;
 let _medModo    = '30d';
 let _medMes     = null;
+let _medFi      = null;
+let _medFf      = null;
 let _medCharts  = {};
 
 // ── Dashboard Vendedores ──────────────────────────────────────────────────────
 let _vendLoaded  = false;
 let _vendModo    = '30d';
 let _vendMes     = null;
+let _vendFi      = null;
+let _vendFf      = null;
 let _vendCharts  = {};
 
 function _vendSetModo(modo) {
   _vendModo = modo;
   _vendMes  = null;
-  const btn30  = document.getElementById('vend-btn-30d');
-  const btnMes = document.getElementById('vend-btn-mes');
-  const labelEl = document.getElementById('vend-label');
-  const _actStyle = 'var(--blue-mid)';
-  const _inactBg  = 'var(--surface)';
-  const _inactTxt = 'var(--text)';
-  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg;  btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
-  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg;  btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  _vendFi   = null;
+  _vendFf   = null;
+  const ACT = 'var(--blue-mid)'; const INACT_BG = 'var(--surface)'; const INACT_TXT = 'var(--text)';
+  const btn30    = document.getElementById('vend-btn-30d');
+  const btnMes   = document.getElementById('vend-btn-mes');
+  const btnRang  = document.getElementById('vend-btn-rango');
+  const rangWrap = document.getElementById('vend-rango-wrap');
+  const labelEl  = document.getElementById('vend-label');
+  if (btn30)   { btn30.style.background   = modo === '30d'   ? ACT : INACT_BG; btn30.style.color   = modo === '30d'   ? '#fff' : INACT_TXT; }
+  if (btnMes)  { btnMes.style.background  = modo === 'mes'   ? ACT : INACT_BG; btnMes.style.color  = modo === 'mes'   ? '#fff' : INACT_TXT; }
+  if (btnRang) { btnRang.style.background = modo === 'rango' ? ACT : INACT_BG; btnRang.style.color = modo === 'rango' ? '#fff' : INACT_TXT; }
+  if (rangWrap) rangWrap.style.display = modo === 'rango' ? 'flex' : 'none';
+  if (modo === 'rango') return; // esperar que el usuario elija fechas y presione Aplicar
   if (labelEl) {
     if (modo === '30d') labelEl.textContent = 'Últimos 30 días';
     else {
@@ -7038,6 +7292,64 @@ function _vendSetModo(modo) {
   }
   _mostrarOverlayGenerando('vendedores');
   cargarVendedores();
+}
+
+function _vendAplicarRango() {
+  const fi = document.getElementById('vend-fi')?.value;
+  const ff = document.getElementById('vend-ff')?.value;
+  if (!fi || !ff) { mostrarToast('Selecciona fecha de inicio y fin', 'warn'); return; }
+  if (fi > ff)    { mostrarToast('La fecha inicio debe ser anterior al fin', 'warn'); return; }
+  _vendFi   = fi;
+  _vendFf   = ff;
+  _vendMes  = null;
+  _vendModo = 'rango';
+  const labelEl = document.getElementById('vend-label');
+  if (labelEl) labelEl.textContent = `${_fmtFecha(fi)} → ${_fmtFecha(ff)}`;
+  _mostrarOverlayGenerando('vendedores');
+  cargarVendedores();
+}
+
+// ── Selectores mes/año ────────────────────────────────────────────────────────
+function _initMesSels(prefix) {
+  const anioEl = document.getElementById(prefix + '-anio-sel');
+  if (!anioEl || anioEl.options.length > 0) return;
+  const hoy = new Date();
+  for (let y = hoy.getFullYear() - 3; y <= hoy.getFullYear(); y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y;
+    if (y === hoy.getFullYear()) opt.selected = true;
+    anioEl.appendChild(opt);
+  }
+  // Preseleccionar mes actual
+  const mesEl = document.getElementById(prefix + '-mes-sel');
+  if (mesEl) mesEl.value = hoy.getMonth() + 1;
+}
+
+function _onMesSelChange(prefix) {
+  const m = document.getElementById(prefix + '-mes-sel')?.value;
+  const y = document.getElementById(prefix + '-anio-sel')?.value;
+  if (!m || !y) return;
+  const val = `${y}-${String(m).padStart(2, '0')}`;
+  const hidden = document.getElementById(prefix + '-mes-input');
+  if (hidden) hidden.value = val;
+  if (prefix === 'vend') _vendSetMes(val);
+  else _medSetMes(val);
+}
+
+function _syncMesSels(prefix, yyyymm) {
+  if (!yyyymm) return;
+  const [y, m] = yyyymm.split('-');
+  const mesEl  = document.getElementById(prefix + '-mes-sel');
+  const anioEl = document.getElementById(prefix + '-anio-sel');
+  if (mesEl) mesEl.value = parseInt(m);
+  if (anioEl) {
+    if (![...anioEl.options].find(o => o.value === y)) {
+      const opt = document.createElement('option');
+      opt.value = y; opt.textContent = y;
+      anioEl.insertBefore(opt, anioEl.firstChild);
+    }
+    anioEl.value = y;
+  }
 }
 
 function _vendSetMes(valor) {
@@ -7059,8 +7371,8 @@ function _vendSetMes(valor) {
 async function cargarVendedores() {
   _vendLoaded = true;
   let url = '/api/datos/vendedores';
-  if (_fi && _ff) {
-    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  if (_vendFi && _vendFf) {
+    url += `?fi=${encodeURIComponent(_vendFi)}&ff=${encodeURIComponent(_vendFf)}`;
   } else if (_vendMes) {
     url += `?mes=${encodeURIComponent(_vendMes)}`;
   } else {
@@ -7345,14 +7657,16 @@ function _renderVendProdxVend(data) {
     },
   });
 
-  // Leyenda de posición de producto
+  // Leyenda con nombre real del producto (basado en el vendedor top)
+  const topVendedor = lista[0];
   if (leyenda) {
-    leyenda.innerHTML = PALETA.slice(0, Math.min(maxRank, 5)).map((c, i) =>
-      `<span style="display:inline-flex;align-items:center;gap:4px">
-        <span style="width:10px;height:10px;border-radius:2px;background:${c};display:inline-block"></span>
-        <span style="color:var(--text-dim)">${RANK_LABEL[i]}</span>
-      </span>`
-    ).join('');
+    leyenda.innerHTML = PALETA.slice(0, Math.min(maxRank, 5)).map((c, i) => {
+      const nombre = topVendedor?.productos[i]?.producto || RANK_LABEL[i];
+      return `<div style="display:flex;align-items:center;gap:6px" title="${nombre}">
+        <span style="width:10px;height:10px;border-radius:2px;background:${c};flex-shrink:0;display:inline-block"></span>
+        <span style="color:var(--text-dim);font-size:11px">${nombre}</span>
+      </div>`;
+    }).join('');
   }
 }
 
@@ -7361,13 +7675,35 @@ function _renderVendProdxVend(data) {
 function _medSetModo(modo) {
   _medModo = modo;
   _medMes  = null;
-  const _actStyle = 'var(--blue-mid)'; const _inactBg = 'var(--surface)'; const _inactTxt = 'var(--text)';
-  const btn30  = document.getElementById('med-btn-30d');
-  const btnMes = document.getElementById('med-btn-mes');
-  const labelEl = document.getElementById('med-label');
-  if (btn30)  { btn30.style.background  = modo === '30d' ? _actStyle : _inactBg; btn30.style.color  = modo === '30d' ? '#fff' : _inactTxt; }
-  if (btnMes) { btnMes.style.background = modo === 'mes' ? _actStyle : _inactBg; btnMes.style.color = modo === 'mes' ? '#fff' : _inactTxt; }
+  _medFi   = null;
+  _medFf   = null;
+  const ACT = 'var(--blue-mid)'; const INACT_BG = 'var(--surface)'; const INACT_TXT = 'var(--text)';
+  const btn30    = document.getElementById('med-btn-30d');
+  const btnMes   = document.getElementById('med-btn-mes');
+  const btnRang  = document.getElementById('med-btn-rango');
+  const rangWrap = document.getElementById('med-rango-wrap');
+  const labelEl  = document.getElementById('med-label');
+  if (btn30)   { btn30.style.background   = modo === '30d'   ? ACT : INACT_BG; btn30.style.color   = modo === '30d'   ? '#fff' : INACT_TXT; }
+  if (btnMes)  { btnMes.style.background  = modo === 'mes'   ? ACT : INACT_BG; btnMes.style.color  = modo === 'mes'   ? '#fff' : INACT_TXT; }
+  if (btnRang) { btnRang.style.background = modo === 'rango' ? ACT : INACT_BG; btnRang.style.color = modo === 'rango' ? '#fff' : INACT_TXT; }
+  if (rangWrap) rangWrap.style.display = modo === 'rango' ? 'flex' : 'none';
+  if (modo === 'rango') return;
   if (labelEl) labelEl.textContent = modo === '30d' ? 'Últimos 30 días' : 'Mes actual';
+  _mostrarOverlayGenerando('medicos');
+  cargarMedicos();
+}
+
+function _medAplicarRango() {
+  const fi = document.getElementById('med-fi')?.value;
+  const ff = document.getElementById('med-ff')?.value;
+  if (!fi || !ff) { mostrarToast('Selecciona fecha de inicio y fin', 'warn'); return; }
+  if (fi > ff)    { mostrarToast('La fecha inicio debe ser anterior al fin', 'warn'); return; }
+  _medFi   = fi;
+  _medFf   = ff;
+  _medMes  = null;
+  _medModo = 'rango';
+  const labelEl = document.getElementById('med-label');
+  if (labelEl) labelEl.textContent = `${_fmtFecha(fi)} → ${_fmtFecha(ff)}`;
   _mostrarOverlayGenerando('medicos');
   cargarMedicos();
 }
@@ -7390,8 +7726,8 @@ function _medSetMes(valor) {
 async function cargarMedicos() {
   _medLoaded = true;
   let url = '/api/datos/medicos';
-  if (_fi && _ff) {
-    url += `?fi=${encodeURIComponent(_fi)}&ff=${encodeURIComponent(_ff)}`;
+  if (_medFi && _medFf) {
+    url += `?fi=${encodeURIComponent(_medFi)}&ff=${encodeURIComponent(_medFf)}`;
   } else if (_medMes) {
     url += `?mes=${encodeURIComponent(_medMes)}`;
   } else {

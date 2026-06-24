@@ -208,6 +208,7 @@ def _ventas_mes(anio: int, mes: int) -> str:
             WHERE fc.Status<>'C' AND fc.Cve_Sucursal<>99
               AND YEAR(fc.Fecha_Documento)=? AND MONTH(fc.Fecha_Documento)=?
               AND p.Descripcion IS NOT NULL
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion
             ORDER BY SUM(fd.Importe_Neto) DESC
         """, (anio, mes))
@@ -380,6 +381,7 @@ def _top_productos(anio: int, mes: int) -> str:
             WHERE fc.Status<>'C' AND fc.Cve_Sucursal<>99
               AND YEAR(fc.Fecha_Documento)=? AND MONTH(fc.Fecha_Documento)=?
               AND p.Descripcion IS NOT NULL
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion
             ORDER BY SUM(fd.Importe_Neto) DESC
         """, (ant_anio, ant_mes))
@@ -400,6 +402,7 @@ def _top_productos(anio: int, mes: int) -> str:
             WHERE fc.Status<>'C' AND fc.Cve_Sucursal<>99
               AND YEAR(fc.Fecha_Documento)=? AND MONTH(fc.Fecha_Documento)=?
               AND p.Descripcion IS NOT NULL
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion, s.Nombre
             ORDER BY SUM(fd.Importe_Neto) DESC
         """, (anio, mes))
@@ -513,6 +516,7 @@ def _caducidades_proximas(dias: int = 90) -> str:
               AND il.Fecha_Caducidad >= GETDATE()
               AND il.Fecha_Caducidad <= DATEADD(DAY,?,GETDATE())
               AND il.Cve_Sucursal   <> 99
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             ORDER BY il.Fecha_Caducidad ASC
         """, (dias,))
 
@@ -546,6 +550,7 @@ def _caducidades_proximas(dias: int = 90) -> str:
               AND il.Fecha_Caducidad >= GETDATE()
               AND il.Fecha_Caducidad <= DATEADD(DAY,?,GETDATE())
               AND il.Cve_Sucursal   <> 99
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion
             ORDER BY SUM(il.Existencia)*AVG(ea.Costo_Promedio) DESC
         """, (dias,))
@@ -650,6 +655,7 @@ def _stock_sin_existencia() -> str:
             JOIN GN_Sucursales     s ON s.Cve_Sucursal  = ea.Cve_Sucursal
             JOIN IM_Productos_Gral p ON p.Cve_Producto  = ea.Cve_Producto
             WHERE ea.Existencia=0 AND ea.Status='AC' AND ea.Cve_Sucursal<>99
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
               AND EXISTS (
                   SELECT 1 FROM FT_Facturas_D fd
                   JOIN FT_Facturas_C fc
@@ -674,6 +680,7 @@ def _stock_sin_existencia() -> str:
             JOIN GN_Sucursales     s ON s.Cve_Sucursal  = ea.Cve_Sucursal
             JOIN IM_Productos_Gral p ON p.Cve_Producto  = ea.Cve_Producto
             WHERE ea.Existencia > 0 AND ea.Status='AC' AND ea.Cve_Sucursal<>99
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
               AND ea.Cve_Producto IN (
                   SELECT DISTINCT ea2.Cve_Producto
                   FROM IN_Existencias_Alm ea2
@@ -708,6 +715,7 @@ def _stock_sin_existencia() -> str:
               AND ea.Status='AC'
             WHERE pc.Estatus='AC' AND pc.Cve_Sucursal<>99
               AND ea.Existencia=0
+              AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion
             ORDER BY SUM(pd.Cantidad) DESC
         """)

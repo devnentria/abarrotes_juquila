@@ -28,6 +28,10 @@ IN_Existencias_Alm — existencias actuales por sucursal
   Maximo (decimal), Minimo (decimal), Punto_Reorden (decimal),
   Status (varchar)
   ⚠ Filtrar: Status = 'AC'
+  ⚠ ENVÍO ESPECIAL — excluir SIEMPRE de listas de productos:
+    "ENVIO ESPECIAL" es un cargo por flete, no un producto real.
+    ✅ FILTRO OBLIGATORIO en cualquier SELECT que liste productos:
+       AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
   Para existencias con total por variante de producto:
     GROUP BY ROLLUP(p.Descripcion) → ISNULL(p.Descripcion,'── TOTAL') AS Descripcion
   Para existencias con total por sucursal:
