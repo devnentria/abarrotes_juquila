@@ -28,6 +28,11 @@ IN_Existencias_Alm — existencias actuales por sucursal
   Maximo (decimal), Minimo (decimal), Punto_Reorden (decimal),
   Status (varchar)
   ⚠ Filtrar: Status = 'AC'
+  ⚠ DATO CRÍTICO — Costo_Promedio y Costo_Ultima_Compra de esta tabla tienen valor $1.00 en la BD actual (dato incorrecto del ERP).
+    NUNCA usar IN_Existencias_Alm.Costo_Promedio para calcular valores monetarios.
+    ✅ SIEMPRE usar IM_Productos_Gral.Costo_Promedio (JOIN por Cve_Producto) para cualquier cálculo de costo o valor de inventario:
+       JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
+       → pg.Costo_Promedio  ← costo real del producto
   ⚠ ENVÍO ESPECIAL — excluir SIEMPRE de listas de productos:
     "ENVIO ESPECIAL" es un cargo por flete, no un producto real.
     ✅ FILTRO OBLIGATORIO en cualquier SELECT que liste productos:

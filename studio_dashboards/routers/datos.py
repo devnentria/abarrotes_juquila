@@ -989,10 +989,11 @@ def inventario_dashboard():
     try:
         kpi_rows = query(f"""
             SELECT
-                ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor_stock,
-                ISNULL(SUM(e.Existencia), 0)                               AS unidades_totales,
+                ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)), 0) AS valor_stock,
+                ISNULL(SUM(e.Existencia), 0)                                 AS unidades_totales,
                 COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos_con_stock
             FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
         """)
         kpi = kpi_rows[0] if kpi_rows else {}
@@ -1030,16 +1031,17 @@ def inventario_dashboard():
     try:
         suc_rows = query(f"""
             SELECT s.Nombre AS sucursal,
-                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor,
-                   ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                   ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)), 0) AS valor,
+                   ISNULL(SUM(e.Existencia), 0)                                AS unidades,
                    COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos
             FROM GN_Sucursales s
             LEFT JOIN IN_Existencias_Alm e
                 ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            LEFT JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE s.Cve_Sucursal <> 99
             GROUP BY s.Cve_Sucursal, s.Nombre
             HAVING ISNULL(SUM(e.Existencia), 0) > 0
-            ORDER BY SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)) DESC
+            ORDER BY SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)) DESC
         """)
         por_sucursal = [
             {
@@ -2394,10 +2396,11 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
                 FROM (
                     SELECT YEAR(h.Fecha) AS anio, MONTH(h.Fecha) AS mes,
                            DATENAME(MONTH, h.Fecha) AS mes_nombre,
-                           ISNULL(h.Existencia * ISNULL(h.Costo_Promedio,0), 0) AS valor,
+                           ISNULL(h.Existencia * ISNULL(pg.Costo_Promedio,0), 0) AS valor,
                            ISNULL(h.Existencia, 0) AS unidades
                     FROM IN_Existencias_Alm_Diario h
                     JOIN GN_Sucursales s ON s.Cve_Sucursal = h.Cve_Sucursal
+                    JOIN IM_Productos_Gral pg ON CAST(pg.Cve_Producto AS VARCHAR) = h.Cve_Producto
                     WHERE h.Fecha >= DATEADD(MONTH,-3,DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
                       AND h.Fecha <  DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1)
                       AND s.Cve_Sucursal <> 99
@@ -2415,10 +2418,10 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         # Rotación de inventario: ventas 30d / valor_stock_actual (por sucursal)
         rotacion_rows = query(f"""
             SELECT s.Nombre AS label,
-                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio,0)),0) AS valor_stock,
+                   ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)),0) AS valor_stock,
                    ISNULL(SUM(v.ventas_30d),0) AS ventas_30d,
-                   CASE WHEN SUM(e.Existencia * ISNULL(e.Costo_Promedio,0)) > 0
-                        THEN ROUND(SUM(v.ventas_30d) / SUM(e.Existencia * ISNULL(e.Costo_Promedio,0)), 2)
+                   CASE WHEN SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)) > 0
+                        THEN ROUND(SUM(v.ventas_30d) / SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)), 2)
                         ELSE 0 END AS rotacion,
                    CASE WHEN SUM(v.ventas_diaria) > 0
                         THEN ROUND(SUM(e.Existencia) / SUM(v.ventas_diaria), 0)
@@ -2426,6 +2429,7 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             FROM GN_Sucursales s
             LEFT JOIN IN_Existencias_Alm e
               ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status='AC'
+            LEFT JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             LEFT JOIN (
                 SELECT d.Cve_Sucursal,
                        ISNULL(SUM(d.Cantidad_Ordenada),0) AS ventas_30d,
@@ -2489,12 +2493,13 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
     elif tipo == "inventario_stock":
         rows = query(f"""
             SELECT s.Nombre AS label,
-                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS actual,
-                   ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                   ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)), 0) AS actual,
+                   ISNULL(SUM(e.Existencia), 0)                                AS unidades,
                    COUNT(CASE WHEN e.Existencia > 0 AND e.Existencia <= 5 THEN 1 END) AS criticos
             FROM GN_Sucursales s
             LEFT JOIN IN_Existencias_Alm e
               ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            LEFT JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE s.Cve_Sucursal <> 99
             GROUP BY s.Cve_Sucursal, s.Nombre
             HAVING ISNULL(SUM(e.Existencia), 0) > 0

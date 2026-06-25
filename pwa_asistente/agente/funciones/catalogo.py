@@ -537,22 +537,18 @@ def _caducidades_proximas(dias: int = 90) -> str:
             SELECT TOP 10
                 p.Descripcion                                         AS producto,
                 SUM(il.Existencia)                                    AS total_piezas,
-                CAST(AVG(ea.Costo_Promedio) AS DECIMAL(18,2))         AS costo_promedio,
-                CAST(SUM(il.Existencia) * AVG(ea.Costo_Promedio)
-                    AS DECIMAL(18,2))                                 AS valor_estimado
+                CAST(AVG(p.Costo_Promedio) AS DECIMAL(18,2))          AS costo_promedio,
+                CAST(SUM(il.Existencia) * AVG(p.Costo_Promedio)
+                    AS DECIMAL(18,2))                                  AS valor_estimado
             FROM IN_Existencias_Lote il
             JOIN IM_Productos_Gral p  ON p.Cve_Producto  = il.Cve_Producto
-            JOIN IN_Existencias_Alm ea
-              ON ea.Cve_Producto  = il.Cve_Producto
-             AND ea.Cve_Sucursal  = il.Cve_Sucursal
-             AND ea.Status = 'AC'
             WHERE il.Existencia      > 0
               AND il.Fecha_Caducidad >= GETDATE()
               AND il.Fecha_Caducidad <= DATEADD(DAY,?,GETDATE())
               AND il.Cve_Sucursal   <> 99
               AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
             GROUP BY p.Descripcion
-            ORDER BY SUM(il.Existencia)*AVG(ea.Costo_Promedio) DESC
+            ORDER BY SUM(il.Existencia)*AVG(p.Costo_Promedio) DESC
         """, (dias,))
 
     proximos, caducados, valor = _parallel(q_proximos, q_ya_caducados, q_valor_en_riesgo)

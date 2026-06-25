@@ -236,10 +236,11 @@ def guardar_snapshot_inventario() -> None:
     try:
         rows_kpi = db_query("""
             SELECT
-                ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor_stock,
-                ISNULL(SUM(e.Existencia), 0)                               AS unidades,
+                ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)), 0) AS valor_stock,
+                ISNULL(SUM(e.Existencia), 0)                                 AS unidades,
                 COUNT(DISTINCT CASE WHEN e.Existencia > 0 THEN e.Cve_Producto END) AS productos_stock
             FROM IN_Existencias_Alm e
+            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE e.Status = 'AC' AND e.Cve_Sucursal <> 99
         """)
         kpi = rows_kpi[0] if rows_kpi else {}
@@ -266,14 +267,15 @@ def guardar_snapshot_inventario() -> None:
 
         rows_suc = db_query("""
             SELECT s.Nombre AS sucursal,
-                   ISNULL(SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)), 0) AS valor,
+                   ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)), 0) AS valor,
                    ISNULL(SUM(e.Existencia), 0) AS unidades
             FROM GN_Sucursales s
             LEFT JOIN IN_Existencias_Alm e ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status = 'AC'
+            LEFT JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             WHERE s.Cve_Sucursal <> 99
             GROUP BY s.Cve_Sucursal, s.Nombre
             HAVING ISNULL(SUM(e.Existencia), 0) > 0
-            ORDER BY SUM(e.Existencia * ISNULL(e.Costo_Promedio, 0)) DESC
+            ORDER BY SUM(e.Existencia * ISNULL(pg.Costo_Promedio, 0)) DESC
         """)
         por_sucursal = [
             {"sucursal": (r["sucursal"] or "").strip(),
@@ -289,7 +291,7 @@ def guardar_snapshot_inventario() -> None:
                    CAST(e.Cve_Producto AS VARCHAR)  AS cve_producto,
                    MIN(pg.Descripcion)              AS descripcion,
                    SUM(e.Existencia)                AS existencia,
-                   MIN(ISNULL(e.Costo_Promedio, 0)) AS costo_promedio,
+                   MIN(ISNULL(pg.Costo_Promedio, 0)) AS costo_promedio,
                    MIN(ISNULL(pg.Precio_Minimo_Venta_Base, 0))       AS precio1,
                    MIN(ISNULL(pg.Precio_Minimo_Venta_Base2, 0))       AS precio2,
                    MIN(ISNULL(pg.Precio_Minimo_Venta_Base3, 0))       AS precio3
