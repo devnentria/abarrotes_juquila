@@ -601,10 +601,10 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
                 "piezas":   int(r["piezas"] or 0),
             })
 
-    # 3. Mapa: top 200 CPs con sucursal dominante, coords del caché SQLite
+    # 3. Mapa: todos los CPs con sucursal dominante, coords del caché SQLite
     try:
         mapa_rows = query(f"""
-            SELECT TOP 200 con.CP, p.Cve_Sucursal,
+            SELECT con.CP, p.Cve_Sucursal,
                    CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
                    COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
             FROM FT_Pedidos_C p
