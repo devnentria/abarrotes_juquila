@@ -102,7 +102,7 @@ def _geocode_cp(cp: str):
 
 
 def _proyectar(valores: list) -> float:
-    """Regresión lineal simple — proyecta el siguiente valor de la serie."""
+    """Regresión lineal simple — proyecta el siguiente valor de la serie (fallback)."""
     serie = [float(v) for v in valores if v is not None]
     n = len(serie)
     if n < 2:
@@ -114,6 +114,64 @@ def _proyectar(valores: list) -> float:
     den = sum((x - x_m) ** 2 for x in xs)
     slope = num / den if den else 0.0
     return max(0.0, round(y_m + slope * (n - x_m), 2))
+
+
+def _holt_winters_forecast(serie: list, pasos: int = 6) -> list:
+    """
+    Proyección con Holt-Winters (Triple Exponential Smoothing).
+    Maneja tendencia + estacionalidad anual (período 12).
+
+    - Si hay ≥ 24 puntos: modelo aditivo completo (trend + seasonal).
+    - Si hay ≥ 12 puntos: solo tendencia (sin componente estacional).
+    - Si hay < 12 puntos: fallback a regresión lineal.
+
+    Retorna lista de `pasos` valores proyectados (float, ≥ 0).
+    """
+    try:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+        import numpy as np
+        import warnings
+
+        vals = [float(v) for v in serie if v is not None and float(v) >= 0]
+        n = len(vals)
+        if n < 6:
+            last = vals[-1] if vals else 0.0
+            return [round(last, 2)] * pasos
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if n >= 24:
+                modelo = ExponentialSmoothing(
+                    vals,
+                    trend="add",
+                    seasonal="add",
+                    seasonal_periods=12,
+                    initialization_method="estimated",
+                ).fit(optimized=True)
+            elif n >= 12:
+                modelo = ExponentialSmoothing(
+                    vals,
+                    trend="add",
+                    seasonal=None,
+                    initialization_method="estimated",
+                ).fit(optimized=True)
+            else:
+                modelo = ExponentialSmoothing(
+                    vals,
+                    trend=None,
+                    seasonal=None,
+                    initialization_method="estimated",
+                ).fit(optimized=True)
+
+            forecast = modelo.forecast(pasos)
+
+        # No permitir proyecciones negativas
+        return [max(0.0, round(float(v), 2)) for v in forecast]
+
+    except Exception:
+        # Fallback a regresión lineal si statsmodels falla
+        base = _proyectar(serie)
+        return [round(base, 2)] * pasos
 
 
 def _filtros_periodo(modo: str, campo: str, fi: str = None, ff: str = None):
@@ -891,26 +949,17 @@ def productos_prediccion(cve_producto: int):
         return max(0.1, min(5.0, yoy))
 
     def _seasonal_proyeccion(keys: list, totals: dict, yoy: float) -> list:
-        """Proyecta 6 meses usando factor YoY estacional.
-        Cada proyección se limita al 110% del máximo histórico para evitar cifras irreales."""
+        """Proyecta 6 meses usando Holt-Winters sobre la serie histórica completa."""
         if not keys:
             return []
-        last_key = keys[-1]
+        last_key   = keys[-1]
         vals_trend = [totals[k] for k in keys]
-        avg_last3 = sum(vals_trend[-3:]) / max(1, len(vals_trend[-3:]))
-        max_hist  = max(vals_trend) if vals_trend else 0
-        techo     = max_hist * 1.10  # nunca proyectar más del 110% del máximo histórico
+        forecast   = _holt_winters_forecast(vals_trend, pasos=6)
         result = []
-        for k in range(1, 7):
-            mes_p = last_key[1] + k
+        for i, val_p in enumerate(forecast):
+            mes_p  = last_key[1] + i + 1
             anio_p = last_key[0] + (mes_p - 1) // 12
             mes_p  = ((mes_p - 1) % 12) + 1
-            key_ant = (anio_p - 1, mes_p)
-            if key_ant in totals and totals[key_ant] > 0:
-                val_p = totals[key_ant] * yoy
-            else:
-                val_p = avg_last3
-            val_p = max(0.0, min(val_p, techo) if techo > 0 else val_p)
             result.append({
                 "mes_label": f"{MESES_ES_C[mes_p]} {anio_p}",
                 "piezas":    round(val_p, 1),
@@ -2203,23 +2252,17 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         yoy_ta = sum(yoy_ratios_ta[-6:]) / len(yoy_ratios_ta[-6:]) if yoy_ratios_ta else 1.0
         yoy_ta = min(max(yoy_ta, 0.1), 5.0)
 
-        # Recent 3-month average as fallback
-        recent_avg_ta = sum(mes_val[k] for k in trend_keys_ta[-3:]) / 3 if len(trend_keys_ta) >= 3 else (mes_val[trend_keys_ta[-1]] if trend_keys_ta else 0)
-        max_hist_ta = max((mes_val[k] for k in trend_keys_ta), default=0)
-        techo_ta    = max_hist_ta * 1.10  # nunca proyectar más del 110% del máximo histórico
-
-        # Project next 3 months seasonally
+        # Project next 3 months with Holt-Winters
         MESES_ES_TA = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
                        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+        vals_ta   = [mes_val[k] for k in trend_keys_ta]
+        forecast_ta = _holt_winters_forecast(vals_ta, pasos=3)
         last_k_ta = trend_keys_ta[-1] if trend_keys_ta else (_hd2.year, _hd2.month - 1)
         proyeccion_meses = []
-        for step in range(1, 4):
-            mp = last_k_ta[1] + step
+        for i, val_p in enumerate(forecast_ta):
+            mp = last_k_ta[1] + i + 1
             ap = last_k_ta[0] + (mp - 1) // 12
             mp = ((mp - 1) % 12) + 1
-            prev_year_k = (ap - 1, mp)
-            val_p = mes_val[prev_year_k] * yoy_ta if prev_year_k in mes_val and mes_val[prev_year_k] > 0 else recent_avg_ta
-            val_p = max(0.0, min(val_p, techo_ta) if techo_ta > 0 else val_p)
             proyeccion_meses.append({
                 "mes_label": f"{MESES_ES_TA[mp]} {ap}",
                 "valor": round(val_p, 2),
