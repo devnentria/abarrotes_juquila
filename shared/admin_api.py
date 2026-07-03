@@ -115,18 +115,35 @@ def build_api_router() -> APIRouter:
         )
         return JSONResponse({"id": nuevo_id, "mensaje": "Usuario creado exitosamente"}, status_code=201)
 
-    @router.patch("/api/admin/usuarios/{usuario_id}", dependencies=[Depends(require_rol("admin"))])
-    def actualizar_usuario(usuario_id: int, datos: UsuarioActualizar):
-        """Actualiza los campos enviados de un usuario existente."""
-        usuario = fetch_one("SELECT id FROM usuarios WHERE id = ?", (usuario_id,))
+    @router.patch("/api/admin/usuarios/{usuario_id}")
+    def actualizar_usuario(
+        usuario_id: int,
+        datos: UsuarioActualizar,
+        ejecutor: dict = Depends(require_rol("admin", "supervisor")),
+    ):
+        """Actualiza los campos enviados de un usuario existente.
+        Admin: puede editar cualquier campo de cualquier usuario.
+        Supervisor: puede editar nombre, email, módulos, permisos y límite IA
+                    de usuarios con rol 'usuario' únicamente (no admins ni supervisores).
+        """
+        usuario = fetch_one("SELECT id, rol FROM usuarios WHERE id = ?", (usuario_id,))
         if not usuario:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        es_supervisor = ejecutor["rol"] == "supervisor"
+        if es_supervisor and usuario["rol"] != "usuario":
+            raise HTTPException(
+                status_code=403,
+                detail="El supervisor solo puede editar usuarios finales",
+            )
 
         campos, valores = [], []
 
         if datos.nombre is not None:
             campos.append("nombre = ?");   valores.append(datos.nombre)
         if datos.rol is not None:
+            if es_supervisor:
+                raise HTTPException(status_code=403, detail="El supervisor no puede cambiar roles")
             if datos.rol not in ("admin", "supervisor", "usuario"):
                 raise HTTPException(status_code=400, detail="Rol inválido")
             campos.append("rol = ?");      valores.append(datos.rol)
@@ -137,6 +154,8 @@ def build_api_router() -> APIRouter:
         if datos.password is not None:
             campos.append("password_hash = ?"); valores.append(hash_password(datos.password))
         if datos.limite_ia is not None:
+            if es_supervisor:
+                raise HTTPException(status_code=403, detail="El supervisor no puede cambiar el límite de IA")
             if datos.limite_ia < 0:
                 raise HTTPException(status_code=400, detail="El límite de IA no puede ser negativo")
             campos.append("limite_ia = ?"); valores.append(datos.limite_ia)
