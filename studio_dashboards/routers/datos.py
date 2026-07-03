@@ -891,12 +891,15 @@ def productos_prediccion(cve_producto: int):
         return max(0.1, min(5.0, yoy))
 
     def _seasonal_proyeccion(keys: list, totals: dict, yoy: float) -> list:
-        """Proyecta 6 meses usando factor YoY estacional."""
+        """Proyecta 6 meses usando factor YoY estacional.
+        Cada proyección se limita al 110% del máximo histórico para evitar cifras irreales."""
         if not keys:
             return []
         last_key = keys[-1]
         vals_trend = [totals[k] for k in keys]
         avg_last3 = sum(vals_trend[-3:]) / max(1, len(vals_trend[-3:]))
+        max_hist  = max(vals_trend) if vals_trend else 0
+        techo     = max_hist * 1.10  # nunca proyectar más del 110% del máximo histórico
         result = []
         for k in range(1, 7):
             mes_p = last_key[1] + k
@@ -907,7 +910,7 @@ def productos_prediccion(cve_producto: int):
                 val_p = totals[key_ant] * yoy
             else:
                 val_p = avg_last3
-            val_p = max(0.0, val_p)
+            val_p = max(0.0, min(val_p, techo) if techo > 0 else val_p)
             result.append({
                 "mes_label": f"{MESES_ES_C[mes_p]} {anio_p}",
                 "piezas":    round(val_p, 1),
@@ -945,10 +948,10 @@ def productos_prediccion(cve_producto: int):
         })
     por_sucursal.sort(key=lambda x: x["pred_mes_6"], reverse=True)
 
-    # Monthly history
+    # Monthly history — excluir mes actual (parcial) para no distorsionar el gráfico
     detalle = [
         {"mes_label": f"{MESES_ES_C[k[1]]} {k[0]}", "piezas": round(mes_totales[k], 1)}
-        for k in sorted_keys
+        for k in sorted_keys if k != mes_actual
     ]
 
     return JSONResponse({
@@ -2202,6 +2205,8 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
 
         # Recent 3-month average as fallback
         recent_avg_ta = sum(mes_val[k] for k in trend_keys_ta[-3:]) / 3 if len(trend_keys_ta) >= 3 else (mes_val[trend_keys_ta[-1]] if trend_keys_ta else 0)
+        max_hist_ta = max((mes_val[k] for k in trend_keys_ta), default=0)
+        techo_ta    = max_hist_ta * 1.10  # nunca proyectar más del 110% del máximo histórico
 
         # Project next 3 months seasonally
         MESES_ES_TA = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -2214,7 +2219,7 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             mp = ((mp - 1) % 12) + 1
             prev_year_k = (ap - 1, mp)
             val_p = mes_val[prev_year_k] * yoy_ta if prev_year_k in mes_val and mes_val[prev_year_k] > 0 else recent_avg_ta
-            val_p = max(0.0, val_p)
+            val_p = max(0.0, min(val_p, techo_ta) if techo_ta > 0 else val_p)
             proyeccion_meses.append({
                 "mes_label": f"{MESES_ES_TA[mp]} {ap}",
                 "valor": round(val_p, 2),
