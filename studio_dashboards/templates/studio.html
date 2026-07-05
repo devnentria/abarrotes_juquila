@@ -2855,18 +2855,12 @@ async function _mapaNavMes(delta) {
   if (nextBtn) nextBtn.disabled = true;
 
   try {
-    const data = await api(`/api/datos/mapa?anio=${_mapaAnio}&mes=${_mapaMes}`);
+    const data = await api(`/api/datos/zonas?anio=${_mapaAnio}&mes=${_mapaMes}`);
     if (labelEl) labelEl.textContent = data.label || '';
-    const pendientes = data.pendientes || 0;
-    if (labelEl && pendientes > 0) {
-      labelEl.textContent = `${data.label || ''} · geocodificando ${pendientes} CPs…`;
-    } else if (labelEl) {
-      labelEl.textContent = data.label || '';
-    }
-    if (data.puntos && data.puntos.length) {
-      renderMapaVentas(data.puntos);
+    if (data.mapa_puntos && data.mapa_puntos.length) {
+      renderMapaVentas(data.mapa_puntos, data.sucursales || []);
     } else {
-      renderMapaVentas([]);
+      renderMapaVentas([], []);
       if (labelEl) labelEl.textContent = `${MESES_ES[_mapaMes]} ${_mapaAnio} — sin datos`;
     }
   } catch {
@@ -2881,23 +2875,9 @@ async function _mapaNavMes(delta) {
 let _mapaLeaflet   = null;
 let _mapaCluster   = null;   // MarkerClusterGroup activo
 
-function renderMapaVentas(puntos) {
-  _mapaEstados = puntos || [];
+function renderMapaVentas(puntos, sucursales) {
   const leyenda = document.getElementById('mapa-leyenda');
 
-  const total     = _mapaEstados.reduce((s, p) => s + (parseInt(p.ventas) || 0), 0);
-  const maxVentas = _mapaEstados.length ? Math.max(..._mapaEstados.map(p => p.ventas)) : 1;
-
-  function interpolarColor(valor) {
-    if (!valor || valor <= 0) return '#1e3a5f';
-    const t = Math.pow(valor / maxVentas, 0.45);
-    const r = Math.round(255 + (30  - 255) * t);
-    const g = Math.round(255 + (58  - 255) * t);
-    const b = Math.round(255 + (95  - 255) * t);
-    return `rgb(${r},${g},${b})`;
-  }
-
-  // Inicializar mapa Leaflet (solo una vez)
   const container = document.getElementById('mapa-leaflet');
   if (!container) return;
 
@@ -2910,50 +2890,32 @@ function renderMapaVentas(puntos) {
     }).addTo(_mapaLeaflet);
   }
 
-  // Eliminar cluster anterior
-  if (_mapaCluster) {
-    _mapaLeaflet.removeLayer(_mapaCluster);
-  }
+  if (_mapaCluster) _mapaLeaflet.removeLayer(_mapaCluster);
 
-  // Crear nuevo cluster group
   _mapaCluster = L.markerClusterGroup({
     maxClusterRadius: 40,
     iconCreateFunction: function(cluster) {
-      const count = cluster.getChildCount();
-      const size  = count < 5 ? 32 : count < 20 ? 40 : 50;
+      const sz = cluster.getChildCount() < 10 ? 30 : 38;
       return L.divIcon({
-        html: `<div style="width:${size}px;height:${size}px;border-radius:50%;
-                           background:rgba(0,137,123,0.85);border:2px solid #fff;
-                           display:flex;align-items:center;justify-content:center;
-                           color:#fff;font-weight:700;font-size:${size < 40 ? 11 : 13}px;
-                           box-shadow:0 2px 6px rgba(0,0,0,0.3)">${count}</div>`,
-        className: '',
-        iconSize: [size, size],
-        iconAnchor: [size/2, size/2],
+        html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:rgba(26,43,90,0.8);
+                           border:2px solid #fff;display:flex;align-items:center;justify-content:center;
+                           color:#fff;font-weight:700;font-size:11px">${cluster.getChildCount()}</div>`,
+        className: '', iconSize: [sz, sz], iconAnchor: [sz/2, sz/2],
       });
     },
   });
 
-  // Dibujar un punto por cada CP con coordenadas
-  puntos.forEach(punto => {
-    const ventas  = punto.ventas  || 0;
-    const pedidos = punto.pedidos || 0;
-    const pct     = total > 0 ? ((ventas / total) * 100).toFixed(1) : '0.0';
-    const color   = interpolarColor(ventas);
-    const radius  = Math.max(5, Math.min(20, 5 + 15 * Math.pow(ventas / maxVentas, 0.4)));
-
-    const circle = L.circleMarker([punto.lat, punto.lng], {
-      radius,
-      fillColor: color,
-      color: '#fff',
-      weight: 0.8,
-      fillOpacity: 0.82,
+  puntos.forEach(p => {
+    const color = _colorZona(p.cve_sucursal, sucursales);
+    const suc   = sucursales.find(s => s.cve === p.cve_sucursal);
+    const circle = L.circleMarker([p.lat, p.lng], {
+      radius: 6, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.85,
     });
     circle.bindTooltip(
-      `<strong>CP ${punto.cp}</strong><br>` +
-      `Ventas: <strong>${_formatMXN(ventas)}</strong><br>` +
-      `Pedidos: <strong>${pedidos.toLocaleString('es-MX')}</strong><br>` +
-      `Participación: <strong>${pct}%</strong>`,
+      `<strong>CP ${p.cp}</strong><br>` +
+      `Sucursal: <strong>${suc ? suc.nombre : p.cve_sucursal}</strong><br>` +
+      `Ventas: <strong>${_formatMXN(p.ventas)}</strong><br>` +
+      `Pedidos: <strong>${(p.pedidos || 0).toLocaleString('es-MX')}</strong>`,
       { sticky: true, className: 'mapa-tip' }
     );
     _mapaCluster.addLayer(circle);
@@ -2961,25 +2923,22 @@ function renderMapaVentas(puntos) {
 
   _mapaLeaflet.addLayer(_mapaCluster);
 
-  // Leyenda Top 10
-  const top10 = _mapaEstados.slice(0, 10);
-  if (leyenda) leyenda.innerHTML = !_mapaEstados.length
+  // Leyenda por sucursal
+  const totalVentas = sucursales.reduce((s, r) => s + r.ventas, 0);
+  if (leyenda) leyenda.innerHTML = !sucursales.length
     ? '<div style="color:var(--text-dim);font-size:12px">Sin datos para este mes</div>'
-    : `<div style="font-weight:700;margin-bottom:8px;color:var(--text)">Top 10 CPs</div>
-    ${top10.map((p, i) => {
-      const v   = parseInt(p.ventas) || 0;
-      const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0';
-      const col = interpolarColor(v);
-      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-        <span style="font-size:10px;color:var(--text-dim);width:14px;text-align:right">${i+1}</span>
-        <span style="width:12px;height:12px;border-radius:50%;background:${col};flex-shrink:0"></span>
-        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)">CP ${p.cp}</span>
-        <span style="color:var(--text-dim);font-size:11px">${pct}%</span>
+    : `<div style="font-weight:700;margin-bottom:8px;color:var(--text)">Resumen por sucursal</div>
+    ${sucursales.map((s, i) => {
+      const color = COLORES_ZONAS[i % COLORES_ZONAS.length];
+      const pct   = totalVentas > 0 ? ((s.ventas / totalVentas) * 100).toFixed(1) : '0.0';
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;font-size:11px;color:var(--text)">${s.nombre}</div>
+          <div style="font-size:10px;color:var(--text-dim)">${_formatMXN(s.ventas)} · ${s.pedidos} ped · ${pct}%</div>
+        </div>
       </div>`;
-    }).join('')}
-    <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);color:var(--text-dim);font-size:11px">
-      Total: <strong style="color:var(--text)">${_formatMXN(total)}</strong>
-    </div>`;
+    }).join('')}`;
 }
 
 function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
@@ -3180,7 +3139,8 @@ function _renderZonasMapa(puntos, sucursales) {
     circle.bindTooltip(
       `<strong>CP ${p.cp}</strong><br>` +
       `Sucursal: <strong>${suc ? suc.nombre : p.cve_sucursal}</strong><br>` +
-      `Ventas: <strong>${_formatMXN(p.ventas)}</strong>`,
+      `Ventas: <strong>${_formatMXN(p.ventas)}</strong><br>` +
+      `Pedidos: <strong>${p.pedidos.toLocaleString('es-MX')}</strong>`,
       { sticky: true, className: 'mapa-tip' }
     );
     _zonasCluster.addLayer(circle);
@@ -3206,7 +3166,7 @@ function _renderZonasTabla(sucursales, topProductos) {
         <span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;margin-top:2px"></span>
         <div style="flex:1;min-width:0">
           <div style="font-weight:600;color:var(--text);font-size:12px">${s.nombre}</div>
-          <div style="color:var(--text-dim);font-size:11px">${_formatMXN(s.ventas)} · ${s.piezas.toLocaleString('es-MX')} pzs · ${pct}%</div>
+          <div style="color:var(--text-dim);font-size:11px">${_formatMXN(s.ventas)} · ${s.pedidos.toLocaleString('es-MX')} pedidos · ${pct}%</div>
           ${top ? `<div style="color:var(--text-dim);font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">⭐ ${top.producto}</div>` : ''}
         </div>
       </div>`;
@@ -3302,7 +3262,7 @@ function _renderZonasChart(sucursales) {
               const s = sorted[ctx.dataIndex];
               return [
                 ` Ventas: ${_formatMXN(ctx.raw)}`,
-                ` Piezas: ${s.piezas.toLocaleString('es-MX')} pzs`,
+                ` Pedidos: ${s.pedidos.toLocaleString('es-MX')}`,
               ];
             },
           },
@@ -3555,12 +3515,16 @@ function _renderProdPrediccion(data) {
         <div style="font-size:11px;font-weight:600;color:var(--text)">Tendencia de ventas</div>
         <div style="display:flex;gap:12px;font-size:10px;color:var(--text-dim)">
           <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#1A2B5A;margin-right:4px"></span>Histórico</span>
-          <span><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#EF6C3A;opacity:.7;margin-right:4px"></span>Proyección</span>
+          <span><span style="display:inline-block;width:18px;height:2px;background:#EF6C3A;margin-right:4px;vertical-align:middle;border-top:2px dashed #EF6C3A"></span>Proyección</span>
         </div>
       </div>
       <div style="position:relative;height:180px">
         <canvas id="pred-chart-canvas"></canvas>
       </div>
+      ${data.modelo_aviso ? `<div style="margin-top:6px;font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="11" height="11"><path d="M8 1a7 7 0 100 14A7 7 0 008 1zm.75 10.5h-1.5v-1.5h1.5v1.5zm0-3h-1.5V4.5h1.5V8.5z"/></svg>
+        ${data.modelo_aviso}
+      </div>` : ''}
     </div>`;
 
   // Desglose por sucursal
@@ -3600,38 +3564,51 @@ function _renderProdPrediccion(data) {
   const canvas = document.getElementById('pred-chart-canvas');
   if (!canvas) return;
 
-  // Show only last 12 months of history + 6 projected (same window as model)
-  const det12    = det.slice(-12);
+  // Últimos 12 meses de histórico + 6 de proyección
+  const det12      = det.slice(-12);
   const histLabels = det12.map(d => d.mes_label);
   const histVals   = det12.map(d => d.piezas);
   const projLabels = proj.map(d => d.mes_label);
   const projVals   = proj.map(d => d.piezas);
+  const n          = histLabels.length;
 
-  // Combine: 12 history bars + 6 projected bars (null-padded for alignment)
+  // Eje X unificado: histórico + proyección
   const allLabels = [...histLabels, ...projLabels];
-  const histData  = [...histVals, ...projLabels.map(() => null)];
-  const projData  = [...histLabels.map(() => null), ...projVals];
+
+  // Línea histórica: valores reales + null en zona proyección
+  const histLine = [...histVals, ...projLabels.map(() => null)];
+
+  // Línea proyección: null en zona histórica + valores proyectados.
+  // El punto conector (último hist) se comparte para que ambas líneas se toquen.
+  const projLine = [...histLabels.map(() => null), ...projVals];
+  if (n > 0) projLine[n - 1] = histVals[n - 1];
 
   _predChart = new Chart(canvas.getContext('2d'), {
-    type: 'bar',
+    type: 'line',
     data: {
       labels: allLabels,
       datasets: [
         {
           label: 'Histórico',
-          data: histData,
-          backgroundColor: '#1A2B5A',
-          borderRadius: 4,
-          borderSkipped: false,
-          order: 2,
+          data: histLine,
+          borderColor: '#1A2B5A',
+          backgroundColor: 'rgba(26,43,90,0.12)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+          pointHoverRadius: 5,
         },
         {
           label: 'Proyección',
-          data: projData,
-          backgroundColor: 'rgba(239,108,58,.65)',
-          borderRadius: 4,
-          borderSkipped: false,
-          order: 2,
+          data: projLine,
+          borderColor: '#EF6C3A',
+          backgroundColor: 'transparent',
+          borderDash: [6, 4],
+          fill: false,
+          tension: 0.35,
+          pointRadius: 4,
+          pointStyle: 'triangle',
+          pointHoverRadius: 6,
         },
       ],
     },
@@ -3639,10 +3616,17 @@ function _renderProdPrediccion(data) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true,
+          labels: {
+            color: textColor, font: { size: 11 }, boxWidth: 12,
+          },
+        },
         tooltip: {
           callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString('es-MX')} pzs`,
+            label: ctx => ctx.parsed.y !== null
+              ? ` ${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString('es-MX')} pzs`
+              : '',
           },
         },
       },
@@ -3656,25 +3640,6 @@ function _renderProdPrediccion(data) {
           grid: { color: gridColor },
           border: { display: false },
           suggestedMin: 0,
-        },
-      },
-      animation: {
-        onComplete() {
-          // Draw value labels on projected (orange) bars
-          const chart = this;
-          const ctx2  = chart.ctx;
-          const ds    = chart.data.datasets[1];  // proyección dataset
-          const meta  = chart.getDatasetMeta(1);
-          ctx2.save();
-          ctx2.fillStyle = esDark ? '#cbd5e1' : '#374151';
-          ctx2.font = 'bold 10px sans-serif';
-          ctx2.textAlign = 'center';
-          meta.data.forEach((bar, i) => {
-            const val = ds.data[i];
-            if (val == null || val === 0) return;
-            ctx2.fillText(Math.round(val), bar.x, bar.y - 4);
-          });
-          ctx2.restore();
         },
       },
     },
@@ -3748,26 +3713,20 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
     renderChartMensual(mensualData);
 
     // Mapa de ventas por CP — independiente para no afectar el resto si falla
-    api(`/api/datos/mapa?anio=${_mapaAnio}&mes=${_mapaMes}`)
+    api(`/api/datos/zonas?anio=${_mapaAnio}&mes=${_mapaMes}`)
       .then(mapaData => {
         const mapaLabelEl = document.getElementById('mapa-label');
-        const pendientes  = mapaData.pendientes || 0;
-        const labelBase   = mapaData.label || '';
-        if (mapaLabelEl) {
-          mapaLabelEl.textContent = pendientes > 0
-            ? `${labelBase} · geocodificando ${pendientes} CPs…`
-            : labelBase;
-        }
-        if (mapaData.puntos && mapaData.puntos.length) {
-          renderMapaVentas(mapaData.puntos);
+        if (mapaLabelEl) mapaLabelEl.textContent = mapaData.label || '';
+        if (mapaData.mapa_puntos && mapaData.mapa_puntos.length) {
+          renderMapaVentas(mapaData.mapa_puntos, mapaData.sucursales || []);
         } else {
-          renderMapaVentas([]);
+          renderMapaVentas([], []);
         }
       })
       .catch(() => {
         const mapaLabelEl = document.getElementById('mapa-label');
         if (mapaLabelEl) mapaLabelEl.textContent = '—';
-        renderMapaVentas([]);
+        renderMapaVentas([], []);
       });
 
     // Descontar 1 consulta por carga de datos del ERP (fire-and-forget, sin bloquear UI)

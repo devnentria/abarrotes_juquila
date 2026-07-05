@@ -867,7 +867,7 @@ def productos_prediccion(cve_producto: int):
         raise HTTPException(500, f"prediccion-nombre: {e}")
 
     hoy_d = _date.today()
-    fecha_corte_str = f"{hoy_d.year - 2}-{hoy_d.month:02d}-01"
+    fecha_corte_str = f"{hoy_d.year - 3}-{hoy_d.month:02d}-01"
 
     try:
         hist_rows = query(f"""
@@ -919,18 +919,39 @@ def productos_prediccion(cve_producto: int):
         suc_mes[cve_suc][key] += float(r["piezas"] or 0)
         suc_nombre[cve_suc] = (r["sucursal"] or f"Suc {cve_suc}").strip()
 
-    # Sort keys chronologically
-    sorted_keys = sorted(mes_totales.keys())
-    # Use only last 12 complete months for trend (exclude current partial month)
-    mes_actual = (hoy_d.year, hoy_d.month)
-    trend_keys = [k for k in sorted_keys if k != mes_actual][-12:]
-    trend_vals = [mes_totales[k] for k in trend_keys]
-
     MESES_ES_C = ["", "Ene", "Feb", "Mar", "Abr", "May", "Jun",
                   "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
 
-    # Last complete month actual sales
-    ultimo_mes_key    = trend_keys[-1] if trend_keys else None
+    mes_actual = (hoy_d.year, hoy_d.month)
+
+    # Último mes completo (mes anterior al actual)
+    if hoy_d.month > 1:
+        ultimo_completo = (hoy_d.year, hoy_d.month - 1)
+    else:
+        ultimo_completo = (hoy_d.year - 1, 12)
+
+    # Rellenar meses sin ventas con 0 para que la serie sea continua.
+    # Esto permite que Holt-Winters detecte la estacionalidad y que
+    # la proyección arranque siempre desde hoy, no desde el último mes con ventas.
+    raw_keys = sorted(mes_totales.keys())
+    if raw_keys:
+        y, m = raw_keys[0]
+        ey, em = ultimo_completo
+        while (y, m) <= (ey, em):
+            mes_totales.setdefault((y, m), 0.0)
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+
+    sorted_keys = sorted(mes_totales.keys())
+    # Últimos 18 meses completos para el modelo (más historia = mejor estacionalidad)
+    trend_keys = [k for k in sorted_keys if k != mes_actual][-18:]
+
+    # Último mes con ventas reales (para el KPI "Último mes")
+    ultimo_mes_key = next(
+        (k for k in reversed(trend_keys) if mes_totales[k] > 0), None
+    ) or (trend_keys[-1] if trend_keys else None)
     ultimo_mes_piezas = round(mes_totales[ultimo_mes_key], 1) if ultimo_mes_key else 0
     ultimo_mes_label  = f"{MESES_ES_C[ultimo_mes_key[1]]} {ultimo_mes_key[0]}" if ultimo_mes_key else ""
 
@@ -949,25 +970,41 @@ def productos_prediccion(cve_producto: int):
         return max(0.1, min(5.0, yoy))
 
     def _seasonal_proyeccion(keys: list, totals: dict, yoy: float) -> list:
-        """Proyecta 6 meses usando Holt-Winters sobre la serie histórica completa."""
+        """Proyecta 6 meses usando Holt-Winters.
+        La proyección siempre arranca desde el mes siguiente al último mes completo
+        (mes anterior al actual), independientemente de cuándo fue la última venta.
+        """
         if not keys:
             return []
-        last_key   = keys[-1]
         vals_trend = [totals[k] for k in keys]
         forecast   = _holt_winters_forecast(vals_trend, pasos=6)
         result = []
+        # Arrancar desde el mes siguiente al último mes completo
+        py, pm = ultimo_completo
         for i, val_p in enumerate(forecast):
-            mes_p  = last_key[1] + i + 1
-            anio_p = last_key[0] + (mes_p - 1) // 12
-            mes_p  = ((mes_p - 1) % 12) + 1
+            pm += 1
+            if pm > 12:
+                pm = 1
+                py += 1
             result.append({
-                "mes_label": f"{MESES_ES_C[mes_p]} {anio_p}",
+                "mes_label": f"{MESES_ES_C[pm]} {py}",
                 "piezas":    round(val_p, 1),
             })
         return result
 
     # Global YoY factor
     yoy_factor = _calc_yoy_factor(trend_keys, mes_totales)
+
+    # Determinar calidad del modelo para mostrar aviso en el frontend
+    meses_con_ventas = sum(1 for k in trend_keys if mes_totales.get(k, 0) > 0)
+    if meses_con_ventas >= 24:
+        modelo_aviso = None  # Modelo estacional completo — sin aviso
+    elif meses_con_ventas >= 12:
+        modelo_aviso = "Proyección basada en tendencia · sin suficientes datos estacionales"
+    elif meses_con_ventas >= 6:
+        modelo_aviso = "Datos limitados · proyección aproximada"
+    else:
+        modelo_aviso = "Datos insuficientes para proyectar"
 
     # Global projection (6 months)
     proyeccion = _seasonal_proyeccion(trend_keys, mes_totales, yoy_factor)
@@ -997,10 +1034,11 @@ def productos_prediccion(cve_producto: int):
         })
     por_sucursal.sort(key=lambda x: x["pred_mes_6"], reverse=True)
 
-    # Monthly history — excluir mes actual (parcial) para no distorsionar el gráfico
+    # Monthly history — excluir mes actual (parcial). Incluye meses con 0 ventas
+    # para que la gráfica muestre la caída completa sin saltos de tiempo.
     detalle = [
         {"mes_label": f"{MESES_ES_C[k[1]]} {k[0]}", "piezas": round(mes_totales[k], 1)}
-        for k in sorted_keys if k != mes_actual
+        for k in sorted_keys if k != mes_actual and k <= ultimo_completo
     ]
 
     return JSONResponse({
@@ -1016,6 +1054,7 @@ def productos_prediccion(cve_producto: int):
         "por_sucursal":      por_sucursal,
         "detalle":           detalle,
         "proyeccion":        proyeccion,
+        "modelo_aviso":      modelo_aviso,
     })
 
 
