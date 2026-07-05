@@ -106,15 +106,13 @@ def _top_cps_mes(anio: int, mes: int) -> list:
             FROM FT_Pedidos_C p
             INNER JOIN FT_Pedidos_Dia d
               ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-            INNER JOIN (
-                SELECT Cve_Consignatario, MIN(CP) AS CP
-                FROM CM_Consignatarios
-                WHERE CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-                GROUP BY Cve_Consignatario
-            ) con ON con.Cve_Consignatario=p.Cve_Consignatario
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+             AND con.Cve_Cliente=p.Cve_Cliente
             WHERE p.Estatus<>'CN'
               AND p.Referencia_Cliente='PAGADO'
               AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
               AND YEAR(p.Fecha_Documento)={anio}
               AND MONTH(p.Fecha_Documento)={mes}
             GROUP BY con.CP
@@ -132,15 +130,13 @@ def _cps_del_dia(fecha: date) -> list:
         rows = db_query(f"""
             SELECT DISTINCT con.CP
             FROM FT_Pedidos_C p
-            INNER JOIN (
-                SELECT Cve_Consignatario, MIN(CP) AS CP
-                FROM CM_Consignatarios
-                WHERE CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-                GROUP BY Cve_Consignatario
-            ) con ON con.Cve_Consignatario=p.Cve_Consignatario
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+             AND con.Cve_Cliente=p.Cve_Cliente
             WHERE p.Estatus<>'CN'
               AND p.Referencia_Cliente='PAGADO'
               AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
               AND CAST(p.Fecha_Documento AS DATE) = '{fecha.isoformat()}'
         """)
         return [r["CP"] for r in (rows or []) if r.get("CP")]
@@ -250,13 +246,11 @@ def refresh_mapa_zonas() -> None:
             FROM FT_Pedidos_C p
             INNER JOIN FT_Pedidos_Dia d
               ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-            INNER JOIN (
-                SELECT Cve_Consignatario, MIN(CP) AS CP
-                FROM CM_Consignatarios
-                WHERE CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-                GROUP BY Cve_Consignatario
-            ) con ON con.Cve_Consignatario=p.Cve_Consignatario
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+             AND con.Cve_Cliente=p.Cve_Cliente
             WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
               AND YEAR(p.Fecha_Documento)={anio} AND MONTH(p.Fecha_Documento)={mes}
             GROUP BY con.CP, p.Cve_Sucursal
             ORDER BY ventas DESC
