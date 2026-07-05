@@ -670,7 +670,7 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
     )
     if cached_zonas:
         puntos_mapa = json.loads(cached_zonas["puntos"] or "[]")
-    else:
+    if not puntos_mapa:
         # Fallback: query en vivo cuando el cron aún no ha corrido
         try:
             mapa_rows = query(f"""
