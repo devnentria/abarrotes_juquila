@@ -299,7 +299,8 @@ def refresh_mapa_zonas() -> None:
     for cp, data in cp_data.items():
         if cp in coords:
             lat, lng = coords[cp]
-            puntos_mapa.append({**data, "lat": lat, "lng": lng})
+            if 14.0 <= lat <= 33.0 and -119.0 <= lng <= -86.0:
+                puntos_mapa.append({**data, "lat": lat, "lng": lng})
 
     MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                 "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]

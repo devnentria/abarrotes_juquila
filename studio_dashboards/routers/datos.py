@@ -528,13 +528,14 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
         cp = r.get("CP", "")
         if cp in coords_cache:
             lat, lng = coords_cache[cp]
-            puntos.append({
-                "cp":      cp,
-                "lat":     lat,
-                "lng":     lng,
-                "ventas":  int(r.get("ventas") or 0),
-                "pedidos": int(r.get("pedidos") or 0),
-            })
+            if 14.0 <= lat <= 33.0 and -119.0 <= lng <= -86.0:
+                puntos.append({
+                    "cp":      cp,
+                    "lat":     lat,
+                    "lng":     lng,
+                    "ventas":  int(r.get("ventas") or 0),
+                    "pedidos": int(r.get("pedidos") or 0),
+                })
 
     pendientes = len(todos_faltantes)
 
@@ -713,7 +714,9 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
             for cp, data in cp_data.items():
                 if cp in coords:
                     lat, lng = coords[cp]
-                    puntos_mapa.append({**data, "lat": lat, "lng": lng})
+                    # Descartar geocodificaciones fuera de México
+                    if 14.0 <= lat <= 33.0 and -119.0 <= lng <= -86.0:
+                        puntos_mapa.append({**data, "lat": lat, "lng": lng})
 
     return JSONResponse({
         "anio": _anio, "mes": _mes, "label": label,
