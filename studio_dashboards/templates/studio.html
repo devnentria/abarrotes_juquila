@@ -2895,11 +2895,13 @@ function renderMapaVentas(puntos, sucursales) {
   _mapaCluster = L.markerClusterGroup({
     maxClusterRadius: 40,
     iconCreateFunction: function(cluster) {
-      const sz = cluster.getChildCount() < 10 ? 30 : 38;
+      const total = cluster.getAllChildMarkers().reduce((s, m) => s + (m._pedidos || 0), 0);
+      const label = total >= 1000 ? (total / 1000).toFixed(1) + 'k' : total;
+      const sz    = total < 10 ? 30 : total < 100 ? 34 : 38;
       return L.divIcon({
         html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:rgba(26,43,90,0.8);
                            border:2px solid #fff;display:flex;align-items:center;justify-content:center;
-                           color:#fff;font-weight:700;font-size:11px">${cluster.getChildCount()}</div>`,
+                           color:#fff;font-weight:700;font-size:11px">${label}</div>`,
         className: '', iconSize: [sz, sz], iconAnchor: [sz/2, sz/2],
       });
     },
@@ -2911,6 +2913,7 @@ function renderMapaVentas(puntos, sucursales) {
     const circle = L.circleMarker([p.lat, p.lng], {
       radius: 6, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.85,
     });
+    circle._pedidos = p.pedidos || 0;
     circle.bindTooltip(
       `<strong>CP ${p.cp}</strong><br>` +
       `Sucursal: <strong>${suc ? suc.nombre : p.cve_sucursal}</strong><br>` +
@@ -3120,11 +3123,13 @@ function _renderZonasMapa(puntos, sucursales) {
   _zonasCluster = L.markerClusterGroup({
     maxClusterRadius: 40,
     iconCreateFunction: function(cluster) {
-      const sz = cluster.getChildCount() < 10 ? 30 : 38;
+      const total = cluster.getAllChildMarkers().reduce((s, m) => s + (m._pedidos || 0), 0);
+      const label = total >= 1000 ? (total / 1000).toFixed(1) + 'k' : total;
+      const sz    = total < 10 ? 30 : total < 100 ? 34 : 38;
       return L.divIcon({
         html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:rgba(26,43,90,0.8);
                            border:2px solid #fff;display:flex;align-items:center;justify-content:center;
-                           color:#fff;font-weight:700;font-size:11px">${cluster.getChildCount()}</div>`,
+                           color:#fff;font-weight:700;font-size:11px">${label}</div>`,
         className: '', iconSize: [sz, sz], iconAnchor: [sz/2, sz/2],
       });
     },
@@ -3136,11 +3141,12 @@ function _renderZonasMapa(puntos, sucursales) {
     const circle = L.circleMarker([p.lat, p.lng], {
       radius: 6, fillColor: color, color: '#fff', weight: 1, fillOpacity: 0.85,
     });
+    circle._pedidos = p.pedidos || 0;
     circle.bindTooltip(
       `<strong>CP ${p.cp}</strong><br>` +
       `Sucursal: <strong>${suc ? suc.nombre : p.cve_sucursal}</strong><br>` +
       `Ventas: <strong>${_formatMXN(p.ventas)}</strong><br>` +
-      `Pedidos: <strong>${p.pedidos.toLocaleString('es-MX')}</strong>`,
+      `Pedidos: <strong>${(p.pedidos || 0).toLocaleString('es-MX')}</strong>`,
       { sticky: true, className: 'mapa-tip' }
     );
     _zonasCluster.addLayer(circle);
