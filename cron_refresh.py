@@ -224,6 +224,97 @@ def refresh_geocodificacion() -> None:
     log.info(f"--- Geocodificación terminada — {total_nuevos} CPs nuevos guardados ---")
 
 
+def refresh_mapa_zonas() -> None:
+    """
+    Pre-computa el mapa de pedidos por CP del mes actual y lo guarda en SQLite.
+    Debe ejecutarse después de refresh_geocodificacion() para que cp_coords esté al día.
+    Almacena en mapa_resultado_cache con key='zonas_YYYY-MM'.
+    """
+    import json
+    log.info("--- Pre-cómputo mapa zonas iniciado ---")
+    hoy = date.today()
+    anio, mes = hoy.year, hoy.month
+    cache_key = f"zonas_{anio:04d}-{mes:02d}"
+
+    try:
+        mapa_rows = db_query(f"""
+            SELECT con.CP, p.Cve_Sucursal,
+                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
+                   COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
+            FROM FT_Pedidos_C p
+            INNER JOIN FT_Pedidos_Dia d
+              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            INNER JOIN CM_Consignatarios con
+              ON con.Cve_Consignatario=p.Cve_Consignatario
+            WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
+              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+              AND YEAR(p.Fecha_Documento)={anio} AND MONTH(p.Fecha_Documento)={mes}
+            GROUP BY con.CP, p.Cve_Sucursal
+            ORDER BY ventas DESC
+        """)
+    except Exception as e:
+        log.error(f"  Error consultando mapa zonas SQL Server: {e}")
+        return
+
+    # Sucursal dominante por CP (mayor ventas)
+    cp_data: dict = {}
+    for r in (mapa_rows or []):
+        cp = r.get("CP", "")
+        if not cp:
+            continue
+        v = int(r.get("ventas") or 0)
+        if cp not in cp_data or v > cp_data[cp]["ventas"]:
+            cp_data[cp] = {
+                "cp": cp, "cve_sucursal": int(r["Cve_Sucursal"]),
+                "ventas": v, "pedidos": int(r.get("pedidos") or 0),
+            }
+
+    if not cp_data:
+        log.info(f"  Sin pedidos para {anio}-{mes:02d}, nada que cachear")
+        return
+
+    # Join con cp_coords (ya actualizado por refresh_geocodificacion)
+    conn = get_connection()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS mapa_resultado_cache (
+            key       TEXT PRIMARY KEY,
+            label     TEXT,
+            puntos    TEXT NOT NULL,
+            cached_at REAL NOT NULL
+        )
+    """)
+    conn.commit()
+
+    cps = list(cp_data.keys())
+    placeholders = ",".join(["?"] * len(cps))
+    cached_coords = conn.execute(
+        f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({placeholders})", cps
+    ).fetchall()
+    coords = {r[0]: (r[1], r[2]) for r in cached_coords}
+
+    puntos_mapa = []
+    for cp, data in cp_data.items():
+        if cp in coords:
+            lat, lng = coords[cp]
+            puntos_mapa.append({**data, "lat": lat, "lng": lng})
+
+    MESES_ES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+    label = f"{MESES_ES[mes]} {anio}"
+
+    # cached_at = 0 → sin TTL (permanente hasta el siguiente cron)
+    conn.execute(
+        "INSERT OR REPLACE INTO mapa_resultado_cache (key, label, puntos, cached_at) VALUES (?, ?, ?, 0)",
+        (cache_key, label, json.dumps(puntos_mapa)),
+    )
+    conn.commit()
+    conn.close()
+    log.info(
+        f"  Mapa zonas: {len(puntos_mapa)} CPs con coords / {len(cp_data)} CPs totales"
+    )
+    log.info(f"--- Pre-cómputo mapa zonas terminado: {cache_key} ---")
+
+
 def guardar_snapshot_inventario() -> None:
     """
     Guarda un snapshot del inventario actual en SQLite.
@@ -415,6 +506,12 @@ def main() -> None:
         log.info(f"Cache resultado mapa invalidado para {hoy_key}")
     except Exception as e:
         log.error(f"Error en geocodificación mapa: {e}")
+
+    # Pre-computar mapa de zonas con los CPs recién geocodificados
+    try:
+        refresh_mapa_zonas()
+    except Exception as e:
+        log.error(f"Error en pre-cómputo mapa zonas: {e}")
 
     duracion = (datetime.now() - inicio).total_seconds()
     log.info(f"=== Cron refresh terminado en {duracion:.1f}s — errores: {len(errores)} ===")

@@ -659,53 +659,59 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
                 "piezas":   int(r["piezas"] or 0),
             })
 
-    # 3. Mapa: todos los CPs con sucursal dominante, coords del caché SQLite
-    try:
-        mapa_rows = query(f"""
-            SELECT con.CP, p.Cve_Sucursal,
-                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
-                   COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
-            FROM FT_Pedidos_C p
-            INNER JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-            INNER JOIN CM_Consignatarios con
-              ON con.Cve_Consignatario=p.Cve_Consignatario
-            WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
-              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-              AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
-            GROUP BY con.CP, p.Cve_Sucursal
-            ORDER BY ventas DESC
-        """)
-    except Exception:
-        mapa_rows = []
-
-    # Sucursal dominante por CP (mayor ventas)
-    cp_data: dict = {}
-    for r in (mapa_rows or []):
-        cp = r.get("CP", "")
-        if not cp:
-            continue
-        v = int(r.get("ventas") or 0)
-        if cp not in cp_data or v > cp_data[cp]["ventas"]:
-            cp_data[cp] = {
-                "cp": cp, "cve_sucursal": int(r["Cve_Sucursal"]),
-                "ventas": v, "pedidos": int(r.get("pedidos") or 0),
-            }
-
-    # Buscar coords en caché SQLite (sin geocodificar — el endpoint /mapa ya lo hace)
+    # 3. Mapa: cache pre-computado por cron → fallback a query en vivo
     puntos_mapa = []
-    if cp_data:
-        _init_mapa_tables()
-        cps = list(cp_data.keys())
-        cached = fetch_all(
-            f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({','.join(['?']*len(cps))})",
-            cps,
-        )
-        coords = {r["cp"]: (r["lat"], r["lng"]) for r in cached}
-        for cp, data in cp_data.items():
-            if cp in coords:
-                lat, lng = coords[cp]
-                puntos_mapa.append({**data, "lat": lat, "lng": lng})
+    _init_mapa_tables()
+    cache_key_zonas = f"zonas_{_anio:04d}-{_mes:02d}"
+    cached_zonas = fetch_one(
+        "SELECT puntos FROM mapa_resultado_cache WHERE key=?", (cache_key_zonas,)
+    )
+    if cached_zonas:
+        puntos_mapa = json.loads(cached_zonas["puntos"] or "[]")
+    else:
+        # Fallback: query en vivo cuando el cron aún no ha corrido
+        try:
+            mapa_rows = query(f"""
+                SELECT con.CP, p.Cve_Sucursal,
+                       CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
+                       COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
+                FROM FT_Pedidos_C p
+                INNER JOIN FT_Pedidos_Dia d
+                  ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+                INNER JOIN CM_Consignatarios con
+                  ON con.Cve_Consignatario=p.Cve_Consignatario
+                WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
+                  AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+                  AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
+                GROUP BY con.CP, p.Cve_Sucursal
+                ORDER BY ventas DESC
+            """)
+        except Exception:
+            mapa_rows = []
+
+        cp_data: dict = {}
+        for r in (mapa_rows or []):
+            cp = r.get("CP", "")
+            if not cp:
+                continue
+            v = int(r.get("ventas") or 0)
+            if cp not in cp_data or v > cp_data[cp]["ventas"]:
+                cp_data[cp] = {
+                    "cp": cp, "cve_sucursal": int(r["Cve_Sucursal"]),
+                    "ventas": v, "pedidos": int(r.get("pedidos") or 0),
+                }
+
+        if cp_data:
+            cps = list(cp_data.keys())
+            cached_coords = fetch_all(
+                f"SELECT cp, lat, lng FROM cp_coords WHERE cp IN ({','.join(['?']*len(cps))})",
+                cps,
+            )
+            coords = {r["cp"]: (r["lat"], r["lng"]) for r in cached_coords}
+            for cp, data in cp_data.items():
+                if cp in coords:
+                    lat, lng = coords[cp]
+                    puntos_mapa.append({**data, "lat": lat, "lng": lng})
 
     return JSONResponse({
         "anio": _anio, "mes": _mes, "label": label,
