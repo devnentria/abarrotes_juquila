@@ -494,12 +494,15 @@ def mapa_ventas(anio: int = Query(None), mes: int = Query(None)):
             FROM FT_Pedidos_C p
             INNER JOIN FT_Pedidos_Dia d
               ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-            INNER JOIN CM_Consignatarios con
-              ON con.Cve_Consignatario=p.Cve_Consignatario
+            INNER JOIN (
+                SELECT Cve_Consignatario, MIN(CP) AS CP
+                FROM CM_Consignatarios
+                WHERE CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+                GROUP BY Cve_Consignatario
+            ) con ON con.Cve_Consignatario=p.Cve_Consignatario
             WHERE p.Estatus<>'CN'
               AND p.Referencia_Cliente='PAGADO'
               AND p.Cve_Sucursal<>99
-              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
               AND YEAR(p.Fecha_Documento)={_anio}
               AND MONTH(p.Fecha_Documento)={_mes}
             GROUP BY con.CP
@@ -678,10 +681,13 @@ def zonas_ventas(anio: Optional[int] = None, mes: Optional[int] = None):
                 FROM FT_Pedidos_C p
                 INNER JOIN FT_Pedidos_Dia d
                   ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-                INNER JOIN CM_Consignatarios con
-                  ON con.Cve_Consignatario=p.Cve_Consignatario
+                INNER JOIN (
+                    SELECT Cve_Consignatario, MIN(CP) AS CP
+                    FROM CM_Consignatarios
+                    WHERE CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
+                    GROUP BY Cve_Consignatario
+                ) con ON con.Cve_Consignatario=p.Cve_Consignatario
                 WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
-                  AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
                   AND YEAR(p.Fecha_Documento)={_anio} AND MONTH(p.Fecha_Documento)={_mes}
                 GROUP BY con.CP, p.Cve_Sucursal
                 ORDER BY ventas DESC
