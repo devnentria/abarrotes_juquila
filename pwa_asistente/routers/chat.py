@@ -33,7 +33,7 @@ from pydantic import BaseModel
 from shared.auth import get_current_user
 from shared.config import IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA, OPENAI_API_KEY
 from shared.database import query as query_erp
-from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia
+from shared.database_local import execute, fetch_all, fetch_one, verificar_mes_ia, periodo_ia_actual
 from pwa_asistente.agente import director
 from pwa_asistente.agente import feedback as _feedback
 from pwa_asistente.agente import candidatas as _candidatas
@@ -258,7 +258,7 @@ def enviar_mensaje_async(body: MensajeBody, usuario: dict = Depends(get_current_
     if not msg:
         raise HTTPException(400, "El mensaje no puede estar vacío")
 
-    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
+    verificar_mes_ia(usuario["id"], periodo_ia_actual())
     u = fetch_one("SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia FROM usuarios WHERE id = ?", (usuario["id"],))
     if u and u["limite_ia"] > 0 and u["consultas_ia_r"] >= u["limite_ia"]:
         raise HTTPException(
@@ -414,7 +414,7 @@ async def enviar_audio_llamada(
     Créditos: 1 por enviar + 3 por respuesta con audio = 4 por turno.
     """
     # Verificar límite de créditos
-    verificar_mes_ia(usuario["id"], date.today().strftime("%Y-%m"))
+    verificar_mes_ia(usuario["id"], periodo_ia_actual())
     u = fetch_one(
         "SELECT COALESCE(consultas_ia_r, consultas_ia) AS consultas_ia_r, limite_ia "
         "FROM usuarios WHERE id = ?",

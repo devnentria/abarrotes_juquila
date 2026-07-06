@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from shared.auth import get_current_user
 from shared.config import IA_FLASH_MODEL, IA_PRECIO_INPUT, IA_PRECIO_OUTPUT, IA_RATIO_PWA, OPENAI_API_KEY
 from shared.database import query, hoy
-from shared.database_local import execute as execute_local, verificar_mes_ia
+from shared.database_local import execute as execute_local, verificar_mes_ia, periodo_ia_actual
 from shared import cache_dashboard as _cache
 from pwa_asistente.routers.vistas import stock_detalle
 
@@ -76,7 +76,7 @@ def _registrar_costo(usuario_id: int, costo_usd: float, ratio: float = 0.0) -> N
     """
     if usuario_id == 0:
         return  # Llamada del cron — no hay usuario real que actualizar
-    verificar_mes_ia(usuario_id, date.today().strftime("%Y-%m"))
+    verificar_mes_ia(usuario_id, periodo_ia_actual())
     if ratio > 0:
         execute_local(
             "UPDATE usuarios SET "

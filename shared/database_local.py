@@ -274,6 +274,26 @@ def execute(sql: str, params: tuple = ()) -> int:
         return cursor.lastrowid
 
 
+def periodo_ia_actual() -> str:
+    """
+    Devuelve el identificador del período de facturación IA actual.
+    El ciclo va del día 10 de cada mes al día 9 del siguiente.
+    Antes del día 10 → sigue siendo el período del mes anterior.
+
+    Ejemplos:
+        5 julio  → "2026-06"  (aún en el ciclo de junio)
+        10 julio → "2026-07"  (nuevo ciclo de julio)
+    """
+    from datetime import date as _date
+    hoy = _date.today()
+    if hoy.day >= 10:
+        return hoy.strftime("%Y-%m")
+    # Antes del día 10: retroceder al mes anterior
+    if hoy.month == 1:
+        return f"{hoy.year - 1}-12"
+    return f"{hoy.year}-{hoy.month - 1:02d}"
+
+
 def verificar_mes_ia(usuario_id: int, mes_actual: str) -> None:
     """
     Verifica si el mes del contador IA cambió. Si cambió, archiva el consumo
