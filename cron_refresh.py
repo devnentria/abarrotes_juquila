@@ -517,6 +517,34 @@ def main() -> None:
     except Exception as e:
         log.error(f"Error en pre-cómputo mapa zonas: {e}")
 
+    # Backup diario de SQLite
+    try:
+        import shutil
+        db_path = Path(__file__).parent / "suite.db"
+        backup_dir = Path(__file__).parent / "backups"
+        backup_dir.mkdir(exist_ok=True)
+        backup_path = backup_dir / f"suite_{date.today().strftime('%Y%m%d')}.db"
+        shutil.copy2(db_path, backup_path)
+        log.info(f"Backup SQLite guardado: {backup_path.name}")
+        # Eliminar backups de más de 30 días
+        cutoff = date.today().toordinal() - 30
+        eliminados = 0
+        for f in backup_dir.glob("suite_*.db"):
+            try:
+                fecha_str = f.stem.replace("suite_", "")
+                if len(fecha_str) == 8:
+                    from datetime import date as _d
+                    fd = _d(int(fecha_str[:4]), int(fecha_str[4:6]), int(fecha_str[6:8]))
+                    if fd.toordinal() < cutoff:
+                        f.unlink()
+                        eliminados += 1
+            except Exception:
+                pass
+        if eliminados:
+            log.info(f"Backups eliminados (>30 días): {eliminados}")
+    except Exception as e:
+        log.error(f"Error en backup SQLite: {e}")
+
     duracion = (datetime.now() - inicio).total_seconds()
     log.info(f"=== Cron refresh terminado en {duracion:.1f}s — errores: {len(errores)} ===")
     if errores:
