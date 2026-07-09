@@ -2025,6 +2025,8 @@ def generar_dashboard(body: GenerarBody, usuario=Depends(get_current_user)):
     # Paso 4: Descontar créditos
     # Dashboards: 3 consultas (múltiples SQL + clasificación + narración)
     # Chat Studio sin dashboard: IA_RATIO_STUDIO = 1.5 (o4-mini razonamiento)
+    from shared.database_local import verificar_mes_ia, periodo_ia_actual
+    verificar_mes_ia(usuario["id"], periodo_ia_actual())
     _RATIO_DASHBOARD = 3
     ratio = float(_RATIO_DASHBOARD if tipo != "ninguno" else IA_RATIO_STUDIO)
     execute(
@@ -2773,9 +2775,8 @@ def registrar_uso_selector(usuario=Depends(get_current_user)):
     Se llama desde el frontend tras cargar los datos del ERP con éxito.
     No aplica si el usuario es ilimitado (limite_ia = 0).
     """
-    from shared.database_local import verificar_mes_ia
-    from datetime import date as _d
-    verificar_mes_ia(usuario["id"], _d.today().strftime("%Y-%m"))
+    from shared.database_local import verificar_mes_ia, periodo_ia_actual
+    verificar_mes_ia(usuario["id"], periodo_ia_actual())
     execute(
         "UPDATE usuarios SET "
         "consultas_ia   = CAST(ROUND(COALESCE(consultas_ia_r, consultas_ia) + 1, 0) AS INTEGER), "
