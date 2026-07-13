@@ -19,7 +19,7 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
 from shared.config import JWT_ALGORITHM, JWT_EXPIRY_HOURS, JWT_SECRET
-from shared.database_local import fetch_one, modulos_de_usuario
+from shared.database_local import fetch_one, execute, modulos_de_usuario
 
 # ── OAuth2 scheme ─────────────────────────────────────────────────────────────
 _oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -130,6 +130,11 @@ def get_current_user(token: str = Depends(_oauth2_scheme)) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario no encontrado o inactivo",
         )
+
+    execute(
+        "UPDATE usuarios SET ultimo_acceso = ? WHERE id = ?",
+        (datetime.now(timezone.utc).isoformat(), user_id),
+    )
 
     usuario["modulos"] = modulos_de_usuario(usuario["modulos"])
     return usuario
