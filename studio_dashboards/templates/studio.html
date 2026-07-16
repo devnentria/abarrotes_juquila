@@ -6568,7 +6568,7 @@ function renderLayoutSingleChart(container, spec) {
   const isVertical = indexAxis === 'x';
 
   const canvasId = `sc-single-${Date.now()}`;
-  container.innerHTML = `<div style="padding:8px 16px 16px"><canvas id="${canvasId}" style="max-height:440px"></canvas></div>`;
+  container.innerHTML = `<div style="padding:8px 16px 16px;width:100%"><canvas id="${canvasId}" style="max-height:440px;width:100%!important;display:block"></canvas></div>`;
 
   const ctx = document.getElementById(canvasId)?.getContext('2d');
   if (!ctx) return;
@@ -6579,7 +6579,7 @@ function renderLayoutSingleChart(container, spec) {
     options: {
       indexAxis,
       responsive: true,
-      maintainAspectRatio: true,
+      maintainAspectRatio: false,
       animation: { duration: 500 },
       plugins: {
         legend: {
