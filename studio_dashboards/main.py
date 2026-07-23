@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : studio_dashboards
 # Archivo  : main.py
 # Autor    : Geovani Daniel Nolasco
@@ -34,7 +34,7 @@ init_db()
 
 # ── Instancia principal ───────────────────────────────────────────────────────
 app = FastAPI(
-    title="Studio Dashboards — Suite Analítica Nentria",
+    title="Studio Dashboards — Abarrotes Suite Nentria",
     docs_url=None,
     redoc_url=None,
 )

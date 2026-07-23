@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente / funciones
 # Archivo  : funciones/catalogo.py
 # Autor    : Geovani Daniel Nolasco
@@ -38,7 +38,7 @@ _MESES_ES = [
 # ── System prompt del analista ────────────────────────────────────────────────
 
 _SYSTEM = """
-Eres el analista de negocio de una distribuidora farmacéutica con varias sucursales en México.
+Eres el analista de negocio de una abarrotera (distribuidora de abarrotes y productos de consumo) con varias sucursales en México.
 Tu trabajo es interpretar datos reales del ERP y producir un reporte ejecutivo de alto valor.
 
 INSTRUCCIONES OBLIGATORIAS:
@@ -443,35 +443,42 @@ def _pedidos_activos() -> str:
         return _q("""
             SELECT
                 s.Nombre                                              AS sucursal,
-                COUNT(pc.Cve_Folio)                                   AS total_pedidos,
-                MAX(DATEDIFF(DAY, pc.Fecha_Documento, GETDATE()))     AS dias_mas_antiguo,
-                MIN(DATEDIFF(DAY, pc.Fecha_Documento, GETDATE()))     AS dias_mas_reciente
-            FROM FT_Pedidos_C pc
-            JOIN GN_Sucursales s ON s.Cve_Sucursal=pc.Cve_Sucursal
-            WHERE pc.Estatus='AC' AND pc.Cve_Sucursal<>99
+                COUNT(oc.Cve_Folio)                                   AS total_ordenes,
+                MAX(DATEDIFF(DAY, oc.Fecha_Documento, GETDATE()))     AS dias_mas_antiguo,
+                MIN(DATEDIFF(DAY, oc.Fecha_Documento, GETDATE()))     AS dias_mas_reciente
+            FROM MT_Ordenes_C oc
+            JOIN GN_Sucursales s ON s.Cve_Sucursal=oc.Cve_Sucursal
+            WHERE oc.Status IN ('AU','RP')
+              AND oc.Cve_Movimiento='OCC'
+              AND oc.Cve_Sucursal<>99
             GROUP BY s.Nombre
-            ORDER BY COUNT(pc.Cve_Folio) DESC
+            ORDER BY COUNT(oc.Cve_Folio) DESC
         """)
 
     def q_mas_antiguos():
         return _q("""
             SELECT TOP 5
                 s.Nombre                                              AS sucursal,
-                DATEDIFF(DAY, pc.Fecha_Documento, GETDATE())          AS dias_activo,
-                CONVERT(varchar(10), pc.Fecha_Documento, 23)          AS fecha_pedido,
-                pc.Cve_Folio                                          AS folio
-            FROM FT_Pedidos_C pc
-            JOIN GN_Sucursales s ON s.Cve_Sucursal=pc.Cve_Sucursal
-            WHERE pc.Estatus='AC' AND pc.Cve_Sucursal<>99
-            ORDER BY pc.Fecha_Documento ASC
+                pr.Nombre                                             AS proveedor,
+                DATEDIFF(DAY, oc.Fecha_Documento, GETDATE())          AS dias_activo,
+                CONVERT(varchar(10), oc.Fecha_Documento, 23)          AS fecha_orden,
+                oc.Cve_Folio                                          AS folio
+            FROM MT_Ordenes_C oc
+            JOIN GN_Sucursales  s  ON s.Cve_Sucursal=oc.Cve_Sucursal
+            JOIN PM_Proveedores pr ON pr.Cve_Proveedor=oc.Cve_Proveedor
+            WHERE oc.Status IN ('AU','RP')
+              AND oc.Cve_Movimiento='OCC'
+              AND oc.Cve_Sucursal<>99
+            ORDER BY oc.Fecha_Documento ASC
         """)
 
     def q_semana_pasada():
-        """Pedidos que entraron en los últimos 7 días."""
+        """Órdenes de compra creadas en los últimos 7 días."""
         return _q("""
             SELECT COUNT(*) AS nuevos_7d
-            FROM FT_Pedidos_C
-            WHERE Estatus='AC'
+            FROM MT_Ordenes_C
+            WHERE Status IN ('AU','RP')
+              AND Cve_Movimiento='OCC'
               AND Cve_Sucursal<>99
               AND Fecha_Documento >= DATEADD(DAY,-7,GETDATE())
         """)
@@ -479,22 +486,22 @@ def _pedidos_activos() -> str:
     por_sucursal, mas_antiguos, semana = _parallel(q_por_sucursal, q_mas_antiguos, q_semana_pasada)
 
     if not por_sucursal:
-        return "No hay pedidos activos en este momento."
+        return "No hay órdenes de compra pendientes en este momento."
 
-    total = sum(r['total_pedidos'] for r in por_sucursal)
+    total = sum(r['total_ordenes'] for r in por_sucursal)
     nuevos_7d = semana[0]['nuevos_7d'] if semana else 0
 
     datos = f"""
-PEDIDOS ACTIVOS TOTALES: {total}
-NUEVOS EN LOS ÚLTIMOS 7 DÍAS: {nuevos_7d}
+ÓRDENES DE COMPRA PENDIENTES TOTALES: {total}
+NUEVAS EN LOS ÚLTIMOS 7 DÍAS: {nuevos_7d}
 
 POR SUCURSAL:
 {_fmt(por_sucursal)}
 
-LOS 5 PEDIDOS MÁS ANTIGUOS SIN SURTIR:
+LAS 5 ÓRDENES DE COMPRA MÁS ANTIGUAS PENDIENTES:
 {_fmt(mas_antiguos)}
 """
-    return _interpretar("Pedidos activos y pendientes", datos)
+    return _interpretar("Órdenes de compra pendientes", datos)
 
 
 # ── Q8 — Caducidades próximas ─────────────────────────────────────────────────
@@ -574,7 +581,7 @@ VALOR EN RIESGO POR PRODUCTO (top 10):
     return _interpretar(f"Análisis de caducidades — próximos {dias} días", datos)
 
 
-# ── Q10 — Proveedores / Laboratorios ─────────────────────────────────────────
+# ── Q10 — Proveedores / Distribuidores ─────────────────────────────────────────
 
 def _proveedores_activos() -> str:
     def q_lista():
@@ -635,7 +642,7 @@ PROVEEDORES CON MÁS PRODUCTOS EN CATÁLOGO:
 PROVEEDORES MÁS ACTIVOS (últimos 90 días — por importe de compra):
 {_fmt(recientes)}
 """
-    return _interpretar("Proveedores y laboratorios activos", datos)
+    return _interpretar("Proveedores y distribuidores activos", datos)
 
 
 # ── Inventario — Stock sin existencia ─────────────────────────────────────────
@@ -695,25 +702,26 @@ def _stock_sin_existencia() -> str:
         """)
 
     def q_pedidos_sin_stock():
-        """Pedidos activos de productos sin existencia → clientes esperando."""
+        """Órdenes de compra activas de productos sin existencia → pendientes de recibir."""
         return _q("""
             SELECT TOP 5
-                p.Descripcion                                         AS producto,
-                COUNT(DISTINCT pd.Cve_Folio)                          AS pedidos_activos,
-                SUM(pd.Cantidad)                                       AS piezas_pendientes
-            FROM FT_Pedidos_D pd
-            JOIN FT_Pedidos_C pc
-              ON pd.Cve_Folio=pc.Cve_Folio AND pd.Cve_Sucursal=pc.Cve_Sucursal
-             AND pd.Cve_Movimiento=pc.Cve_Movimiento
-            JOIN IM_Productos_Gral p ON p.Cve_Producto=pd.Cve_Producto
+                od.Descripcion                                        AS producto,
+                COUNT(DISTINCT od.Cve_Folio)                          AS ordenes_activas,
+                SUM(od.Cant_Ordenada)                                  AS piezas_pendientes
+            FROM MT_Ordenes_D od
+            JOIN MT_Ordenes_C oc
+              ON od.Cve_Folio=oc.Cve_Folio AND od.Cve_Sucursal=oc.Cve_Sucursal
+             AND od.Cve_Movimiento=oc.Cve_Movimiento
+            JOIN IM_Productos_Gral p ON p.Cve_Producto=od.Cve_Producto
             JOIN IN_Existencias_Alm ea
-              ON ea.Cve_Producto=pd.Cve_Producto AND ea.Cve_Sucursal=pc.Cve_Sucursal
+              ON ea.Cve_Producto=od.Cve_Producto AND ea.Cve_Sucursal=oc.Cve_Sucursal
               AND ea.Status='AC'
-            WHERE pc.Estatus='AC' AND pc.Cve_Sucursal<>99
+            WHERE oc.Status IN ('AU','RP')
+              AND oc.Cve_Sucursal<>99
               AND ea.Existencia=0
               AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
-            GROUP BY p.Descripcion
-            ORDER BY SUM(pd.Cantidad) DESC
+            GROUP BY od.Descripcion
+            ORDER BY SUM(od.Cant_Ordenada) DESC
         """)
 
     sin_stock, otras_suc, pedidos = _parallel(q_sin_stock, q_otras_sucursales, q_pedidos_sin_stock)

@@ -1,15 +1,18 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/medicos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.1.0
+# Versión  : 4.0.0
 # ============================================================
 """
-Agente Especialista — Médicos.
+Agente Especialista — Proveedores.
 
-Responde preguntas sobre el directorio de médicos prescriptores,
-duplicados, cédulas, asignación a vendedores y ventas por prescripción.
+Responde preguntas sobre el directorio de proveedores, productos por proveedor,
+costos cotizados, relación producto-proveedor y vendedores asociados.
+
+Nota: la tabla GC_Medicos NO existe en este ERP.
+      El catálogo de proveedores es PM_Proveedores (187 registros activos).
 """
 from typing import Optional
 from pwa_asistente.agente import base_agente
@@ -17,159 +20,127 @@ from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
 
 _SCHEMA = """
-TABLAS DE MÉDICOS:
+TABLAS DE PROVEEDORES:
 
-GC_Medicos — catálogo principal de médicos
-  Cve_Medico (int), Nombre (varchar), Cedula (varchar), cve_vendedor (int)
-  ⚠ Usar LTRIM(RTRIM()) al comparar nombres y cédulas (hay espacios extra en el ERP)
-  ⚠ ISNULL(cedula, '') para manejar cédulas nulas
+PM_Proveedores — catálogo de proveedores / distribuidores (~187 activos)
+  Cve_Proveedor (varchar 10), Nombre (varchar), Razon_Social (varchar),
+  RFC (varchar), Status (char), EMail (varchar), Contacto (varchar),
+  Telefono (varchar), Cve_Moneda (varchar)
+  ⚠ Filtrar: Status = 'AC' para proveedores activos
+  ⚠ Cve_Proveedor es varchar(10) — usar CAST si se une con tablas numéricas
+  ⚠ Usar LTRIM(RTRIM()) al comparar nombres (hay espacios extra en el ERP)
 
-CM_Clientes — cada cliente tiene un médico prescriptor asignado
-  Cve_Cliente (int), Razon_Social (varchar), Cve_Ruta (int)
-  Cve_Ruta → FK a GC_Medicos.Cve_Medico (médico prescriptor del cliente)
-  ⚠ Los clientes sin médico (Cve_Ruta = 0 o NULL) no generan pedidos
+IM_Productos_Proveedor — relación producto-proveedor
+  Cve_Producto (varchar), Cve_Proveedor (varchar), Cve_Prioridad (smallint),
+  Costo_Cotizado (decimal), Fecha_Cotizacion_Costo (datetime),
+  Precio_Venta (decimal), Fecha_Cotizacion_Precio (datetime)
+  ⚠ WHERE Costo_Cotizado > 0 · Cve_Prioridad = 0 para el proveedor principal
 
-FT_Facturas_C — ventas (para ventas directas o por prescripción)
-  Cve_Cliente (int), Importe_Total (decimal), Fecha_Documento (datetime), Status (char)
-  ⚠ Filtrar: Status <> 'C'
-  ⚠ NO existe Cve_Medico en FT_Facturas_C
+IT_Movimientos_C — encabezado de movimientos de inventario (compras reales)
+  Cve_Movimiento (varchar), Fecha_Documento (datetime), Cve_Sucursal (smallint),
+  Cve_Almacen (smallint), Cve_Folio (int), Cve_Proveedor (varchar)
+  ⚠ Cve_Movimiento = 'EC' para Entrada por Compra (filtro principal)
 
-FT_Pedidos_C — pedidos pagados (fuente para consultas de pacientes)
-  Cve_Folio (int), Cve_Sucursal (smallint), Cve_Cliente (varchar),
-  Paciente (varchar) → nombre del paciente en el pedido,
-  Estatus (char) → 'CN'=cancelado, Referencia_Cliente (varchar) → 'PAGADO'
-  ⚠ Para ventas reales: Estatus <> 'CN' AND Referencia_Cliente = 'PAGADO'
+IT_Movimientos_D — detalle de movimientos de inventario
+  Cve_Movimiento (varchar), Cve_Folio (int), Cve_Almacen (smallint),
+  Cve_Producto (varchar), Cantidad (decimal), Costo_Unitario (decimal),
+  Num_Lote (varchar), Fecha_Caducidad (datetime)
+  JOIN con _C por: Cve_Folio + Cve_Movimiento + Cve_Almacen
+  ⚠ Costo_Unitario = costo REAL de compra al proveedor
 
-FT_Pedidos_Dia — detalle de pedidos
-  Cve_Folio, Cve_Sucursal, Cve_Producto (varchar)
-  JOIN con FT_Pedidos_C por: Cve_Folio + Cve_Sucursal
+MT_Ordenes_C — encabezado de órdenes de compra
+  Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
+  Cve_Proveedor (varchar), Fecha_Documento (datetime), Status (char),
+  Importe_Total (float)
+  ⚠ Filtrar: Status = 'AC'
+
+MT_Ordenes_D — detalle de órdenes de compra
+  Cve_Folio (int), Cve_Movimiento (varchar), Cve_Sucursal (smallint),
+  Cve_Producto (varchar), Cantidad (decimal), Costo_Unitario (decimal)
+  JOIN con _C por: Cve_Folio + Cve_Movimiento + Cve_Sucursal
+
+GC_Vendedores — catálogo de vendedores
+  Cve_Vendedor (varchar), Nombre (varchar), Cve_Sucursal (smallint),
+  Status (char), TipoVendedor (varchar), Tipo_Vendedor (char),
+  Cve_Supervisor (varchar), Cve_Ruta (varchar),
+  Porc_Comision (decimal), email (varchar)
+  ⚠ Filtrar Status = 'AC' para activos
 
 IM_Productos_Gral — catálogo de productos
-  Cve_Producto (varchar), Descripcion (varchar)
-  ⚠ Productos PROMO: el ERP crea productos con "PROMO", "GRATIS" o "PROMOCION" en la descripción
-    — regalías identificadas por precio ~\$0.01. Excluir por precio y por nombre GRATIS:\n    AND d.Precio > 1 (FT_Pedidos_Dia) o AND fd.Precio > 1 (FT_Facturas_D)
-    AND p.Descripcion NOT LIKE '%GRATIS%'
+  Cve_Producto (varchar), Descripcion (varchar), Status (varchar),
+  Cve_Familia (varchar), Cve_Subfamilia (varchar),
+  Costo_Promedio (decimal), Costo_Ultima_Compra (decimal)
 """
 
 _REGLAS = """
-DETECCIÓN DE DUPLICADOS:
-  · Por cédula: misma cedula (LTRIM/RTRIM) en más de un registro
-  · Por nombre: mismo UPPER(LTRIM(RTRIM(Nombre))) en más de un registro
-  · Médico sin cédula puede estar duplicado solo por nombre
+PROVEEDORES — CONSULTAS PRINCIPALES:
 
-BÚSQUEDA DE MÉDICOS POR NOMBRE — OBLIGATORIO:
+  1. Listado de proveedores activos:
+     SELECT Cve_Proveedor, Nombre, RFC, Contacto, Telefono, EMail
+     FROM PM_Proveedores WHERE Status = 'AC' ORDER BY Nombre
+
+  2. Qué proveedor surte un producto (por catálogo cotizado):
+     SELECT pv.Nombre AS Proveedor, pp.Costo_Cotizado, pp.Fecha_Cotizacion_Costo
+     FROM IM_Productos_Proveedor pp
+     JOIN PM_Proveedores pv ON pv.Cve_Proveedor = pp.Cve_Proveedor
+     JOIN IM_Productos_Gral p ON p.Cve_Producto = pp.Cve_Producto
+     WHERE p.Descripcion LIKE '%nombre_producto%'
+       AND pv.Status = 'AC' AND pp.Costo_Cotizado > 0
+     ORDER BY pp.Cve_Prioridad
+
+  3. Productos de un proveedor:
+     SELECT p.Descripcion, pp.Costo_Cotizado
+     FROM IM_Productos_Proveedor pp
+     JOIN PM_Proveedores pv ON pv.Cve_Proveedor = pp.Cve_Proveedor
+     JOIN IM_Productos_Gral p ON p.Cve_Producto = pp.Cve_Producto
+     WHERE pv.Nombre LIKE '%nombre_proveedor%'
+       AND pp.Costo_Cotizado > 0
+     ORDER BY p.Descripcion
+
+  4. Último costo real de compra a un proveedor (no cotizado, sino pagado):
+     SELECT TOP 1 p.Descripcion, imd.Costo_Unitario, imc.Fecha_Documento AS Fecha_Compra
+     FROM IT_Movimientos_D imd
+     JOIN IT_Movimientos_C imc ON imc.Cve_Folio = imd.Cve_Folio
+                               AND imc.Cve_Movimiento = imd.Cve_Movimiento
+                               AND imc.Cve_Almacen = imd.Cve_Almacen
+     JOIN IM_Productos_Gral p  ON p.Cve_Producto = imd.Cve_Producto
+     WHERE imc.Cve_Movimiento = 'EC'
+       AND p.Descripcion LIKE '%nombre_producto%'
+     ORDER BY imc.Fecha_Documento DESC
+
+  5. Órdenes de compra a un proveedor:
+     SELECT oc.Cve_Folio, oc.Fecha_Documento, oc.Importe_Total, oc.Status
+     FROM MT_Ordenes_C oc
+     JOIN PM_Proveedores pv ON pv.Cve_Proveedor = oc.Cve_Proveedor
+     WHERE pv.Nombre LIKE '%nombre_proveedor%'
+       AND oc.Status = 'AC'
+     ORDER BY oc.Fecha_Documento DESC
+
+BÚSQUEDA DE PROVEEDORES POR NOMBRE — OBLIGATORIO:
   · Buscar SIEMPRE por cada palabra por separado:
-    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%' OR Nombre LIKE '%palabra3%'
-    Ejemplo: "Luz Stella Seamanduras" → LIKE '%Luz%' OR LIKE '%Stella%' OR LIKE '%Seamanduras%'
+    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%'
   · NUNCA buscar el nombre completo junto — dividir siempre en palabras individuales.
 
   FALLBACK FONÉTICO — si LIKE no devuelve resultados:
   ⛔ NUNCA responder "no encontré" sin antes intentar DIFFERENCE (SOUNDEX):
-    SELECT Cve_Medico, Nombre FROM GC_Medicos
-    WHERE DIFFERENCE(Nombre, 'palabra_buscada') >= 3
+    SELECT Cve_Proveedor, Nombre FROM PM_Proveedores
+    WHERE Status = 'AC' AND DIFFERENCE(Nombre, 'palabra_buscada') >= 3
     ORDER BY DIFFERENCE(Nombre, 'palabra_buscada') DESC
-  → Esto encuentra nombres mal escritos (ej: "Sogevovia" → encuentra "Segovia").
-  → Mostrar los resultados al usuario y preguntar cuál es el correcto antes de continuar.
 
-VENTAS POR MÉDICO — DOS TIPOS (aclarar cuál se pide):
+COSTO COTIZADO vs COSTO REAL — DISTINCIÓN CRÍTICA:
+  · IM_Productos_Proveedor.Costo_Cotizado = precio cotizado/negociado (no siempre el pagado)
+  · IT_Movimientos_D.Costo_Unitario = costo REAL de la última compra efectiva
+  · Para "último costo" o "cuánto se pagó" → usar IT_Movimientos_D + IT_Movimientos_C
+  · Para "precio de catálogo" o "cotización" → usar IM_Productos_Proveedor
 
-  1. Ventas directas (el médico compra como cliente registrado):
-     SELECT c.Razon_Social, SUM(fc.Importe_Total) AS Total
-     FROM CM_Clientes c
-     JOIN FT_Facturas_C fc ON fc.Cve_Cliente = c.Cve_Cliente
-     WHERE fc.Status = 'AC'
-       AND c.Razon_Social LIKE '%palabra1%' OR c.Razon_Social LIKE '%palabra2%'
-     GROUP BY c.Razon_Social
-
-  2. Ventas por prescripción (ventas a clientes asignados al médico vía Cve_Ruta):
-     SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Prescrito
-     FROM FT_Facturas_C fc
-     JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
-     JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-     WHERE fc.Status = 'AC'
-       AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
-       AND m.Nombre LIKE '%nombre_medico%'
-     GROUP BY m.Cve_Medico, m.Nombre
-
-  ⚠ Cve_Ruta = 1 es el registro "SIN MEDICO" (placeholder) — SIEMPRE excluirlo con AND c.Cve_Ruta <> 1
-  ⚠ Si no se especifica, reportar los DOS tipos en tablas separadas con su etiqueta.
-  ⚠ NUNCA usar Cve_Medico en FT_Facturas_C — esa columna no existe.
-
-RANKING DE MÉDICOS POR PRESCRIPCIÓN (todos los médicos):
-  SELECT m.Nombre AS Medico, SUM(fc.Importe_Total) AS Total_Prescrito
-  FROM FT_Facturas_C fc
-  JOIN CM_Clientes c ON c.Cve_Cliente = fc.Cve_Cliente
-  JOIN GC_Medicos m  ON m.Cve_Medico  = c.Cve_Ruta
-  WHERE fc.Status = 'AC'
-    AND c.Cve_Ruta IS NOT NULL AND c.Cve_Ruta <> 0 AND c.Cve_Ruta <> 1
-  [AND fc.Fecha_Documento BETWEEN ... AND ...]
-  GROUP BY m.Cve_Medico, m.Nombre
-  ORDER BY Total_Prescrito DESC
-
-PACIENTES DE UN MÉDICO — PROTOCOLO OBLIGATORIO (3 PASOS):
-
-  PASO 1 — Buscar el médico en GC_Medicos por palabras separadas:
-    SELECT Cve_Medico, Nombre, ISNULL(Cedula,'') AS Cedula
-    FROM GC_Medicos
-    WHERE Nombre LIKE '%palabra1%' OR Nombre LIKE '%palabra2%'
-
-  → Si NO hay resultados: usar DIFFERENCE >= 3 (fallback fonético).
-  → Si hay UN solo resultado: continuar al PASO 3 directamente.
-  → Si hay MÁS DE UNO: ejecutar PASO 2.
-
-  PASO 2 — Múltiples médicos encontrados: detectar duplicados y preguntar.
-    · Contar cuántos clientes tiene cada uno:
-      SELECT m.Cve_Medico, m.Nombre, COUNT(cl.Cve_Cliente) AS Clientes
-      FROM GC_Medicos m
-      LEFT JOIN CM_Clientes cl ON CAST(cl.Cve_Ruta AS int) = m.Cve_Medico
-      WHERE m.Nombre LIKE '%palabra%'
-      GROUP BY m.Cve_Medico, m.Nombre
-    · Mostrar tabla con: Nombre | Clientes
-    · Si los nombres son variantes del mismo (ej: "Segovia Gómez Helberth" / "Helberth Armando Segovia Gómez"):
-      → Indicar: "⚠ Encontré X registros que parecen ser el mismo médico con duplicados."
-      → Preguntar: "¿Busco pacientes de todos los registros consolidados, o solo uno específico?"
-    · Si son médicos claramente distintos: listar y preguntar cuál.
-
-  PASO 3 — Buscar pacientes usando todos los Cve_Medico relevantes:
-    (Si el usuario eligió consolidar duplicados, incluir todos los Cve_Medico en el IN)
-
-    SELECT DISTINCT p.Paciente, COUNT(DISTINCT p.Cve_Folio) AS Pedidos
-    FROM FT_Pedidos_C p
-    JOIN CM_Clientes cl ON cl.Cve_Cliente = p.Cve_Cliente
-    WHERE p.Estatus <> 'CN' AND p.Referencia_Cliente = 'PAGADO'
-      AND cl.Cve_Ruta IN (236, 237, 273)    -- todos los Cve_Medico del doctor
-      AND p.Paciente IS NOT NULL AND LTRIM(RTRIM(p.Paciente)) <> ''
-    GROUP BY p.Paciente
-    ORDER BY Pedidos DESC, p.Paciente
-
-    Si además preguntan por producto específico, agregar:
-    JOIN FT_Pedidos_Dia d ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
-    JOIN IM_Productos_Gral pr ON pr.Cve_Producto=d.Cve_Producto
-    AND pr.Descripcion LIKE '%nombre_producto%' AND pr.Descripcion NOT LIKE '%GRATIS%'
-    AND d.Precio > 1
-
-  ⚠ NUNCA mostrar Cve_Medico en la respuesta — solo nombres.
-  ⚠ Si consolidas duplicados: mencionar en la respuesta cuántos registros se unificaron.
-
-MÉDICOS SIN CÉDULA — REGLA OBLIGATORIA:
-  · Filtrar SIEMPRE registros de sistema: WHERE LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')
-  · Limitar a TOP 50 ORDER BY m.Nombre — aclarar al usuario cuántos hay en total:
-    "Se encontraron X médicos sin cédula. Mostrando los primeros 50 ordenados alfabéticamente."
-  · Query estándar:
-    SELECT TOP 50 m.Nombre, v.Nombre AS Vendedor
-    FROM GC_Medicos m
-    LEFT JOIN GC_Vendedores v ON LTRIM(RTRIM(CAST(m.cve_vendedor AS varchar))) = LTRIM(RTRIM(CAST(v.Cve_Vendedor AS varchar)))
-    WHERE (m.Cedula IS NULL OR LTRIM(RTRIM(m.Cedula)) = '')
-      AND LTRIM(RTRIM(UPPER(m.Nombre))) NOT IN ('SIN MEDICO','PRUEBA','TEST')
-    ORDER BY m.Nombre
-
-FORMATO ADICIONAL MÉDICOS:
-  · ⚠ NUNCA mostrar Cve_Medico — es código interno. En resultados: SOLO m.Nombre, NUNCA m.Cve_Medico.
-  · ⚠ para duplicados confirmados · Agrupar por vendedor cuando sea relevante
+FORMATO ADICIONAL:
+  · ⚠ NUNCA mostrar Cve_Proveedor en resultados — es código interno, mostrar Nombre.
+  · Agrupar por proveedor cuando sea relevante.
+  · Incluir siempre Contacto y Telefono cuando se listen datos de un proveedor.
 """
 
 _SYSTEM = build(
-    rol="Eres el agente especialista en MÉDICOS de Suite Analítica.",
+    rol="Eres el agente especialista en PROVEEDORES de Abarrotes Suite (Super Juquila).",
     schema_especifico=_SCHEMA,
     reglas_especificas=_REGLAS,
 )
@@ -177,7 +148,7 @@ _SYSTEM = build(
 
 def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
-    Genera una respuesta sobre médicos.
+    Genera una respuesta sobre proveedores.
 
     Args:
         pregunta  (str):        Pregunta del usuario.

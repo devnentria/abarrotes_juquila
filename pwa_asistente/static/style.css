@@ -1,5 +1,5 @@
 /* ============================================================
-   Suite Analítica — Estilos PWA (Mobile-first)
+   Abarrotes Suite — Estilos PWA (Mobile-first)
    Tema: Blanco corporativo con acentos azul
    ============================================================ */
 
@@ -12,10 +12,10 @@
   --bg-card:     #FFFFFF;
   --bg-card2:    #F9F9FB;
 
-  /* ── Marca LebenMedik (header/brand) ── */
+  /* ── Marca Abarrotes Suite (header/brand) ── */
   --blue:        #1A2B5A;   /* Azul marino logo */
 
-  /* ── Colores acento LebenMedik ── */
+  /* ── Colores acento principal ── */
   --blue-mid:    #00897B;   /* Teal principal — botones, acentos */
   --blue-light:  #E0F2F1;
   --blue-border: #80CBC4;
@@ -1605,3 +1605,6 @@ html.dark .historial-overlay { background: rgba(0,0,0,.6); }
   box-shadow: 0 4px 12px rgba(198,40,40,.4);
 }
 .call-end-btn:active { background: #b71c1c; }
+
+/* DEMO badge pulse */
+@keyframes pulse-demo { 0%,100%{opacity:1} 50%{opacity:.6} }

@@ -1,15 +1,16 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/pedidos.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.3.0
+# Versión  : 3.0.0
 # ============================================================
 """
-Agente Especialista — Pedidos.
+Agente Especialista — Compras (Órdenes de Compra).
 
-Responde preguntas sobre pedidos activos, su antigüedad
-y distribución por sucursal o vendedor.
+Responde preguntas sobre órdenes de compra activas, pendientes,
+antigüedad y distribución por sucursal o proveedor.
+Tablas origen: MT_Ordenes_C (encabezado) + MT_Ordenes_D (detalle).
 """
 from typing import Optional
 from pwa_asistente.agente import base_agente
@@ -17,87 +18,113 @@ from pwa_asistente.agente.base_agente import RespuestaIA
 from pwa_asistente.agente.especialistas.base_prompt import build
 
 _SCHEMA = """
-TABLAS DE PEDIDOS:
+TABLAS DE ÓRDENES DE COMPRA:
 
-FT_Pedidos_C — encabezado de pedidos
-  Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Fecha_Documento (datetime), Cve_Cliente (int), Cve_Vendedor (varchar), Estatus (varchar)
-  Estatus: 'AC'=activo/pendiente · 'TR'=transferido · 'CN'=cancelado
-  ⚠ NO existe Importe_Total en esta tabla — para importe usar FT_Pedidos_CN_D.PrecioNeto
+MT_Ordenes_C — encabezado de órdenes de compra
+  Cve_Folio (varchar), Cve_Sucursal (int), Cve_Movimiento (varchar, siempre 'OCC'),
+  Cve_Proveedor (varchar 10), fecha (datetime), imp_total (decimal),
+  Status (char 2), observaciones (varchar)
+  Status: 'TR'=transferida(completada) · 'RP'=recibida parcial · 'AU'=autorizada(pendiente) · 'CN'=cancelada
 
-FT_Pedidos_CN_D — detalle de pedidos (única tabla de detalle disponible)
-  Cve_Folio (int), Cve_Movimiento (int), Cve_Sucursal (int),
-  Cve_Producto (int), Cantidad_Ordenada (decimal), Cantidad_Surtida (decimal),
-  Cantidad_Pendiente (decimal), Precio (decimal), PrecioNeto (decimal)
-  JOIN con FT_Pedidos_C por: Cve_Folio + Cve_Sucursal + Cve_Movimiento
-  ⚠ NUNCA usar FT_Pedidos_D — esa tabla NO EXISTE en esta base de datos
+MT_Ordenes_D — detalle de órdenes de compra
+  Cve_Folio (varchar), Cve_Sucursal (int), Cve_Movimiento (varchar),
+  Cve_Producto (varchar 14), Descripcion (varchar 250),
+  cant_ordenada (decimal), cant_recibida (decimal), cant_pendiente (decimal),
+  costo_unitario (decimal), imp_total (decimal), Status (char 2)
+  JOIN con MT_Ordenes_C por: d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
 
-VW_Pedidos_Total — vista con importe total por pedido
-  Cve_Sucursal, Cve_Folio, Cve_Movimiento_Pedido, Neto (decimal), Status
-  JOIN: vt.Cve_Folio=pc.Cve_Folio AND vt.Cve_Sucursal=pc.Cve_Sucursal AND vt.Cve_Movimiento_Pedido=pc.Cve_Movimiento
+PM_Proveedores — catálogo de proveedores
+  Cve_Proveedor (varchar 10), Nombre (varchar)
+  JOIN: p.Cve_Proveedor = c.Cve_Proveedor
+
+IM_Productos_Gral — catálogo de productos (solo si se necesita buscar por nombre de producto)
+  Cve_Producto (varchar 14), Descripcion (varchar)
+  JOIN: ip.Cve_Producto = d.Cve_Producto
+  ⚠ MT_Ordenes_D ya tiene Descripcion del producto — usarla directamente cuando sea suficiente.
 """
 
 _REGLAS = """
-REGLAS DE PEDIDOS:
+REGLAS DE ÓRDENES DE COMPRA:
 
-ESTATUS DE PEDIDOS:
-  · Estatus = 'AC'  → activo/pendiente (aún no surtido/cobrado)
-  · Estatus = 'TR'  → transferido/procesado (surtido) — NO significa envío físico entre sucursales
-  · Estatus = 'CN'  → cancelado
-  · Para pedidos ACTIVOS:     WHERE Estatus = 'AC'
-  · Para TODOS los pedidos (histórico, conteo): WHERE Estatus <> 'CN'
-  ⚠ NUNCA filtrar por Referencia_Cliente = 'PAGADO' en pedidos — ese campo aplica en ventas.
-    Un pedido activo ES un pedido aunque no esté cobrado.
+ESTATUS DE ÓRDENES:
+  · Status = 'AU'  → autorizada / pendiente (aún no recibida)
+  · Status = 'RP'  → recibida parcial (se recibió parte de la mercancía)
+  · Status = 'TR'  → transferida / completada (orden recibida y procesada)
+  · Status = 'CN'  → cancelada
+  · Para órdenes ACTIVAS/PENDIENTES: WHERE c.Status IN ('AU','RP')
+  · Para órdenes COMPLETADAS:        WHERE c.Status = 'TR'
+  · Para TODAS las órdenes (histórico, conteo): WHERE c.Status <> 'CN'
 
-CONTEO HISTÓRICO DE PEDIDOS (cuántos pedidos hubo en un período):
-  Consulta estándar para contar pedidos de un producto en un período:
-    SELECT ISNULL(p.Descripcion,'── TOTAL') AS Producto,
-           COUNT(DISTINCT pc.Cve_Folio) AS Pedidos,
-           SUM(pd.Cantidad_Ordenada)    AS Piezas_Ordenadas
-    FROM FT_Pedidos_C pc
-    JOIN FT_Pedidos_CN_D pd ON pd.Cve_Folio=pc.Cve_Folio AND pd.Cve_Sucursal=pc.Cve_Sucursal AND pd.Cve_Movimiento=pc.Cve_Movimiento
-    JOIN IM_Productos_Gral p ON p.Cve_Producto=pd.Cve_Producto
-    WHERE pc.Estatus <> 'CN'
-      AND pc.Cve_Sucursal <> 99
-      AND p.Descripcion LIKE '%nombre_producto%'
-      AND YEAR(pc.Fecha_Documento)=2026 AND MONTH(pc.Fecha_Documento)=4
-    GROUP BY ROLLUP(p.Descripcion)
-    ORDER BY GROUPING(p.Descripcion), Pedidos DESC
+CONTEO HISTÓRICO DE ÓRDENES DE COMPRA (cuántas órdenes hubo en un período):
+  Consulta estándar para contar órdenes de un producto en un período:
+    SELECT ISNULL(d.Descripcion,'── TOTAL') AS Producto,
+           COUNT(DISTINCT c.Cve_Folio) AS Ordenes,
+           SUM(d.cant_ordenada)         AS Piezas_Ordenadas,
+           SUM(d.imp_total)             AS Importe_Total
+    FROM MT_Ordenes_C c
+    JOIN MT_Ordenes_D d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+    WHERE c.Status <> 'CN'
+      AND c.Cve_Sucursal <> 99
+      AND d.Descripcion LIKE '%nombre_producto%'
+      AND YEAR(c.fecha)=2026 AND MONTH(c.fecha)=7
+    GROUP BY ROLLUP(d.Descripcion)
+    ORDER BY GROUPING(d.Descripcion), Ordenes DESC
 
-  ⚠ Para conteo sin filtro de producto: omitir JOIN a IM_Productos_Gral y el filtro de Descripcion.
+  ⚠ Para conteo sin filtro de producto: omitir el filtro de Descripcion.
+
+PROVEEDOR:
+  · SIEMPRE hacer JOIN a PM_Proveedores para mostrar el nombre del proveedor:
+    JOIN PM_Proveedores p ON p.Cve_Proveedor = c.Cve_Proveedor
+  · Si preguntan por un proveedor específico: AND p.Nombre LIKE '%nombre_proveedor%'
 
 ANTIGÜEDAD Y ACTIVOS:
-  · Antigüedad crítica (+30 días): Fecha_Documento < DATEADD(DAY,-30,GETDATE())
+  · Antigüedad crítica (+30 días): c.fecha < DATEADD(DAY,-30,GETDATE())
   · Antigüedad media (15-30 días): entre DATEADD(DAY,-30,...) y DATEADD(DAY,-15,...)
-  · Pedidos del día: CAST(Fecha_Documento AS DATE) = CAST(GETDATE() AS DATE)
-  · Priorizar reportar pedidos de más de 30 días — son los más urgentes.
+  · Órdenes del día: CAST(c.fecha AS DATE) = CAST(GETDATE() AS DATE)
+  · Priorizar reportar órdenes de más de 30 días — son las más urgentes.
 
-PEDIDOS DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
-  Cuando la pregunta menciona un producto (ej: "pedidos de Omnitrope", "cuánto hay pedido de Saizen"):
-  ⛔ NUNCA devolver el total de pedidos sin filtrar por producto.
-  ✅ SIEMPRE hacer JOIN a IM_Productos_Gral p y filtrar: AND p.Descripcion LIKE '%nombre_producto%'
+PENDIENTE DE RECEPCIÓN:
+  · Las piezas que faltan por recibir están en d.cant_pendiente.
+  · El importe pendiente se puede estimar: d.cant_pendiente * d.costo_unitario
 
-  Consulta estándar para pedidos de un producto específico:
-    SELECT p.Descripcion, s.Nombre AS Sucursal,
-           SUM(pd.Cantidad_Pendiente) AS Piezas_Pendientes,
-           SUM(pd.PrecioNeto * pd.Cantidad_Pendiente) AS Importe_Pendiente
-    FROM FT_Pedidos_C pc
-    JOIN FT_Pedidos_CN_D pd ON pd.Cve_Folio=pc.Cve_Folio AND pd.Cve_Sucursal=pc.Cve_Sucursal AND pd.Cve_Movimiento=pc.Cve_Movimiento
-    JOIN IM_Productos_Gral p ON p.Cve_Producto=pd.Cve_Producto
-    JOIN GN_Sucursales s ON s.Cve_Sucursal=pc.Cve_Sucursal
-    WHERE pc.Estatus='AC' AND pc.Cve_Sucursal <> 99
-      AND pd.Cantidad_Pendiente > 0
-      AND p.Descripcion LIKE '%nombre_producto%'
-    GROUP BY p.Descripcion, s.Nombre
+ÓRDENES DE UN PRODUCTO ESPECÍFICO — REGLA CRÍTICA:
+  Cuando la pregunta menciona un producto (ej: "órdenes de Aceite", "cuánto se pidió de Arroz"):
+  ⛔ NUNCA devolver el total de órdenes sin filtrar por producto.
+  ✅ SIEMPRE filtrar: AND d.Descripcion LIKE '%nombre_producto%'
+
+  Consulta estándar para órdenes de compra de un producto específico:
+    SELECT d.Descripcion, s.Nombre AS Sucursal, p.Nombre AS Proveedor,
+           SUM(d.cant_pendiente)                    AS Piezas_Pendientes,
+           SUM(d.cant_pendiente * d.costo_unitario) AS Importe_Pendiente
+    FROM MT_Ordenes_C c
+    JOIN MT_Ordenes_D d ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+    JOIN PM_Proveedores p ON p.Cve_Proveedor=c.Cve_Proveedor
+    JOIN GN_Sucursales s ON s.Cve_Sucursal=c.Cve_Sucursal
+    WHERE c.Status IN ('AU','RP') AND c.Cve_Sucursal <> 99
+      AND d.cant_pendiente > 0
+      AND d.Descripcion LIKE '%nombre_producto%'
+    GROUP BY d.Descripcion, s.Nombre, p.Nombre
     ORDER BY Importe_Pendiente DESC
 
-FORMATO ADICIONAL PEDIDOS:
-  · 🔴 para pedidos con más de 30 días · ⚠ para pedidos entre 15 y 30 días
-  · Agrupar por sucursal cuando aplique
+RESUMEN POR PROVEEDOR:
+  Consulta estándar para órdenes activas agrupadas por proveedor:
+    SELECT p.Nombre AS Proveedor,
+           COUNT(DISTINCT c.Cve_Folio) AS Ordenes_Activas,
+           SUM(c.imp_total)            AS Importe_Total
+    FROM MT_Ordenes_C c
+    JOIN PM_Proveedores p ON p.Cve_Proveedor=c.Cve_Proveedor
+    WHERE c.Status IN ('AU','RP') AND c.Cve_Sucursal <> 99
+    GROUP BY p.Nombre
+    ORDER BY Importe_Total DESC
+
+FORMATO ADICIONAL ÓRDENES DE COMPRA:
+  · 🔴 para órdenes con más de 30 días · ⚠ para órdenes entre 15 y 30 días
+  · Agrupar por sucursal o proveedor cuando aplique
+  · Mostrar piezas pendientes (cant_pendiente) cuando se habla de órdenes activas
 """
 
 _SYSTEM = build(
-    rol="Eres el agente especialista en PEDIDOS de Suite Analítica.",
+    rol="Eres el agente especialista en ÓRDENES DE COMPRA (compras a proveedores) de Abarrotes Suite.",
     schema_especifico=_SCHEMA,
     reglas_especificas=_REGLAS,
 )
@@ -105,7 +132,7 @@ _SYSTEM = build(
 
 def responder(pregunta: str, historial: list, model: Optional[str] = None) -> RespuestaIA:
     """
-    Genera una respuesta sobre pedidos.
+    Genera una respuesta sobre órdenes de compra.
 
     Args:
         pregunta  (str):        Pregunta del usuario.

@@ -1,5 +1,5 @@
 /**
- * Service Worker — Suite Analítica PWA
+ * Service Worker — Abarrotes Suite PWA
  *
  * Qué hace:
  *   - Cachea los archivos estáticos (CSS, JS) para que la app

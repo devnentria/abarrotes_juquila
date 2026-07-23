@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : studio_dashboards
 # Archivo  : routers/chat.py
 # Autor    : Geovani Daniel Nolasco
@@ -90,7 +90,7 @@ _SALUDO = re.compile(
 )
 _RESPUESTA_SALUDO = (
     "¡Hola! ¿En qué puedo ayudarte?\n\n"
-    "Puedo responder preguntas sobre ventas, inventario, pedidos, médicos y clientes. "
+    "Puedo responder preguntas sobre ventas, inventario, pedidos, contactos y clientes. "
     "También puedo generar dashboards visuales — solo pídemelos en tu pregunta."
 )
 
@@ -104,7 +104,7 @@ _DASHBOARDS_DISPONIBLES = (
     "Los dashboards visuales disponibles son:\n"
     "- **Ventas**: reporte completo · ventas de hoy · por sucursal · tendencia · comparativo de meses · diario\n"
     "- **Vendedores**: top vendedores · variación de vendedores\n"
-    "- **Médicos**: ranking de médicos por ventas · tendencia mensual · ventas por representante\n"
+    "- **Contactos**: ranking de contactos por ventas · tendencia mensual · ventas por representante\n"
     "- **Productos**: top productos más vendidos\n"
     "- **Clientes**: clientes frecuentes\n"
     "- **Pedidos**: pedidos activos por sucursal\n"
@@ -118,7 +118,7 @@ _RESPUESTA_CAPACIDADES = (
     "- **Ventas** — importes, facturas, comparativos por sucursal o vendedor\n"
     "- **Inventario** — existencias, caducidades, productos sin stock\n"
     "- **Pedidos** — pedidos activos y su antigüedad\n"
-    "- **Médicos** — directorio y duplicados\n"
+    "- **Contactos** — directorio y duplicados\n"
     "- **Clientes** — historial de compras y clientes frecuentes\n"
     "- **Dashboards** — genera tableros visuales pidiendo: *\"genera un dashboard de ventas de hoy\"*\n\n"
     "Solo escribe tu pregunta."
@@ -134,7 +134,7 @@ _ESPECIALISTAS = {
 }
 
 _SISTEMA_ANALISTA = """
-Eres un analista de negocio senior de una distribuidora farmacéutica de especialidades.
+Eres un analista de negocio senior de una abarrotera de especialidades.
 Tu asistente técnico ya consultó el ERP y obtuvo los datos exactos.
 
 REGLAS ABSOLUTAS:
@@ -278,7 +278,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
     _es_dashboard = bool(re.search(r'\b(dash\w*|tablero)\b', msg, re.IGNORECASE))
     _TIPOS_CON_TAB = {
         "top_vendedores", "variacion_vendedores",              # → tab Vendedores
-        "medicos_dashboard",                                   # → tab Médicos
+        "medicos_dashboard",                                   # → tab Contactos
         "ventas_sucursal", "comparativo_meses",                # → tab Ventas (resumen)
         "ventas_diario",   "tendencia_anual", "reporte_ventas",# → tab Ventas (resumen)
         "top_productos",                                       # → tab Productos
@@ -290,7 +290,7 @@ def _procesar_job(job_id: int, conv_id: int, msg: str, historial: list, usuario_
         ff   = spec_dash.get("fecha_fin")
         if tipo_dash == "medicos_dashboard":
             dashboard = {"tipo": "switch_tab", "tab": "medicos", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
-            respuesta = "Te muestro el dashboard de **Médicos** — ranking, tendencia mensual y ventas por representante."
+            respuesta = "Te muestro el dashboard de **Contactos** — ranking, tendencia mensual y ventas por representante."
         elif tipo_dash in ("top_vendedores", "variacion_vendedores"):
             dashboard = {"tipo": "switch_tab", "tab": "vendedores", "modo": modo, "fecha_inicio": fi, "fecha_fin": ff}
             respuesta = "Te muestro el dashboard de **Vendedores** — ranking, tendencia mensual y líder por sucursal."

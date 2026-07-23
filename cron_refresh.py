@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Archivo  : cron_refresh.py
 # Autor    : Geovani Daniel Nolasco
 # Versión  : 1.0.0
@@ -103,20 +103,33 @@ def _top_cps_mes(anio: int, mes: int) -> list:
     try:
         rows = db_query(f"""
             SELECT TOP 150 con.CP
-            FROM FT_Pedidos_C p
-            INNER JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+            FROM (
+                SELECT c.Cve_Cliente, c.Cve_Consignatario, c.Cve_Sucursal, c.Fecha_Documento,
+                       d.Cantidad * d.Precio AS Monto
+                FROM FT_Remisiones_C c
+                INNER JOIN FT_Remisiones_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Status='AC' AND c.Cve_Movimiento='VTA'
+                  AND c.Cve_Sucursal<>99
+                  AND YEAR(c.Fecha_Documento)={anio}
+                  AND MONTH(c.Fecha_Documento)={mes}
+                UNION ALL
+                SELECT c.Cve_Cliente, c.Cve_Consignatario, c.Cve_Sucursal, c.Fecha_Documento,
+                       d.Cantidad * d.Precio AS Monto
+                FROM FT_Facturas_C c
+                INNER JOIN FT_Facturas_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+                  AND c.Cve_Sucursal<>99
+                  AND YEAR(c.Fecha_Documento)={anio}
+                  AND MONTH(c.Fecha_Documento)={mes}
+            ) p
             INNER JOIN CM_Consignatarios con
               ON con.Cve_Consignatario=p.Cve_Consignatario
              AND con.Cve_Cliente=p.Cve_Cliente
-            WHERE p.Estatus<>'CN'
-              AND p.Referencia_Cliente='PAGADO'
-              AND p.Cve_Sucursal<>99
-              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-              AND YEAR(p.Fecha_Documento)={anio}
-              AND MONTH(p.Fecha_Documento)={mes}
+            WHERE con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
             GROUP BY con.CP
-            ORDER BY SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) DESC
+            ORDER BY SUM(ISNULL(p.Monto,0)) DESC
         """)
         return [r["CP"] for r in (rows or []) if r.get("CP")]
     except Exception as e:
@@ -129,15 +142,23 @@ def _cps_del_dia(fecha: date) -> list:
     try:
         rows = db_query(f"""
             SELECT DISTINCT con.CP
-            FROM FT_Pedidos_C p
+            FROM (
+                SELECT c.Cve_Cliente, c.Cve_Consignatario
+                FROM FT_Remisiones_C c
+                WHERE c.Status='AC' AND c.Cve_Movimiento='VTA'
+                  AND c.Cve_Sucursal<>99
+                  AND CAST(c.Fecha_Documento AS DATE) = '{fecha.isoformat()}'
+                UNION ALL
+                SELECT c.Cve_Cliente, c.Cve_Consignatario
+                FROM FT_Facturas_C c
+                WHERE c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+                  AND c.Cve_Sucursal<>99
+                  AND CAST(c.Fecha_Documento AS DATE) = '{fecha.isoformat()}'
+            ) p
             INNER JOIN CM_Consignatarios con
               ON con.Cve_Consignatario=p.Cve_Consignatario
              AND con.Cve_Cliente=p.Cve_Cliente
-            WHERE p.Estatus<>'CN'
-              AND p.Referencia_Cliente='PAGADO'
-              AND p.Cve_Sucursal<>99
-              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-              AND CAST(p.Fecha_Documento AS DATE) = '{fecha.isoformat()}'
+            WHERE con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
         """)
         return [r["CP"] for r in (rows or []) if r.get("CP")]
     except Exception as e:
@@ -241,17 +262,31 @@ def refresh_mapa_zonas() -> None:
     try:
         mapa_rows = db_query(f"""
             SELECT con.CP, p.Cve_Sucursal,
-                   CAST(SUM(ISNULL(d.Cantidad_Ordenada*d.Precio,0)) AS bigint) AS ventas,
-                   COUNT(DISTINCT p.Cve_Folio)                                 AS pedidos
-            FROM FT_Pedidos_C p
-            INNER JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio=p.Cve_Folio AND d.Cve_Sucursal=p.Cve_Sucursal
+                   CAST(SUM(ISNULL(p.Monto,0)) AS bigint) AS ventas,
+                   COUNT(DISTINCT p.Cve_Folio)             AS pedidos
+            FROM (
+                SELECT c.Cve_Folio, c.Cve_Sucursal, c.Cve_Cliente, c.Cve_Consignatario,
+                       d.Cantidad * d.Precio AS Monto
+                FROM FT_Remisiones_C c
+                INNER JOIN FT_Remisiones_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Status='AC' AND c.Cve_Movimiento='VTA'
+                  AND c.Cve_Sucursal<>99
+                  AND YEAR(c.Fecha_Documento)={anio} AND MONTH(c.Fecha_Documento)={mes}
+                UNION ALL
+                SELECT c.Cve_Folio, c.Cve_Sucursal, c.Cve_Cliente, c.Cve_Consignatario,
+                       d.Cantidad * d.Precio AS Monto
+                FROM FT_Facturas_C c
+                INNER JOIN FT_Facturas_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+                  AND c.Cve_Sucursal<>99
+                  AND YEAR(c.Fecha_Documento)={anio} AND MONTH(c.Fecha_Documento)={mes}
+            ) p
             INNER JOIN CM_Consignatarios con
               ON con.Cve_Consignatario=p.Cve_Consignatario
              AND con.Cve_Cliente=p.Cve_Cliente
-            WHERE p.Estatus<>'CN' AND p.Referencia_Cliente='PAGADO' AND p.Cve_Sucursal<>99
-              AND con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
-              AND YEAR(p.Fecha_Documento)={anio} AND MONTH(p.Fecha_Documento)={mes}
+            WHERE con.CP LIKE '[0-9][0-9][0-9][0-9][0-9]'
             GROUP BY con.CP, p.Cve_Sucursal
             ORDER BY ventas DESC
         """)
@@ -350,12 +385,21 @@ def guardar_snapshot_inventario() -> None:
                 HAVING SUM(e.Existencia) <= 0
             ) sin_stock
             WHERE sin_stock.Cve_Producto IN (
-                SELECT DISTINCT d.Cve_Producto
-                FROM FT_Pedidos_C c
-                INNER JOIN FT_Pedidos_Dia d
-                    ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
-                WHERE c.Estatus <> 'CN' AND c.Referencia_Cliente = 'PAGADO'
-                  AND c.Fecha_Documento >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+                SELECT Cve_Producto FROM (
+                    SELECT DISTINCT d.Cve_Producto
+                    FROM FT_Remisiones_C c
+                    INNER JOIN FT_Remisiones_D d
+                        ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                    WHERE c.Status='AC' AND c.Cve_Movimiento='VTA'
+                      AND c.Fecha_Documento >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+                    UNION
+                    SELECT DISTINCT d.Cve_Producto
+                    FROM FT_Facturas_C c
+                    INNER JOIN FT_Facturas_D d
+                        ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                    WHERE c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+                      AND c.Fecha_Documento >= DATEADD(DAY, -90, CAST(GETDATE() AS DATE))
+                ) vendidos
             )
         """)
         criticos = int((rows_crit[0] if rows_crit else {}).get("total") or 0)
@@ -388,8 +432,8 @@ def guardar_snapshot_inventario() -> None:
                    SUM(e.Existencia)                AS existencia,
                    MIN(ISNULL(pg.Costo_Promedio, 0)) AS costo_promedio,
                    MIN(ISNULL(pg.Precio_Minimo_Venta_Base, 0))       AS precio1,
-                   MIN(ISNULL(pg.Precio_Minimo_Venta_Base2, 0))       AS precio2,
-                   MIN(ISNULL(pg.Precio_Minimo_Venta_Base3, 0))       AS precio3
+                   MIN(ISNULL(pg.PrecioP, 0))                           AS precio2,
+                   MIN(ISNULL(pg.PrecioF, 0))                           AS precio3
             FROM IN_Existencias_Alm e
             INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
             LEFT JOIN GN_Sucursales s ON s.Cve_Sucursal = e.Cve_Sucursal
@@ -463,7 +507,7 @@ def main() -> None:
     except Exception as e:
         log.error(f"Error en snapshot inventario: {e}")
 
-    # Precargar prompt de productos para Whisper (reconocimiento de nombres farmacéuticos)
+    # Precargar prompt de productos para Whisper (reconocimiento de nombres de abarrotes)
     try:
         _chat_router._whisper_product_prompt()
         log.info("Whisper product prompt precargado OK")

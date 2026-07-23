@@ -1,7 +1,7 @@
 {
-  "name": "Suite Analítica",
-  "short_name": "Analítica",
-  "description": "Asistente analítico empresarial",
+  "name": "Abarrotes Suite",
+  "short_name": "Abarrotes",
+  "description": "Asistente inteligente para abarroteras",
   "start_url": "/IA/",
   "scope": "/IA/",
   "display": "standalone",

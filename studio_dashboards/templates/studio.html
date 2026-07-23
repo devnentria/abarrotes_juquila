@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-     Proyecto : Suite Analítica — Nentria Intelligent Solutions
+     Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
      Módulo   : studio_dashboards
      Archivo  : templates/studio.html
      Autor    : Geovani Daniel Nolasco
@@ -10,7 +10,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Suite Analítica — Studio</title>
+  <title>Abarrotes Suite — Studio</title>
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,12 +19,12 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --blue:       #1A2B5A;    /* Azul marino LebenMedik */
-      --blue-mid:   #00897B;   /* Teal LebenMedik — botones, acentos */
+      --blue:       #1A2B5A;    /* Azul marino Abarrotes Suite */
+      --blue-mid:   #00897B;   /* Teal Abarrotes Suite — botones, acentos */
       --blue-light: #E3F0FF;
       --success:    #34C759;   /* iOS green */
       --danger:     #FF3B30;   /* iOS red */
-      --warn:       #EF6C3A;   /* Naranja LebenMedik */
+      --warn:       #EF6C3A;   /* Naranja Abarrotes Suite */
       --bg:         #F2F2F7;   /* iOS system background */
       --card:       #FFFFFF;
       --border:     #E5E5EA;   /* iOS separator */
@@ -45,6 +45,7 @@
       --text-dim: #94a3b8;
       --blue-light: #1e3a6e44;
     }
+    @keyframes pulse-demo { 0%,100%{opacity:1} 50%{opacity:.6} }
     [data-theme="dark"] .header        { background: #0f172a; }
     [data-theme="dark"] .drawer        { background: #1e293b; }
     [data-theme="dark"] .drawer-item:hover { background: #0f172a; }
@@ -859,7 +860,7 @@
   <!-- ── Login ── -->
   <div id="login-screen" class="login-screen">
     <div class="login-card">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" style="width:180px;height:auto;display:block;margin:0 auto 12px">
+      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" style="width:180px;height:auto;display:block;margin:0 auto 12px">
       <p class="login-sub" style="text-align:center;margin-bottom:4px">Studio — Inicia sesión para continuar</p>
       <div id="login-error" class="login-error hidden"></div>
       <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
@@ -878,10 +879,11 @@
   <!-- ── Header ── -->
   <header class="header">
     <div class="header-left">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" style="height:38px;width:auto;max-width:200px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 12px">
+      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" style="height:38px;width:auto;max-width:200px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 12px">
+      <span style="background:#EF6C3A;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:6px;letter-spacing:.08em;text-transform:uppercase;animation:pulse-demo 2s infinite">DEMO</span>
       <div class="header-user-info">
         <span class="header-user-name">Bienvenido, <span id="header-welcome-nombre">—</span></span>
-        <span class="header-user-sub" id="header-welcome-sub">Suite Analítica</span>
+        <span class="header-user-sub" id="header-welcome-sub">Abarrotes Suite</span>
       </div>
     </div>
     <div class="header-right">
@@ -940,7 +942,7 @@
       <span style="opacity:.4">|</span>
       <span id="tab-vendedores" onclick="_switchTab('vendedores')" style="cursor:pointer">Vendedores</span>
       <span style="opacity:.4">|</span>
-      <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Médicos</span>
+      <span id="tab-medicos" onclick="_switchTab('medicos')" style="cursor:pointer">Proveedores</span>
     </div>
 
     <!-- Contenido estático (resumen ejecutivo) -->
@@ -1479,12 +1481,12 @@
 
     </div><!-- /vendedores-dash-area -->
 
-<!-- ── Dashboard Médicos ───────────────────────────────────────── -->
+<!-- ── Dashboard Proveedores ───────────────────────────────────────── -->
 <div id="medicos-dash-area" style="display:none">
 
   <!-- Header con selector de período -->
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
-    <div class="section-label" style="margin-bottom:0">Médicos</div>
+    <div class="section-label" style="margin-bottom:0">Proveedores</div>
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <button id="med-btn-30d" onclick="_medSetModo('30d')"
         style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--blue-mid);color:#fff;cursor:pointer;font-weight:600">
@@ -1526,7 +1528,7 @@
   <!-- Fila 2: Ranking top 10 médicos + ventas por rep -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
     <div class="chart-card">
-      <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 médicos por ventas</div>
+      <div class="chart-card-title" style="margin-bottom:12px">Ranking — top 10 proveedores por compras</div>
       <div id="med-ranking-wrap" style="position:relative;height:280px">
         <canvas id="med-ranking-chart"></canvas>
         <div id="med-ranking-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
@@ -1544,14 +1546,14 @@
   <!-- Fila 3: Tendencia mensual + Detalle tabla -->
   <div style="display:grid;grid-template-columns:3fr 2fr;gap:12px">
     <div class="chart-card">
-      <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 médicos (últimos 6 meses)</div>
+      <div class="chart-card-title" style="margin-bottom:12px">Tendencia mensual — top 5 proveedores (últimos 6 meses)</div>
       <div id="med-mes-wrap" style="position:relative;height:220px">
         <canvas id="med-mes-chart"></canvas>
         <div id="med-mes-nodata" style="display:none;color:var(--text-dim);font-size:12px;padding:20px 0">Sin datos</div>
       </div>
     </div>
     <div class="chart-card">
-      <div class="chart-card-title" style="margin-bottom:12px">Detalle de médicos</div>
+      <div class="chart-card-title" style="margin-bottom:12px">Detalle de proveedores</div>
       <div id="med-detalle" style="font-size:12px;max-height:280px;overflow-y:auto"></div>
     </div>
   </div>
@@ -1616,7 +1618,7 @@
       <div class="sc-bubble sc-bubble-bot">
         <div class="sc-bubble-content">
           Hola, soy tu asistente analítico.<br>
-          Pregúntame sobre ventas, inventario, pedidos, médicos o clientes.<br>
+          Pregúntame sobre ventas, inventario, pedidos, proveedores o clientes.<br>
           <span style="opacity:.7;font-size:11px">Pídeme datos y los visualizo automáticamente.</span>
         </div>
       </div>
@@ -1991,7 +1993,7 @@ function renderHeader() {
   document.getElementById('drawer-usuario').textContent = _usuario.email;
 
   const subs = { admin: 'Administrador · Nentria', supervisor: 'Supervisor', usuario: 'Usuario' };
-  const sub = subs[_usuario.rol] || 'Suite Analítica';
+  const sub = subs[_usuario.rol] || 'Abarrotes Suite';
   document.getElementById('header-welcome-sub').textContent = sub;
 }
 
@@ -2034,7 +2036,7 @@ function renderDrawer() {
               <span>${it.label}</span>
             </button>`;
   }).join('') + `<div style="position:sticky;bottom:0;padding:10px 16px;font-size:11px;color:var(--text-dim);text-align:center;opacity:.55;background:var(--surface);margin-top:auto">
-    Suite Analítica v1.2.0
+    Abarrotes Suite v1.2.0
   </div>`;
 }
 
@@ -2951,7 +2953,7 @@ function _pintarMapaGris() { /* no-op: Leaflet se encarga */ }
 let _currentTab = 'resumen';
 
 const _TAB_NOMBRES = {
-  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores', medicos: 'Médicos'
+  ventas: 'Ventas', zonas: 'Zonas de ventas', productos: 'Productos', inventario: 'Inventario', vendedores: 'Vendedores', medicos: 'Proveedores'
 };
 
 function _mostrarOverlayGenerando(tab) {
@@ -4751,7 +4753,7 @@ async function _generarPDFBase64(titulo, pregunta) {
     `Generado por: ${genPor}`,
     `Fecha: ${ahora.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}`,
     `Hora: ${ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
-    'Suite Analítica · Nentria',
+    'Abarrotes Suite · Nentria',
   ];
   const cW = (PW - 16) / metas.length;
   doc.setFontSize(8);
@@ -4813,10 +4815,10 @@ async function _generarPDFBase64(titulo, pregunta) {
     // Lado izquierdo — cliente
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(100, 116, 139);
-    doc.text('Supra Global Consulting', 8, PH - 6.5);
+    doc.text('Abarrotes Suite', 8, PH - 6.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
-    doc.text('supragc.com.mx', 8, PH - 3);
+    doc.text('abarrotessuite.com', 8, PH - 3);
     // Lado derecho — Nentria
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(100, 116, 139);
@@ -7218,7 +7220,7 @@ function _renderInvCriticos(lista, el) {
   </table>`;
 }
 
-// ── Dashboard Médicos — estado ────────────────────────────────────────────────
+// ── Dashboard Proveedores — estado ────────────────────────────────────────────────
 let _medLoaded  = false;
 let _medModo    = '30d';
 let _medMes     = null;
@@ -7638,7 +7640,7 @@ function _renderVendProdxVend(data) {
   }
 }
 
-// ── Dashboard Médicos ─────────────────────────────────────────────────────────
+// ── Dashboard Proveedores ─────────────────────────────────────────────────────────
 
 function _medSetModo(modo) {
   _medModo = modo;

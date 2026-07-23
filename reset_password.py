@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : raíz
 # Archivo  : reset_password.py
 # Autor    : Geovani Daniel Nolasco
@@ -93,7 +93,7 @@ def main() -> None:
     parser.add_argument("--email", help="Email del usuario a resetear (opcional)")
     args = parser.parse_args()
 
-    print("\n── Suite Analítica — Reset de contraseña ──\n")
+    print("\n── Abarrotes Suite — Reset de contraseña ──\n")
 
     init_db()
 

@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/nombres_cache.py
 # Autor    : Geovani Daniel Nolasco
@@ -35,7 +35,7 @@ _store = PersistentStore(
 _TABLA_TIPO = {
     "IM_Productos_Gral": ("producto", "Descripcion"),
     "CM_Clientes":       ("cliente",  "Razon_Social"),
-    "GC_Medicos":        ("medico",   "Nombre"),
+    "PM_Proveedores":    ("medico",   "Nombre"),
 }
 
 # Solo procesar queries que contengan LIKE — las agregaciones no tienen nombres

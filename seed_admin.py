@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : raíz
 # Archivo  : seed_admin.py
 # Autor    : Geovani Daniel Nolasco
@@ -46,7 +46,7 @@ def solicitar_credenciales() -> tuple[str, str, str]:
 
 def main() -> None:
     """Inicializa la BD y crea el usuario admin si no existe."""
-    print("\n── Suite Analítica — Inicialización de administrador ──\n")
+    print("\n── Abarrotes Suite — Inicialización de administrador ──\n")
 
     init_db()
 

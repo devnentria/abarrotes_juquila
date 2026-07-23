@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Benchmark de preguntas contra servidor de PRODUCCIÓN — Suite Analítica Supra
-Mismas preguntas que benchmark_preguntas.py pero apunta a supra.nentria.com
+Benchmark de preguntas contra servidor de PRODUCCIÓN — Abarrotes Suite
+Mismas preguntas que benchmark_preguntas.py pero apunta al servidor de producción
 Resultado: pruebaservidor.md
 """
 import time
 import datetime
 import requests
 
-BASE     = "https://supra.nentria.com"
+BASE     = "https://abarrotes.nentria.com"
 EMAIL    = "admin_nentria"
 PASSWORD = "Nentria01"
 SALIDA   = "pruebaservidor.md"
@@ -101,7 +101,7 @@ def main():
 
     ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lineas = [
-        f"# Prueba en Servidor de Producción — Suite Analítica Supra",
+        f"# Prueba en Servidor de Producción — Abarrotes Suite",
         f"**Fecha:** {ahora}  |  **Servidor:** {BASE}",
         "",
     ]

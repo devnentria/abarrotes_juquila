@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente / funciones
 # Archivo  : funciones/matcher.py
 # Autor    : Geovani Daniel Nolasco
@@ -38,8 +38,8 @@ _RE_MES_NOMBRE = re.compile(
 # Si la pregunta las contiene, el matcher no toca la consulta
 # (se necesita extracción de nombre → agente dinámico)
 _RE_ENTIDAD = re.compile(
-    r'\b(del?\s+(producto|medicamento|cliente|m[eé]dico|doctor|vendedor|proveedor|laboratorio|farmacia)\b'
-    r'|para\s+(el|la)\s+(producto|cliente|m[eé]dico|vendedor))',
+    r'\b(del?\s+(producto|producto|cliente|proveedor|contacto|vendedor|proveedor|laboratorio|farmacia)\b'
+    r'|para\s+(el|la)\s+(producto|cliente|proveedor|vendedor))',
     re.IGNORECASE,
 )
 
@@ -98,14 +98,14 @@ _RE_CADUCIDADES = re.compile(
 )
 _RE_DIAS = re.compile(r'(\d+)\s*d[ií]as?', re.IGNORECASE)
 
-# Proveedores / laboratorios
+# Proveedores / distribuidores
 _RE_PROVEEDORES = re.compile(
-    r'\b(cu[aá]les?\s+(son\s+)?los?\s+(proveedores?|laboratorios?)'
-    r'|lista\s+de\s+(proveedores?|laboratorios?)'
-    r'|qu[eé]\s+laboratorios?\s+(nos?\s+surten?|tenemos?|hay)'
+    r'\b(cu[aá]les?\s+(son\s+)?los?\s+(proveedores?|distribuidores?)'
+    r'|lista\s+de\s+(proveedores?|distribuidores?)'
+    r'|qu[eé]\s+distribuidores?\s+(nos?\s+surten?|tenemos?|hay)'
     r'|qu[eé]\s+proveedores?\s+(tenemos?|hay)'
     r'|proveedores?\s+activos?'
-    r'|laboratorios?\s+activos?)\b',
+    r'|distribuidores?\s+activos?)\b',
     re.IGNORECASE,
 )
 
@@ -135,7 +135,7 @@ def detectar(pregunta: str) -> Optional[tuple]:
     # Si la pregunta referencia una entidad específica, no usar predefinida
     if _RE_ENTIDAD.search(pregunta):
         return None
-    # "del Ozempic", "del Cliente X", "de Farmacia X" → entidad por nombre propio
+    # "del Ozempic", "del Cliente X", "de Tienda X" → entidad por nombre propio
     for m in _RE_DEL_NOMBRE.finditer(pregunta):
         if m.group(1).lower() not in _PALABRAS_PERIODO:
             return None
@@ -149,7 +149,7 @@ def detectar(pregunta: str) -> Optional[tuple]:
         dias = _extraer_dias(pregunta) or 90
         return ('caducidades_proximas', {'dias': dias})
 
-    # --- Proveedores / laboratorios -------------------------------------------
+    # --- Proveedores / distribuidores -------------------------------------------
     if _RE_PROVEEDORES.search(pregunta):
         return ('proveedores_activos', {})
 
