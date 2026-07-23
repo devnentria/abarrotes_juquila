@@ -1,12 +1,12 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : shared
 # Archivo  : shared/config.py
 # Autor    : Geovani Daniel Nolasco
 # Versión  : 1.0.0
 # ============================================================
 """
-Configuración central de la Suite Analítica Nentria.
+Configuración central de la Abarrotes Suite Nentria.
 
 REGLA: Este es el ÚNICO archivo donde viven los valores de configuración.
        Para cambiar la BD, el modelo de IA o los puertos — solo editar .env
@@ -41,7 +41,7 @@ STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "gpt-4.1-mini")
 # Para cambiar de entorno (Docker local → servidor cliente) solo editar .env
 DB_HOST:     str = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT:     int = int(os.getenv("DB_PORT", "1433"))
-DB_NAME:     str = os.getenv("DB_NAME", "CreaSoftTest2")
+DB_NAME:     str = os.getenv("DB_NAME", "ERP")
 DB_USER:     str = os.getenv("DB_USER", "sa")
 DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 

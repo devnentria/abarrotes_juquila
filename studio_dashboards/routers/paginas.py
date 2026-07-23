@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : studio_dashboards
 # Archivo  : routers/paginas.py
 # Autor    : Geovani Daniel Nolasco

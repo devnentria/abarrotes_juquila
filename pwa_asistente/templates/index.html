@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#1A2B5A">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Analítica">
-  <title>Suite Analítica</title>
+  <meta name="apple-mobile-web-app-title" content="Abarrotes">
+  <title>Abarrotes Suite</title>
   <link rel="manifest" href="{{ base_path }}/manifest.json">
   <link rel="icon" type="image/x-icon" href="{{ base_path }}/static/favicon.ico">
   <link rel="apple-touch-icon" href="{{ base_path }}/static/icons/icon-192.png">
@@ -21,7 +21,7 @@
   <!-- ── Login ──────────────────────────────────────────────── -->
   <div id="login-screen" class="login-screen">
     <div class="login-card">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" class="login-logo-img">
+      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" class="login-logo-img">
       <p class="login-sub">Inicia sesión para continuar</p>
       <div id="login-error" class="login-error hidden"></div>
       <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
@@ -40,9 +40,10 @@
   <!-- ── Header ─────────────────────────────────────────────── -->
   <header class="app-header">
     <div class="app-header-left">
-      <img src="/static/logo_transparente.png" alt="LebenMedik" class="app-header-logo">
+      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" class="app-header-logo">
     </div>
     <div class="app-header-right">
+      <span style="background:#EF6C3A;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:6px;letter-spacing:.08em;text-transform:uppercase;animation:pulse-demo 2s infinite">DEMO</span>
       <div class="app-header-user">
         <span class="app-name" id="header-nombre">—</span>
         <span class="app-subtitle" id="header-subtitle">Inicio</span>
@@ -154,7 +155,7 @@
       </div>
     </section>
 
-    <!-- ── Médicos ─────────────────────────────────────────── -->
+    <!-- ── Proveedores ─────────────────────────────────────── -->
     <section class="view hidden" id="view-medicos">
       <div id="lista-medicos">
         <div class="empty-state">Cargando...</div>
@@ -223,9 +224,9 @@
     </button>
     <button class="nav-item" data-view="medicos">
       <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>
+        <path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
       </svg>
-      <span>Médicos</span>
+      <span>Proveedores</span>
     </button>
     <button class="nav-item" data-view="inventario">
       <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
@@ -360,9 +361,9 @@
 
   <!-- ── Banner de instalación PWA ──────────────────────────── -->
   <div id="install-banner" class="install-banner hidden">
-    <div class="install-banner-icon"><img src="/static/logo.jpeg" alt="LebenMedik" style="width:36px;height:auto"></div>
+    <div class="install-banner-icon"><img src="/static/logo.jpeg" alt="Abarrotes Suite" style="width:36px;height:auto"></div>
     <div class="install-banner-texto">
-      <span class="install-banner-titulo">LebenMedik</span>
+      <span class="install-banner-titulo">Abarrotes Suite</span>
       <span class="install-banner-sub" id="install-banner-sub">Instala la app para acceso rápido</span>
     </div>
     <button id="install-banner-btn" class="install-banner-btn">Instalar</button>

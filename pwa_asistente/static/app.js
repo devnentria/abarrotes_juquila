@@ -33,7 +33,7 @@ let _intentosFallidos = 0;
  * Muestra un banner informativo si el usuario accede desde un dispositivo
  * no recomendado para esta URL. No bloquea el acceso.
  *
- * PWA (supra.nentria.com)   → avisa si está en desktop
+ * PWA (abarrotes.nentria.com)   → avisa si está en desktop
  * Studio (studio.nentria.com) → avisa si está en móvil
  */
 function mostrarAvisoDispositivo() {
@@ -155,7 +155,7 @@ async function iniciarSesion() {
 const state = {
   sucursales: null,   // ventas del mes por sucursal (Inicio)
   stock:      null,   // existencias por sucursal (Inventario)
-  medicos:    null,   // duplicados de médicos
+  medicos:    null,   // duplicados de proveedores
 };
 
 // ── Formatters ────────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ const SUBTITLES = {
   inicio:     'Inicio',
   dashboards: 'Dashboards',
   chat:       'Asistente Gerencial',
-  medicos:    'Médicos',
+  medicos:    'Proveedores',
   inventario: 'Inventario',
 };
 
@@ -494,7 +494,7 @@ function renderInventario() {
   renderSucursalCards('lista-inv-sucursales', state.stock.sucursales, 'inventario');
 }
 
-// ── Render: Médicos duplicados ────────────────────────────────────────────────
+// ── Render: Proveedores duplicados ────────────────────────────────────────────────
 function renderMedicos() {
   if (!state.medicos) return;
   const el = document.getElementById('lista-medicos');
@@ -505,19 +505,19 @@ function renderMedicos() {
     <div id="ia-medicos-banner" class="ia-medicos-banner">
       <div class="ia-medicos-loading">
         <div class="spinner spinner-sm"></div>
-        <span>Analizando catálogo de médicos...</span>
+        <span>Analizando catálogo de proveedores...</span>
       </div>
     </div>`;
   // Cargar insight IA en segundo plano (no bloquea el render)
   setTimeout(iaFlashMedicos, 50);
 
   // Duplicados confirmados por cédula
-  html += `<div class="section-title">Cédula duplicada · ${por_cedula.length} médico${por_cedula.length !== 1 ? 's' : ''}</div>`;
+  html += `<div class="section-title">Identificador duplicado · ${por_cedula.length} proveedor${por_cedula.length !== 1 ? 's' : ''}</div>`;
   if (por_cedula.length) {
     html += por_cedula.map(grupo => `
       <div class="card-item">
         <div class="card-row">
-          <span class="tag tag-danger">Cédula ${grupo[0].cedula}</span>
+          <span class="tag tag-danger">ID ${grupo[0].cedula}</span>
           <span class="card-sub">registrado ${grupo.length} veces</span>
         </div>
         ${grupo.map(m => `
@@ -532,11 +532,11 @@ function renderMedicos() {
       </div>
     `).join('');
   } else {
-    html += '<div class="empty-state" style="padding:12px">Sin duplicados por cédula</div>';
+    html += '<div class="empty-state" style="padding:12px">Sin duplicados por identificador</div>';
   }
 
   // Posibles duplicados por nombre
-  html += `<div class="section-title mt">Nombre duplicado · ${por_nombre.length} médico${por_nombre.length !== 1 ? 's' : ''}</div>`;
+  html += `<div class="section-title mt">Nombre duplicado · ${por_nombre.length} proveedor${por_nombre.length !== 1 ? 's' : ''}</div>`;
   if (por_nombre.length) {
     html += por_nombre.map(grupo => `
       <div class="card-item">
@@ -548,7 +548,7 @@ function renderMedicos() {
           <div class="detalle-row" style="margin-top:4px">
             <div style="flex:1;min-width:0">
               <span class="detalle-lab">Vendedor: ${m.vendedor || '—'} <span style="color:var(--text-dim)">(#${m.cve_vendedor})</span></span>
-              ${m.cedula ? `<span class="detalle-lab">Cédula: <strong style="color:var(--blue-mid)">${m.cedula}</strong></span>` : '<span class="detalle-lab" style="color:var(--text-dim)">Sin cédula</span>'}
+              ${m.cedula ? `<span class="detalle-lab">ID: <strong style="color:var(--blue-mid)">${m.cedula}</strong></span>` : '<span class="detalle-lab" style="color:var(--text-dim)">Sin ID</span>'}
             </div>
             <span class="card-sub">#${m.cve_medico}</span>
           </div>

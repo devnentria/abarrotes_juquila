@@ -1,15 +1,16 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente / especialistas
 # Archivo  : especialistas/inventario.py
 # Autor    : Geovani Daniel Nolasco
-# Versión  : 2.3.0
+# Versión  : 3.0.0
 # ============================================================
 """
 Agente Especialista — Inventario.
 
-Responde preguntas sobre stock, existencias
-y productos sin existencia por sucursal.
+Responde preguntas sobre stock, existencias,
+productos sin existencia por sucursal, compras
+y movimientos de almacén para la abarrotera.
 """
 from typing import Optional
 from pwa_asistente.agente import base_agente
@@ -24,34 +25,28 @@ IN_Existencias_Alm — existencias actuales por sucursal
   Cve_Presentacion (varchar), Existencia (decimal),
   Entradas_Pendientes (decimal), Comprometido (decimal),
   Costo_Promedio (decimal), Costo_Ultima_Compra (decimal),
-  Precio_Minimo_Venta_Base (decimal),
   Maximo (decimal), Minimo (decimal), Punto_Reorden (decimal),
   Status (varchar)
   ⚠ Filtrar: Status = 'AC'
-  ⚠ DATO CRÍTICO — Costo_Promedio y Costo_Ultima_Compra de esta tabla tienen valor $1.00 en la BD actual (dato incorrecto del ERP).
-    NUNCA usar IN_Existencias_Alm.Costo_Promedio para calcular valores monetarios.
+  ⚠ DATO CRÍTICO — Costo_Promedio y Costo_Ultima_Compra de esta tabla pueden tener valores
+    incorrectos en la BD actual (dato del ERP no siempre confiable).
     ✅ SIEMPRE usar IM_Productos_Gral.Costo_Promedio (JOIN por Cve_Producto) para cualquier cálculo de costo o valor de inventario:
        JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
        → pg.Costo_Promedio  ← costo real del producto
-  ⚠ ENVÍO ESPECIAL — excluir SIEMPRE de listas de productos:
-    "ENVIO ESPECIAL" es un cargo por flete, no un producto real.
-    ✅ FILTRO OBLIGATORIO en cualquier SELECT que liste productos:
-       AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
   Para existencias con total por variante de producto:
     GROUP BY ROLLUP(p.Descripcion) → ISNULL(p.Descripcion,'── TOTAL') AS Descripcion
   Para existencias con total por sucursal:
     GROUP BY ROLLUP(s.Nombre) → ISNULL(s.Nombre,'── TOTAL') AS Sucursal
 
-IN_Existencias_Alm_Diario — snapshot histórico diario
+IN_Existencias_Alm_Diario — snapshot histórico diario (10 columnas)
   Cve_Sucursal (smallint), Cve_Almacen (varchar), Cve_Producto (varchar),
   Cve_Presentacion (varchar), Fecha (datetime),
   Existencia (decimal), Comprometido (decimal),
   Costo_Ultima_Compra (decimal), Costo_Promedio (decimal)
   ⚠ Cobertura: enero 2024 en adelante · Cve_Producto es VARCHAR — CAST al unir con IM_Productos_Gral
   ⚠ Para fecha específica: registro más cercano anterior con subconsulta MAX(Fecha) <= 'YYYY-MM-DD'
-  ⚠ Incluir todas las variantes con LIKE '%nombre%'; mostrar filas separadas distinguiendo promos de productos reales
 
-IT_Movimientos_C — cabecera de movimientos de almacén
+IT_Movimientos_C — cabecera de movimientos de almacén (21 columnas)
   Cve_Sucursal (smallint), Cve_Almacen (varchar),
   Cve_Documento (char) → tipo de documento (char 3),
   Cve_Movimiento (varchar) → código operación (varchar 3) — DISTINTO de Cve_Documento,
@@ -60,7 +55,7 @@ IT_Movimientos_C — cabecera de movimientos de almacén
   Status (char), Observaciones (varchar)
   Tipos Cve_Movimiento: EC=Entrada Compra, VTA=Venta, EA=Entrada Almacén, SA=Salida, ST/ET=Traspasos
 
-IT_Movimientos_D — detalle de movimientos
+IT_Movimientos_D — detalle de movimientos (27 columnas)
   Cve_Sucursal (smallint), Cve_Almacen (varchar),
   Cve_Documento (char), Cve_Movimiento (varchar),
   Cve_Folio (int), Cve_Partida (int),
@@ -73,11 +68,18 @@ IT_Movimientos_D — detalle de movimientos
   ⚠ Último costo: WHERE Cve_Movimiento='EC' ORDER BY Fecha_Documento DESC TOP 1
   ⚠ Costo promedio en período: AVG(Costo_Unitario) WHERE EC + rango fechas
 
+IM_Productos_Gral — catálogo maestro de productos
+  Cve_Producto (varchar), Descripcion (varchar),
+  Costo_Promedio (decimal), PrecioP (decimal), PrecioF (decimal),
+  Status (char)
+  ⚠ PrecioP = precio al público · PrecioF = precio de farmacia/distribuidor
+  ⚠ NO existen columnas Precio_Minimo_Venta_Base2 ni Precio_Minimo_Venta_Base3 — usar PrecioP y PrecioF
+
 IM_Codigos_Barra — códigos de barras de productos (una fila por variante/presentación)
   Cve_Producto (varchar), Codigo_Barras (varchar)
   ⚠ USAR cuando LIKE sobre IM_Productos_Gral.Descripcion devuelva 0 resultados o resultados sospechosos.
-  ⚠ Razón: las promociones crean productos NUEVOS en IM_Productos_Gral con Cve_Producto distinto,
-    pero el mismo código de barras. Buscar por Codigo_Barras consolida todas las variantes del producto.
+  ⚠ Razón: pueden existir productos con Cve_Producto distinto pero mismo código de barras.
+    Buscar por Codigo_Barras consolida todas las variantes del producto.
 
   PROTOCOLO cuando no se encuentra stock con LIKE:
     PASO 1 — Buscar con LIKE '%nombre%' en IM_Productos_Gral. Si devuelve existencia > 0: reportar. FIN.
@@ -97,6 +99,48 @@ IM_Codigos_Barra — códigos de barras de productos (una fila por variante/pres
       GROUP BY p.Descripcion
       ORDER BY Existencia DESC
     → Esto muestra el stock REAL consolidado aunque esté bajo distintos Cve_Producto.
+
+══════════════════════════════════════════════════════════════
+VENTAS PARA CONTEXTO DE INVENTARIO (piezas vendidas / rotación)
+══════════════════════════════════════════════════════════════
+Cuando necesites cruzar inventario con piezas vendidas (rotación, cobertura de stock, etc.)
+usa la combinación de Remisiones + Facturas:
+
+FT_Remisiones_C / FT_Remisiones_D — remisiones de venta
+  FT_Remisiones_C: Cve_Folio, Cve_Sucursal, Cve_Movimiento, Cve_Cliente, Fecha_Documento, Status
+  FT_Remisiones_D: Cve_Folio, Cve_Sucursal, Cve_Movimiento, Cve_Producto, Cantidad, Precio
+  Filtrar: c.Status = 'AC' AND c.Cve_Movimiento = 'VTA'
+  JOIN: d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal AND d.Cve_Movimiento = c.Cve_Movimiento
+
+FT_Facturas_C / FT_Facturas_D — facturas de venta
+  FT_Facturas_C: Cve_Folio, Cve_Sucursal, Cve_Movimiento, Cve_Cliente, Fecha_Documento, Status
+  FT_Facturas_D: Cve_Folio, Cve_Sucursal, Cve_Movimiento, Cve_Producto, Cantidad, Precio
+  Filtrar: c.Status = 'AC' AND c.Cve_Movimiento IN ('FM','FP')
+  JOIN: d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal AND d.Cve_Movimiento = c.Cve_Movimiento
+
+CONSULTA ESTÁNDAR para piezas vendidas de un producto en un período:
+  SELECT p.Descripcion, SUM(piezas) AS Piezas_Vendidas
+  FROM (
+      -- Remisiones
+      SELECT d.Cve_Producto, d.Cantidad AS piezas
+      FROM FT_Remisiones_D d
+      JOIN FT_Remisiones_C c ON c.Cve_Folio = d.Cve_Folio
+        AND c.Cve_Sucursal = d.Cve_Sucursal AND c.Cve_Movimiento = d.Cve_Movimiento
+      WHERE c.Status = 'AC' AND c.Cve_Movimiento = 'VTA'
+        AND [filtro de fecha sobre c.Fecha_Documento]
+      UNION ALL
+      -- Facturas
+      SELECT d.Cve_Producto, d.Cantidad AS piezas
+      FROM FT_Facturas_D d
+      JOIN FT_Facturas_C c ON c.Cve_Folio = d.Cve_Folio
+        AND c.Cve_Sucursal = d.Cve_Sucursal AND c.Cve_Movimiento = d.Cve_Movimiento
+      WHERE c.Status = 'AC' AND c.Cve_Movimiento IN ('FM','FP')
+        AND [filtro de fecha sobre c.Fecha_Documento]
+  ) v
+  JOIN IM_Productos_Gral p ON p.Cve_Producto = v.Cve_Producto
+  WHERE p.Descripcion LIKE '%nombre%'
+  GROUP BY p.Descripcion
+  ⚠ NUNCA usar FT_Pedidos_C / FT_Pedidos_Dia para datos de venta en este ERP.
 """
 
 _REGLAS = """
@@ -118,15 +162,11 @@ SUCURSALES — NOMBRES EXACTOS EN EL ERP (siempre en MAYÚSCULAS):
   ⚠ Si el usuario dice "Querétaro" → usar 'QUERETARO'
   ⚠ Si el usuario dice "Cancún" → usar 'CANCUN'
 
-BÚSQUEDA DE PRODUCTOS — REGLA CRÍTICA:
-  Las descripciones en el ERP tienen formatos variables con espacios:
-    "SAIZEN 20 MG/ 60 UI (5.83MG/ML)"  ← espacios entre número y unidad
-    "NORDITROPIN 10 MG/ 1.5 ML"
-  ⚠ NUNCA buscar con nombre pegado: LIKE '%SAIZEN 20MG%' — fallará si hay espacio.
-  ✅ SIEMPRE buscar por términos separados:
-    p.Descripcion LIKE '%SAIZEN%' AND p.Descripcion LIKE '%20%'
-    p.Descripcion LIKE '%NORDITROPIN%' AND p.Descripcion LIKE '%10%'
-  ✅ O usar solo la parte inequívoca: LIKE '%SAIZEN 20%' (con espacio antes del número)
+BÚSQUEDA DE PRODUCTOS:
+  ⚠ SIEMPRE buscar por términos separados con AND:
+    p.Descripcion LIKE '%COCA%' AND p.Descripcion LIKE '%COLA%'
+    p.Descripcion LIKE '%JABON%' AND p.Descripcion LIKE '%ZOTE%'
+  ✅ O usar solo la parte inequívoca del nombre: LIKE '%COCA COLA%'
 
 REGLAS DE INVENTARIO:
   · Sin existencia:  Existencia <= 0
@@ -135,21 +175,7 @@ REGLAS DE INVENTARIO:
     Usar IN_Existencias_Alm_Diario con MAX(Fecha) <= 'YYYY-MM-DD' agrupado por sucursal.
   · Si piden existencias en fecha pasada sin especificar la fecha exacta: pedir SOLO la fecha, nunca la sucursal.
   · Para costo de compra: usar TOP 1 ORDER BY Fecha_Documento DESC por defecto. Solo AVG si el usuario lo pide.
-
-PRODUCTOS PROMOCIONALES — REGLA CRÍTICA:
-  El ERP crea productos nuevos en IM_Productos_Gral para cada promoción:
-    "SAIZEN 20MG/60UI PIEZA PROMOCION GRATIS", "NORDITROPIN PROMO", etc.
-  Estos productos tienen existencia propia (separada del producto real).
-
-  ⚠ Cuando preguntan por existencias de un producto real (ej: "Saizen 20mg disponibles"):
-    ✅ INCLUIR tanto el producto real como sus variantes promo — el usuario quiere saber todo el stock.
-    ✅ Mostrar filas separadas: producto real + piezas promo, con su existencia individual.
-    ✅ Aclarar en la respuesta cuáles son piezas de promoción gratuita.
-    ⛔ NUNCA colapsar en un solo número sin distinguir los tipos.
-
-  ⚠ Si el resultado muestra existencia 0 en TODAS las variantes, reportarlo claramente:
-    "No hay existencia disponible de [producto] en [sucursal/general]."
-    No confundir existencia 0 del producto promo con que no hay stock del producto real.
+  · Para precios: usar IM_Productos_Gral.PrecioP (público) y PrecioF (farmacia/distribuidor).
 
 PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
   SELECT p.Descripcion, SUM(imd.Cantidad) AS Piezas_Compradas,
@@ -164,8 +190,6 @@ PIEZAS COMPRADAS EN UN PERÍODO — consulta estándar:
     AND [filtro de período sobre imc.Fecha_Documento]
   GROUP BY p.Cve_Producto, p.Descripcion
   ORDER BY p.Descripcion
-  · Incluir SIEMPRE todas las variantes/presentaciones del producto (normales + promos)
-  · Si el producto tiene una sola variante: mostrar también el costo unitario promedio del período
 
 TRASPASOS ENTRE SUCURSALES:
   ⛔ Los traspasos entre sucursales se gestionan por WhatsApp — NO están registrados en el ERP.
@@ -173,7 +197,6 @@ TRASPASOS ENTRE SUCURSALES:
   ⛔ Si preguntan por traspasos: informar que no se registran en el sistema.
 
 FORMATO ADICIONAL INVENTARIO:
-  · 🔴 para sin existencia
   · Existencias históricas: mostrar desglose por sucursal/presentación + total general en negritas
   · ⛔ NUNCA calcular sumas manualmente ni en texto ("la existencia total combinada es X").
     SIEMPRE usar GROUP BY ROLLUP para que SQL genere la fila total:
@@ -188,7 +211,7 @@ FORMATO ADICIONAL INVENTARIO:
 """
 
 _SYSTEM = build(
-    rol="Eres el agente especialista en INVENTARIO de Suite Analítica.",
+    rol="Eres el agente especialista en INVENTARIO de Abarrotes Suite.",
     schema_especifico=_SCHEMA,
     reglas_especificas=_REGLAS,
 )

@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/sql_blacklist.py
 # Autor    : Geovani Daniel Nolasco

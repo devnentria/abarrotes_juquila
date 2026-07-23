@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente / agente
 # Archivo  : agente/grafica.py
 # Autor    : Geovani Daniel Nolasco
@@ -27,8 +27,8 @@ _client = OpenAI(api_key=OPENAI_API_KEY)
 CHART_PREFIX = "CHART_HTML::"
 
 _SYSTEM = """
-Eres un generador de gráficas ejecutivas para Suite Analítica, sistema de una
-distribuidora farmacéutica mexicana.
+Eres un generador de gráficas ejecutivas para Abarrotes Suite, sistema de una
+abarrotera mexicana.
 
 Recibirás:
 1. La pregunta original del usuario

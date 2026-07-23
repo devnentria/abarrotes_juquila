@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : shared
 # Archivo  : shared/admin_api.py
 # Autor    : Geovani Daniel Nolasco

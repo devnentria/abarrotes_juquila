@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente
 # Archivo  : routers/ia_flash.py
 # Autor    : Geovani Daniel Nolasco
@@ -11,7 +11,7 @@ Router IA Flash — Resúmenes ejecutivos ligeros con IA.
 Endpoints:
   GET /api/ia/sucursal/{cve}   → Resumen del día de una sucursal (Inicio)
   GET /api/ia/inventario/{cve} → Alerta inteligente de stock de una sucursal
-  GET /api/ia/medicos          → Insight sobre duplicados de médicos
+  GET /api/ia/medicos          → Insight sobre duplicados de contactos
 
 Diseño:
   - Una sola llamada a gpt-4o-mini por petición (sin tool-calls, sin director).
@@ -122,63 +122,97 @@ def ia_sucursal(
 
     # Ventas de hoy (lo que va del día)
     ventas_hoy = query(f"""
-        SELECT COUNT(DISTINCT c.Cve_Folio) AS pedidos,
-               COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
-        FROM FT_Pedidos_C c
-        JOIN FT_Pedidos_Dia d
-          ON d.Cve_Folio     = c.Cve_Folio
-         AND d.Cve_Sucursal  = c.Cve_Sucursal
-        WHERE c.Cve_Sucursal        = ?
-          AND c.Referencia_Cliente  = 'PAGADO'
-          AND CAST(c.Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)
-    """, (cve_sucursal,))
+        SELECT COUNT(DISTINCT Cve_Folio) AS pedidos,
+               COALESCE(SUM(Monto), 0) AS importe
+        FROM (
+            SELECT c.Cve_Folio, d.Cantidad * d.Precio AS Monto
+            FROM FT_Remisiones_C c
+            JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+              AND CAST(c.Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)
+            UNION ALL
+            SELECT c.Cve_Folio, d.Cantidad * d.Precio AS Monto
+            FROM FT_Facturas_C c
+            JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+              AND CAST(c.Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)
+        ) v
+    """, (cve_sucursal, cve_sucursal))
 
-    # Ventas de ayer (pedidos cobrados)
+    # Ventas de ayer
     ventas_ay = query(f"""
-        SELECT COUNT(DISTINCT c.Cve_Folio) AS pedidos,
-               COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
-        FROM FT_Pedidos_C c
-        JOIN FT_Pedidos_Dia d
-          ON d.Cve_Folio     = c.Cve_Folio
-         AND d.Cve_Sucursal  = c.Cve_Sucursal
-        WHERE c.Cve_Sucursal        = ?
-          AND c.Referencia_Cliente  = 'PAGADO'
-          AND CAST(c.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
-    """, (cve_sucursal,))
+        SELECT COUNT(DISTINCT Cve_Folio) AS pedidos,
+               COALESCE(SUM(Monto), 0) AS importe
+        FROM (
+            SELECT c.Cve_Folio, d.Cantidad * d.Precio AS Monto
+            FROM FT_Remisiones_C c
+            JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+              AND CAST(c.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+            UNION ALL
+            SELECT c.Cve_Folio, d.Cantidad * d.Precio AS Monto
+            FROM FT_Facturas_C c
+            JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+              AND CAST(c.Fecha_Documento AS DATE) = DATEADD(DAY, -1, {hoy()})
+        ) v
+    """, (cve_sucursal, cve_sucursal))
 
     # Ventas del mes en curso
     ventas_mes = query(f"""
-        SELECT COALESCE(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS importe
-        FROM FT_Pedidos_C c
-        JOIN FT_Pedidos_Dia d
-          ON d.Cve_Folio     = c.Cve_Folio
-         AND d.Cve_Sucursal  = c.Cve_Sucursal
-        WHERE c.Cve_Sucursal        = ?
-          AND c.Referencia_Cliente  = 'PAGADO'
-          AND YEAR(c.Fecha_Documento)  = YEAR({hoy()})
-          AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
-    """, (cve_sucursal,))
+        SELECT COALESCE(SUM(Monto), 0) AS importe
+        FROM (
+            SELECT d.Cantidad * d.Precio AS Monto
+            FROM FT_Remisiones_C c
+            JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+              AND YEAR(c.Fecha_Documento) = YEAR({hoy()})
+              AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
+            UNION ALL
+            SELECT d.Cantidad * d.Precio AS Monto
+            FROM FT_Facturas_C c
+            JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+              AND YEAR(c.Fecha_Documento) = YEAR({hoy()})
+              AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
+        ) v
+    """, (cve_sucursal, cve_sucursal))
 
     # Top 3 productos del mes con importe y unidades vendidas
     top3 = query(f"""
         SELECT TOP 3
-            p.Descripcion                              AS producto,
-            ROUND(SUM(d.Cantidad_Ordenada * d.Precio), 2) AS importe,
-            SUM(d.Cantidad_Ordenada)                   AS uds
-        FROM FT_Pedidos_C c
-        JOIN FT_Pedidos_Dia d
-          ON d.Cve_Folio     = c.Cve_Folio
-         AND d.Cve_Sucursal  = c.Cve_Sucursal
-        LEFT JOIN IM_Productos_Gral p ON d.Cve_Producto = p.Cve_Producto
-        WHERE c.Cve_Sucursal        = ?
-          AND c.Referencia_Cliente  = 'PAGADO'
-          AND YEAR(c.Fecha_Documento)  = YEAR({hoy()})
-          AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
-          AND p.Descripcion IS NOT NULL
+            p.Descripcion                     AS producto,
+            ROUND(SUM(v.Monto), 2)            AS importe,
+            SUM(v.Cantidad)                   AS uds
+        FROM (
+            SELECT d.Cve_Producto, d.Cantidad, d.Cantidad * d.Precio AS Monto
+            FROM FT_Remisiones_C c
+            JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+              AND YEAR(c.Fecha_Documento) = YEAR({hoy()})
+              AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
+            UNION ALL
+            SELECT d.Cve_Producto, d.Cantidad, d.Cantidad * d.Precio AS Monto
+            FROM FT_Facturas_C c
+            JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+              AND YEAR(c.Fecha_Documento) = YEAR({hoy()})
+              AND MONTH(c.Fecha_Documento) = MONTH({hoy()})
+        ) v
+        LEFT JOIN IM_Productos_Gral p ON v.Cve_Producto = p.Cve_Producto
+        WHERE p.Descripcion IS NOT NULL
           AND p.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
         GROUP BY p.Descripcion
-        ORDER BY SUM(d.Cantidad_Ordenada * d.Precio) DESC
-    """, (cve_sucursal,))
+        ORDER BY SUM(v.Monto) DESC
+    """, (cve_sucursal, cve_sucursal))
 
     # Usar los mismos datos que las tarjetas de inventario (stock_detalle cache)
     stock_cache = _cache.get(f"stock_detalle_{cve_sucursal}")
@@ -290,7 +324,7 @@ def ia_inventario(
     return JSONResponse({"texto": texto})
 
 
-# ── Alerta de médicos duplicados ──────────────────────────────────────────────
+# ── Alerta de contactos duplicados ──────────────────────────────────────────────
 
 @router.get("/medicos")
 def ia_medicos(
@@ -298,7 +332,7 @@ def ia_medicos(
     usuario: dict = Depends(get_current_user),
 ):
     """
-    Genera una alerta corta sobre médicos duplicados en el catálogo.
+    Genera una alerta corta sobre contactos duplicados en el catálogo.
     """
     nombre = _primer_nombre(usuario["nombre"])
 
@@ -306,10 +340,10 @@ def ia_medicos(
         cedula = query("""
             SELECT COUNT(*) AS grupos
             FROM (
-                SELECT LTRIM(RTRIM(cedula)) AS c
-                FROM GC_Medicos
-                WHERE LTRIM(RTRIM(ISNULL(cedula,''))) <> ''
-                GROUP BY LTRIM(RTRIM(cedula))
+                SELECT LTRIM(RTRIM(RFC)) AS c
+                FROM PM_Proveedores
+                WHERE LTRIM(RTRIM(ISNULL(RFC,''))) <> ''
+                GROUP BY LTRIM(RTRIM(RFC))
                 HAVING COUNT(*) > 1
             ) t
         """)
@@ -317,7 +351,7 @@ def ia_medicos(
             SELECT COUNT(*) AS grupos
             FROM (
                 SELECT UPPER(LTRIM(RTRIM(Nombre))) AS n
-                FROM GC_Medicos
+                FROM PM_Proveedores
                 WHERE LTRIM(RTRIM(ISNULL(Nombre,''))) <> ''
                 GROUP BY UPPER(LTRIM(RTRIM(Nombre)))
                 HAVING COUNT(*) > 1
@@ -326,25 +360,25 @@ def ia_medicos(
         # Sin vendedor asignado — dato no visible en la pantalla
         sin_vendedor = query("""
             SELECT COUNT(*) AS total
-            FROM GC_Medicos
-            WHERE ISNULL(LTRIM(RTRIM(cve_vendedor)), '') = ''
+            FROM PM_Proveedores
+            WHERE ISNULL(LTRIM(RTRIM(Cve_Vendedor)), '') = ''
         """)
-        # Sin cédula registrada — dato no visible en la pantalla
+        # Sin identificador registrado — dato no visible en la pantalla
         sin_cedula = query("""
             SELECT COUNT(*) AS total
-            FROM GC_Medicos
-            WHERE LTRIM(RTRIM(ISNULL(cedula, ''))) = ''
+            FROM PM_Proveedores
+            WHERE LTRIM(RTRIM(ISNULL(RFC, ''))) = ''
         """)
-        # Vendedor con más médicos asignados
+        # Vendedor con más proveedores asignados
         top_vendedor = query("""
             SELECT TOP 1
-                v.Nombre                          AS vendedor,
-                COUNT(m.Cve_Medico)               AS total
-            FROM GC_Medicos m
-            JOIN GC_Vendedores v ON m.cve_vendedor = v.Cve_Vendedor
-            WHERE ISNULL(LTRIM(RTRIM(m.cve_vendedor)), '') <> ''
+                v.Nombre                              AS vendedor,
+                COUNT(p.Cve_Proveedor)                AS total
+            FROM PM_Proveedores p
+            JOIN GC_Vendedores v ON p.Cve_Vendedor = v.Cve_Vendedor
+            WHERE ISNULL(LTRIM(RTRIM(p.Cve_Vendedor)), '') <> ''
             GROUP BY v.Nombre
-            ORDER BY COUNT(m.Cve_Medico) DESC
+            ORDER BY COUNT(p.Cve_Proveedor) DESC
         """)
     except Exception:
         return JSONResponse({"texto": None})
@@ -354,31 +388,31 @@ def ia_medicos(
     n_sin_vend   = sin_vendedor[0]["total"]   if sin_vendedor  else 0
     n_sin_ced    = sin_cedula[0]["total"]     if sin_cedula    else 0
     top_vend_txt = (
-        f"{top_vendedor[0]['vendedor']} ({top_vendedor[0]['total']} médicos)"
+        f"{top_vendedor[0]['vendedor']} ({top_vendedor[0]['total']} contactos)"
         if top_vendedor else "sin datos"
     )
 
     if n_cedula == 0 and n_nombre == 0:
         prompt = (
             f"Eres el asistente analítico personal de {nombre}. "
-            f"Redacta exactamente 2 oraciones sobre el estado del catálogo de médicos, "
+            f"Redacta exactamente 2 oraciones sobre el estado del catálogo de contactos, "
             f"dirigidas a {nombre}. "
             f"Datos: sin duplicados detectados. "
-            f"{n_sin_vend} médicos sin vendedor asignado. "
-            f"{n_sin_ced} médicos sin cédula registrada. "
-            f"El vendedor con más médicos a cargo es {top_vend_txt}. "
+            f"{n_sin_vend} contactos sin vendedor asignado. "
+            f"{n_sin_ced} contactos sin identificador registrada. "
+            f"El vendedor con más contactos a cargo es {top_vend_txt}. "
             f"Tono positivo pero con oportunidades de mejora. Empieza con el nombre. Sin títulos ni viñetas."
         )
     else:
         prompt = (
             f"Eres el asistente analítico personal de {nombre}. "
-            f"Redacta exactamente 2 oraciones sobre el estado del catálogo de médicos, "
+            f"Redacta exactamente 2 oraciones sobre el estado del catálogo de contactos, "
             f"dirigidas a {nombre}. "
-            f"Duplicados detectados: {n_cedula} médicos con la misma cédula registrada más de una vez, "
-            f"{n_nombre} médicos con el mismo nombre registrado más de una vez. "
-            f"Médicos sin vendedor asignado: {n_sin_vend}. Sin cédula registrada: {n_sin_ced}. "
-            f"El vendedor con más médicos a cargo es {top_vend_txt}. "
-            f"Usa la palabra 'médicos', no 'grupos'. "
+            f"Duplicados detectados: {n_cedula} contactos con la misma identificador registrada más de una vez, "
+            f"{n_nombre} contactos con el mismo nombre registrado más de una vez. "
+            f"Contactos sin vendedor asignado: {n_sin_vend}. Sin identificador registrada: {n_sin_ced}. "
+            f"El vendedor con más contactos a cargo es {top_vend_txt}. "
+            f"Usa la palabra 'contactos', no 'grupos'. "
             f"Tono profesional. Empieza con el nombre. Menciona el impacto en comisiones. "
             f"Sin títulos ni viñetas."
         )

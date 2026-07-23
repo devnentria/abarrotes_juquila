@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente
 # Archivo  : main.py
 # Autor    : Geovani Daniel Nolasco
@@ -39,7 +39,7 @@ _execute(
 
 # ── Instancia principal ───────────────────────────────────────────────────────
 app = FastAPI(
-    title="PWA Asistente — Suite Analítica Nentria",
+    title="PWA Asistente — Abarrotes Suite Nentria",
     docs_url=None,   # Deshabilitar Swagger en producción (opcional)
     redoc_url=None,
 )
@@ -66,9 +66,9 @@ async def serve_manifest():
     import json
     b = PWA_BASE_PATH  # "" local | "/IA" servidor
     manifest = {
-        "name": "Suite Analítica",
-        "short_name": "Analítica",
-        "description": "Asistente analítico empresarial",
+        "name": "Abarrotes Suite",
+        "short_name": "Abarrotes",
+        "description": "Asistente inteligente para abarroteras",
         "start_url": f"{b}/",
         "scope": f"{b}/",
         "display": "standalone",

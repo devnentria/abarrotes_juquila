@@ -1,1 +1,1 @@
-# Agentes especialistas — Suite Analítica
+# Agentes especialistas — Abarrotes Suite

@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente
 # Archivo  : routers/vistas.py
 # Autor    : Geovani Daniel Nolasco
@@ -71,12 +71,19 @@ def sucursales(modo: str = Query("30d", regex="^(30d|mes)$")):
         FROM GN_Sucursales s
         LEFT JOIN (
             SELECT c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento,
-                   ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS Monto
-            FROM FT_Pedidos_C c
-            INNER JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
-            WHERE c.Estatus <> 'CN'
-              AND c.Referencia_Cliente = 'PAGADO'
+                   ISNULL(SUM(d.Cantidad * d.Precio), 0) AS Monto
+            FROM FT_Remisiones_C c
+            INNER JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Status='AC' AND c.Cve_Movimiento='VTA'
+            GROUP BY c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento
+            UNION ALL
+            SELECT c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento,
+                   ISNULL(SUM(d.Cantidad * d.Precio), 0) AS Monto
+            FROM FT_Facturas_C c
+            INNER JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
             GROUP BY c.Cve_Sucursal, c.Cve_Folio, c.Fecha_Documento
         ) t ON t.Cve_Sucursal = s.Cve_Sucursal
         WHERE s.Cve_Sucursal <> 99
@@ -190,32 +197,54 @@ def stock_detalle(cve_sucursal: int):
                                   AND ea.Cve_Sucursal = ?
                                   AND ea.Status       = 'AC'
         LEFT JOIN (
-            SELECT d.Cve_Producto,
-                   SUM(d.Cantidad_Ordenada * d.Precio)  AS importe,
-                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
+            SELECT Cve_Producto,
+                   SUM(Monto)    AS importe,
+                   SUM(m1_uds)   AS m1_uds,
+                   SUM(m2_uds)   AS m2_uds,
+                   SUM(m3_uds)   AS m3_uds
+            FROM (
+                SELECT d.Cve_Producto,
+                       d.Cantidad * d.Precio AS Monto,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
                              AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-3,{hoy()}))
-                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m1_uds,
-                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
+                            THEN d.Cantidad ELSE 0 END AS m1_uds,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
                              AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-2,{hoy()}))
-                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m2_uds,
-                   SUM(CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
+                            THEN d.Cantidad ELSE 0 END AS m2_uds,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
                              AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
-                            THEN d.Cantidad_Ordenada ELSE 0 END) AS m3_uds
-            FROM FT_Pedidos_C c
-            JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
-            WHERE c.Cve_Sucursal         = ?
-              AND c.Estatus             <> 'CN'
-              AND c.Referencia_Cliente   = 'PAGADO'
-              AND c.Fecha_Documento     >= DATEADD(MONTH, -3, {hoy()})
-            GROUP BY d.Cve_Producto
+                            THEN d.Cantidad ELSE 0 END AS m3_uds
+                FROM FT_Remisiones_C c
+                JOIN FT_Remisiones_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+                  AND c.Fecha_Documento >= DATEADD(MONTH, -3, {hoy()})
+                UNION ALL
+                SELECT d.Cve_Producto,
+                       d.Cantidad * d.Precio AS Monto,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-3,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-3,{hoy()}))
+                            THEN d.Cantidad ELSE 0 END AS m1_uds,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-2,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-2,{hoy()}))
+                            THEN d.Cantidad ELSE 0 END AS m2_uds,
+                       CASE WHEN YEAR(c.Fecha_Documento)  = YEAR(DATEADD(MONTH,-1,{hoy()}))
+                             AND MONTH(c.Fecha_Documento) = MONTH(DATEADD(MONTH,-1,{hoy()}))
+                            THEN d.Cantidad ELSE 0 END AS m3_uds
+                FROM FT_Facturas_C c
+                JOIN FT_Facturas_D d
+                  ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+                WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
+                  AND c.Fecha_Documento >= DATEADD(MONTH, -3, {hoy()})
+            ) ventas
+            GROUP BY Cve_Producto
         ) v ON v.Cve_Producto = cb_canon.Cve_Producto
         WHERE p.Descripcion IS NOT NULL
         GROUP BY cb_canon.barcode_canon
         HAVING SUM(ea.Existencia) <= 0
            AND ISNULL(SUM(v.importe), 0) / 3.0 >= 50
         ORDER BY prom_importe_mensual DESC
-    """, (cve_sucursal, cve_sucursal))
+    """, (cve_sucursal, cve_sucursal, cve_sucursal))
 
     # Agregar etiquetas de mes para el frontend
     _MESES = ['', 'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -252,17 +281,23 @@ def sucursal_resumen(cve_sucursal: int):
     ventas_ayer = query(f"""
         SELECT COUNT(Cve_Folio) AS total_facturas, ISNULL(SUM(Monto), 0) AS importe_total
         FROM (
-            SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad_Ordenada * d.Precio), 0) AS Monto
-            FROM FT_Pedidos_C c
-            INNER JOIN FT_Pedidos_Dia d
-              ON d.Cve_Folio = c.Cve_Folio AND d.Cve_Sucursal = c.Cve_Sucursal
-            WHERE c.Cve_Sucursal = ?
-              AND c.Estatus <> 'CN'
-              AND c.Referencia_Cliente = 'PAGADO'
+            SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad * d.Precio), 0) AS Monto
+            FROM FT_Remisiones_C c
+            INNER JOIN FT_Remisiones_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento='VTA'
+              AND CAST(c.Fecha_Documento AS DATE) = CAST(DATEADD(DAY, -1, {hoy()}) AS DATE)
+            GROUP BY c.Cve_Folio
+            UNION ALL
+            SELECT c.Cve_Folio, ISNULL(SUM(d.Cantidad * d.Precio), 0) AS Monto
+            FROM FT_Facturas_C c
+            INNER JOIN FT_Facturas_D d
+              ON d.Cve_Folio=c.Cve_Folio AND d.Cve_Sucursal=c.Cve_Sucursal AND d.Cve_Movimiento=c.Cve_Movimiento
+            WHERE c.Cve_Sucursal = ? AND c.Status='AC' AND c.Cve_Movimiento IN ('FM','FP')
               AND CAST(c.Fecha_Documento AS DATE) = CAST(DATEADD(DAY, -1, {hoy()}) AS DATE)
             GROUP BY c.Cve_Folio
         ) AS t
-    """, (cve_sucursal,))
+    """, (cve_sucursal, cve_sucursal))
 
     top_productos = query(f"""
         SELECT TOP 3
@@ -286,8 +321,8 @@ def sucursal_resumen(cve_sucursal: int):
 
     pedidos_pendientes = query("""
         SELECT COUNT(*) AS total
-        FROM FT_Pedidos_C
-        WHERE Cve_Sucursal = ? AND Estatus = 'AC'
+        FROM MT_Ordenes_C
+        WHERE Cve_Sucursal = ? AND Status IN ('AU','RP')
     """, (cve_sucursal,))
 
     fecha_hoy = TEST_DATE if TEST_DATE else date.today().strftime("%Y-%m-%d")
@@ -300,21 +335,21 @@ def sucursal_resumen(cve_sucursal: int):
     })
 
 
-# ── Pedidos: resumen por sucursal ─────────────────────────────────────────────
+# ── Órdenes de compra: resumen por sucursal ──────────────────────────────────
 
 @router.get("/pedidos/sucursales")
 def pedidos_sucursales():
-    """Conteo de pedidos activos e historial 30d por sucursal."""
+    """Conteo de órdenes de compra activas e historial 30d por sucursal."""
     rows = query(f"""
         SELECT
             s.Cve_Sucursal                                                    AS cve_sucursal,
             s.Nombre                                                          AS sucursal,
-            COUNT(CASE WHEN p.Estatus = 'AC' THEN 1 END)                     AS activos,
-            COUNT(CASE WHEN p.Estatus IN ('TR','CN')
-                        AND p.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
+            COUNT(CASE WHEN o.Status IN ('AU','RP') THEN 1 END)              AS activos,
+            COUNT(CASE WHEN o.Status IN ('TR','CN')
+                        AND o.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
                   THEN 1 END)                                                 AS historial_30d
         FROM GN_Sucursales s
-        LEFT JOIN FT_Pedidos_C p ON p.Cve_Sucursal = s.Cve_Sucursal
+        LEFT JOIN MT_Ordenes_C o ON o.Cve_Sucursal = s.Cve_Sucursal
         WHERE s.Cve_Sucursal <> 99
         GROUP BY s.Cve_Sucursal, s.Nombre
         ORDER BY activos DESC
@@ -322,11 +357,11 @@ def pedidos_sucursales():
     return JSONResponse({"sucursales": rows})
 
 
-# ── Pedidos: detalle por sucursal ─────────────────────────────────────────────
+# ── Órdenes de compra: detalle por sucursal ──────────────────────────────────
 
 @router.get("/pedidos/{cve_sucursal}")
 def pedidos_sucursal(cve_sucursal: int):
-    """Pedidos activos e historial 30d de una sucursal específica."""
+    """Órdenes de compra activas e historial 30d de una sucursal específica."""
     try:
         return _pedidos_sucursal(cve_sucursal)
     except Exception as e:
@@ -334,7 +369,7 @@ def pedidos_sucursal(cve_sucursal: int):
 
 
 def _pedidos_sucursal(cve_sucursal: int):
-    """Antigüedad de pedidos activos de la sucursal (vista para director)."""
+    """Antigüedad de órdenes de compra activas de la sucursal (vista para director)."""
     antiguedad = query(f"""
         SELECT
             CASE
@@ -348,8 +383,8 @@ def _pedidos_sucursal(cve_sucursal: int):
             END                  AS rango,
             COUNT(*)             AS num_pedidos,
             MIN(Fecha_Documento) AS mas_antiguo
-        FROM FT_Pedidos_C
-        WHERE Cve_Sucursal = ? AND Estatus = 'AC'
+        FROM MT_Ordenes_C
+        WHERE Cve_Sucursal = ? AND Status IN ('AU','RP')
         GROUP BY
             CASE
                 WHEN CAST(Fecha_Documento AS DATE) = {hoy()}
@@ -369,53 +404,53 @@ def _pedidos_sucursal(cve_sucursal: int):
     return JSONResponse({"antiguedad": antiguedad})
 
 
-# ── Médicos: detección de duplicados ─────────────────────────────────────────
+# ── Contactos: detección de duplicados ─────────────────────────────────────────
 
 @router.get("/medicos/duplicados")
 def medicos_duplicados():
-    """Detecta médicos registrados más de una vez por cédula o nombre idéntico."""
+    """Detecta contactos registrados más de una vez por identificador o nombre idéntico."""
 
-    # Duplicados confirmados: misma cédula, distinto registro
+    # Duplicados confirmados: mismo RFC, distinto registro
     raw_cedula = query("""
         SELECT
-            m.Cve_Medico                        AS cve_medico,
-            LTRIM(RTRIM(m.Nombre))              AS nombre,
-            LTRIM(RTRIM(m.cedula))              AS cedula,
-            m.cve_vendedor                      AS cve_vendedor,
-            ISNULL(v.Nombre, CASE WHEN LTRIM(RTRIM(ISNULL(m.cve_vendedor,''))) = '' THEN 'Sin asignar' ELSE m.cve_vendedor END) AS vendedor
-        FROM GC_Medicos m
-        LEFT JOIN GC_Vendedores v ON v.Cve_Vendedor = m.cve_vendedor
-        WHERE LTRIM(RTRIM(ISNULL(m.cedula, ''))) <> ''
-          AND LTRIM(RTRIM(m.cedula)) IN (
-              SELECT LTRIM(RTRIM(cedula))
-              FROM GC_Medicos
-              WHERE LTRIM(RTRIM(ISNULL(cedula, ''))) <> ''
-              GROUP BY LTRIM(RTRIM(cedula))
+            p.Cve_Proveedor                     AS cve_medico,
+            LTRIM(RTRIM(p.Nombre))              AS nombre,
+            LTRIM(RTRIM(p.RFC))                 AS cedula,
+            p.Cve_Vendedor                      AS cve_vendedor,
+            ISNULL(v.Nombre, CASE WHEN LTRIM(RTRIM(ISNULL(p.Cve_Vendedor,''))) = '' THEN 'Sin asignar' ELSE p.Cve_Vendedor END) AS vendedor
+        FROM PM_Proveedores p
+        LEFT JOIN GC_Vendedores v ON v.Cve_Vendedor = p.Cve_Vendedor
+        WHERE LTRIM(RTRIM(ISNULL(p.RFC, ''))) <> ''
+          AND LTRIM(RTRIM(p.RFC)) IN (
+              SELECT LTRIM(RTRIM(RFC))
+              FROM PM_Proveedores
+              WHERE LTRIM(RTRIM(ISNULL(RFC, ''))) <> ''
+              GROUP BY LTRIM(RTRIM(RFC))
               HAVING COUNT(*) > 1
           )
-        ORDER BY LTRIM(RTRIM(m.cedula)), m.Cve_Medico
+        ORDER BY LTRIM(RTRIM(p.RFC)), p.Cve_Proveedor
     """)
 
-    # Posibles duplicados: mismo nombre exacto (con o sin cédula)
+    # Posibles duplicados: mismo nombre exacto (con o sin RFC)
     raw_nombre = query("""
         SELECT
-            m.Cve_Medico                        AS cve_medico,
-            LTRIM(RTRIM(m.Nombre))              AS nombre,
-            LTRIM(RTRIM(ISNULL(m.cedula, ''))) AS cedula,
-            m.cve_vendedor                      AS cve_vendedor,
-            ISNULL(v.Nombre, CASE WHEN LTRIM(RTRIM(ISNULL(m.cve_vendedor,''))) = '' THEN 'Sin asignar' ELSE m.cve_vendedor END) AS vendedor
-        FROM GC_Medicos m
-        LEFT JOIN GC_Vendedores v ON v.Cve_Vendedor = m.cve_vendedor
-        WHERE UPPER(LTRIM(RTRIM(m.Nombre))) IN (
+            p.Cve_Proveedor                     AS cve_medico,
+            LTRIM(RTRIM(p.Nombre))              AS nombre,
+            LTRIM(RTRIM(ISNULL(p.RFC, '')))     AS cedula,
+            p.Cve_Vendedor                      AS cve_vendedor,
+            ISNULL(v.Nombre, CASE WHEN LTRIM(RTRIM(ISNULL(p.Cve_Vendedor,''))) = '' THEN 'Sin asignar' ELSE p.Cve_Vendedor END) AS vendedor
+        FROM PM_Proveedores p
+        LEFT JOIN GC_Vendedores v ON v.Cve_Vendedor = p.Cve_Vendedor
+        WHERE UPPER(LTRIM(RTRIM(p.Nombre))) IN (
               SELECT UPPER(LTRIM(RTRIM(Nombre)))
-              FROM GC_Medicos
+              FROM PM_Proveedores
               GROUP BY UPPER(LTRIM(RTRIM(Nombre)))
               HAVING COUNT(*) > 1
           )
-        ORDER BY UPPER(LTRIM(RTRIM(m.Nombre))), m.Cve_Medico
+        ORDER BY UPPER(LTRIM(RTRIM(p.Nombre))), p.Cve_Proveedor
     """)
 
-    # Agrupar por cédula
+    # Agrupar por identificador
     grupos_cedula: dict = defaultdict(list)
     for r in raw_cedula:
         grupos_cedula[r['cedula']].append(r)

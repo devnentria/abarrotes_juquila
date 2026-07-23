@@ -16,3 +16,10 @@ sql_blacklist.json
 nombres_cache.json
 feedback_respuestas.json
 candidatas_funciones.json
+
+# Exports de esquema BD (pesados, solo referencia local)
+Resultados*.csv
+
+# PyArmor build output
+pyarmor_output/
+pyarmor.bug.log

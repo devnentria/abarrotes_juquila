@@ -1,5 +1,5 @@
 """
-Benchmark de tiempos de respuesta — Suite Analítica
+Benchmark de tiempos de respuesta — Abarrotes Suite
 Compara gpt-4o-mini, gpt-5-nano y gpt-5-mini con una pregunta típica del agente.
 """
 import time

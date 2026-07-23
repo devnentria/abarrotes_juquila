@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Benchmark de preguntas — Suite Analítica Supra
+Benchmark de preguntas — Abarrotes Suite
 Mide el tiempo de respuesta del agente para cada pregunta del soluciones.md
 Genera un reporte Markdown con pregunta, respuesta completa y tiempo.
 Requiere el servidor corriendo en localhost:8001
@@ -107,7 +107,7 @@ def main():
     # ── Generar documento Markdown ────────────────────────────────────────────
     ahora = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lineas = [
-        f"# Benchmark de Respuestas — Suite Analítica Supra",
+        f"# Benchmark de Respuestas — Abarrotes Suite",
         f"**Fecha:** {ahora}  |  **Servidor:** {BASE}",
         "",
     ]

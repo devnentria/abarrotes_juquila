@@ -1,5 +1,5 @@
 # ============================================================
-# Proyecto : Suite Analítica — Nentria Intelligent Solutions
+# Proyecto : Abarrotes Suite — Nentria Intelligent Solutions
 # Módulo   : pwa_asistente
 # Archivo  : routers/chat.py
 # Autor    : Geovani Daniel Nolasco
@@ -51,7 +51,7 @@ def _whisper_product_prompt() -> str:
     """
     Devuelve un string con los top 150 nombres de productos del catálogo,
     para pasárselo a Whisper como contexto y mejorar la transcripción
-    de nombres farmacéuticos (ej: "Oblitrop" → "Omnitrope").
+    de nombres de abarrotess (ej: "Oblitrop" → "Omnitrope").
     Cachea el resultado 24 horas para no consultar la BD en cada llamada.
     """
     import time
@@ -65,12 +65,12 @@ def _whisper_product_prompt() -> str:
             ORDER BY Cve_Producto
         """)
         nombres = ", ".join(r["Descripcion"] for r in rows if r.get("Descripcion"))
-        prompt = f"Consulta de ventas e inventario de farmacia. Productos: {nombres}."
+        prompt = f"Consulta de ventas e inventario de mostrador. Productos: {nombres}."
         _whisper_prompt_cache["txt"] = prompt
         _whisper_prompt_cache["ts"]  = time.time()
         return prompt
     except Exception:
-        return "Consulta de ventas e inventario de farmacia."
+        return "Consulta de ventas e inventario de mostrador."
 
 
 def _intentar_funcion_fija(msg: str) -> tuple:
@@ -100,7 +100,7 @@ _SALUDO = re.compile(
 )
 _RESPUESTA_SALUDO = (
     "¡Hola! ¿En qué puedo ayudarte?\n\n"
-    "Puedes preguntarme sobre ventas, inventario, pedidos, médicos o clientes."
+    "Puedes preguntarme sobre ventas, inventario, pedidos, contactos o clientes."
 )
 
 _CAPACIDADES = re.compile(
@@ -114,7 +114,7 @@ _RESPUESTA_CAPACIDADES = (
     "- **Ventas** — importes, facturas, comparativos por sucursal o vendedor\n"
     "- **Inventario** — existencias, caducidades, productos sin stock\n"
     "- **Pedidos** — pedidos activos y su antigüedad\n"
-    "- **Médicos** — directorio y duplicados\n"
+    "- **Contactos** — directorio y duplicados\n"
     "- **Clientes** — historial de compras y clientes frecuentes\n\n"
     "Solo escribe tu pregunta y te respondo."
 )
@@ -438,7 +438,7 @@ async def enviar_audio_llamada(
     audio_file.name = audio.filename or "audio.webm"
 
     # Obtener nombres de productos del catálogo para mejorar la transcripción
-    # (Whisper usa el prompt para reconocer nombres farmacéuticos correctamente)
+    # (Whisper usa el prompt para reconocer nombres de abarrotess correctamente)
     _whisper_prompt = _whisper_product_prompt()
 
     transcripcion = client.audio.transcriptions.create(
