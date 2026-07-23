@@ -37,14 +37,18 @@ def _detect_driver() -> str:
 
 # La cadena de conexión se construye una sola vez al importar el módulo.
 # Si DB_HOST o DB_PASSWORD cambian en .env, reiniciar el servidor es suficiente.
-_CONNECTION_STRING = (
-    f"DRIVER={{{_detect_driver()}}};"
+_driver = _detect_driver()
+_base = (
+    f"DRIVER={{{_driver}}};"
     f"SERVER={DB_HOST},{DB_PORT};"
     f"DATABASE={DB_NAME};"
-    f"UID={DB_USER};"
-    f"PWD={DB_PASSWORD};"
-    "TrustServerCertificate=yes;"  # Necesario en redes locales y Docker
+    "TrustServerCertificate=yes;"
 )
+# Si no hay usuario en .env, usar Windows Authentication (Trusted_Connection)
+if DB_USER:
+    _CONNECTION_STRING = _base + f"UID={DB_USER};PWD={DB_PASSWORD};"
+else:
+    _CONNECTION_STRING = _base + "Trusted_Connection=yes;"
 
 
 def hoy() -> str:
