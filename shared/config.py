@@ -42,7 +42,8 @@ STUDIO_CHAT_MODEL: str = os.getenv("STUDIO_CHAT_MODEL", "gpt-4.1-mini")
 DB_HOST:     str = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT:     int = int(os.getenv("DB_PORT", "1433"))
 DB_NAME:     str = os.getenv("DB_NAME", "ERP")
-DB_USER:     str = os.getenv("DB_USER", "sa")
+# Dejar vacío DB_USER para usar Windows Authentication (Trusted_Connection)
+DB_USER:     str = os.getenv("DB_USER", "")
 DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
 
 
