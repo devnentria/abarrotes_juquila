@@ -11,16 +11,14 @@ Sub-router de datos: Generacion de dashboards con IA.
 Endpoints:
   POST /generar -> Genera dashboard completo con IA (gpt-5-nano)
 
-v3.0.0 — Migrado de FT_Pedidos_C/FT_Pedidos_Dia a tablas ERP reales:
-  - Ventas = UNION ALL de FT_Remisiones_C + FT_Facturas_C (encabezados)
-  - Detalle producto = FT_Remisiones_D + FT_Facturas_D (con JOIN a headers)
-  - Vendedores = solo FT_Facturas_C (Cve_Vendedor confiable)
-  - Clientes = solo FT_Facturas_C (autoservicio es Cve_Cliente='/')
-  - CM_Clientes con Razon_Social (no GC_Clientes/Nombre_Cliente)
-  - Status='AC' en vez de Estatus<>'CN'
-  - Sin Referencia_Cliente='PAGADO'
-  - pedidos_activos -> MT_Ordenes_C (ordenes de compra)
-  - medicos_dashboard -> placeholder (GC_Medicos no existe)
+v4.0.0 — Ventas migradas a ACUMULADOS (ACU_VTA_DEV_DIARIA_FAM_PROD):
+  - ventas_hoy, ventas_sucursal, comparativo_meses, ventas_diario,
+    tendencia_anual, top_productos, ventas_producto, reporte_ventas
+    → query_acu() sobre datos pre-agregados (rapido, sin UNION ALL)
+  - top_vendedores, clientes_frecuentes, variacion_vendedores
+    → query() sobre FT_Facturas_C (campos no disponibles en ACUMULADOS)
+  - pedidos_activos → query() sobre MT_Ordenes_C
+  - inventario → query() sobre ERP + ventas_30d desde ACUMULADOS
 """
 import json
 
@@ -29,7 +27,7 @@ from fastapi.responses import JSONResponse
 
 from shared.auth import get_current_user
 from shared.config import IA_RATIO_STUDIO
-from shared.database import query, hoy
+from shared.database import query, query_acu, hoy
 from shared.database_local import execute, fetch_one
 
 from .datos_helpers import (
@@ -41,66 +39,43 @@ from .datos_helpers import (
 router = APIRouter()
 
 
-# ── SQL helpers ──────────────────────────────────────────────────────────────
+# ── Helpers ACUMULADOS ──────────────────────────────────────────────────────
 
-def _ventas_union(alias: str = "v", date_col: str = "Fecha_Documento",
-                  extra_where: str = "") -> str:
+def _acu_filtros(modo: str, fi: str = None, ff: str = None):
     """
-    Genera un UNION ALL de remisiones + facturas a nivel encabezado.
-    Devuelve columnas: Cve_Sucursal, Cve_Folio, Fecha_Documento, Importe.
-    Facturas incluye ademas Cve_Vendedor y Cve_Cliente.
+    Devuelve (filtro_actual, filtro_anterior) para queries a ACUMULADOS.
+    La columna de fecha es 'Fecha' (datetime).
     """
-    xw = f"AND {extra_where}" if extra_where else ""
-    return f"""(
-        SELECT r.Cve_Sucursal, r.Cve_Folio, r.Fecha_Documento,
-               r.Importe_Neto AS Importe,
-               NULL AS Cve_Vendedor, NULL AS Cve_Cliente
-        FROM FT_Remisiones_C r
-        WHERE r.Status = 'AC' AND r.Cve_Movimiento = 'VTA'
-          AND r.Cve_Sucursal <> 99 {xw}
-        UNION ALL
-        SELECT f.Cve_Sucursal, f.Cve_Folio, f.Fecha_Documento,
-               f.Importe_Total AS Importe,
-               f.Cve_Vendedor, f.Cve_Cliente
-        FROM FT_Facturas_C f
-        WHERE f.Status = 'AC' AND f.Cve_Movimiento IN ('FM','FP')
-          AND f.Cve_Sucursal <> 99 {xw}
-    ) {alias}"""
+    h = f"CAST({hoy()} AS DATE)"
+    if modo == "custom" and fi and ff:
+        dias = f"DATEDIFF(DAY,'{fi}','{ff}')"
+        actual   = f"CAST(Fecha AS DATE) >= '{fi}' AND CAST(Fecha AS DATE) <= '{ff}'"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-({dias}+1),'{fi}') "
+                    f"AND CAST(Fecha AS DATE) < '{fi}'")
+    elif modo == "hoy":
+        actual   = f"CAST(Fecha AS DATE) = {h}"
+        anterior = f"CAST(Fecha AS DATE) = DATEADD(DAY,-1,{h})"
+    elif modo == "15d":
+        actual   = f"CAST(Fecha AS DATE) >= DATEADD(DAY,-14,{h})"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h}) "
+                    f"AND CAST(Fecha AS DATE) < DATEADD(DAY,-14,{h})")
+    elif modo == "mes":
+        actual   = (f"YEAR(Fecha)=YEAR({hoy()}) AND MONTH(Fecha)=MONTH({hoy()}) "
+                    f"AND CAST(Fecha AS DATE) <= {h}")
+        anterior = (f"YEAR(Fecha)=YEAR(DATEADD(MONTH,-1,{hoy()})) "
+                    f"AND MONTH(Fecha)=MONTH(DATEADD(MONTH,-1,{hoy()})) "
+                    f"AND DAY(Fecha)<=DAY({hoy()})")
+    else:  # 30d
+        actual   = f"CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h})"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-59,{h}) "
+                    f"AND CAST(Fecha AS DATE) < DATEADD(DAY,-29,{h})")
+    return actual, anterior
 
 
-def _ventas_detalle_union(alias: str = "vd", date_col: str = "Fecha_Documento",
-                          extra_where: str = "") -> str:
-    """
-    UNION ALL de detalle remisiones + facturas con JOIN a encabezados.
-    Devuelve: Cve_Sucursal, Cve_Producto, Cantidad, Precio, Fecha_Documento,
-              Cve_Vendedor (NULL for remisiones), Cve_Cliente (NULL for remisiones).
-    """
-    xw = f"AND {extra_where}" if extra_where else ""
-    return f"""(
-        SELECT rd.Cve_Sucursal, rd.Cve_Producto,
-               rd.Cantidad AS Cantidad, rd.Precio_Unitario AS Precio,
-               rc.Fecha_Documento,
-               NULL AS Cve_Vendedor, NULL AS Cve_Cliente
-        FROM FT_Remisiones_D rd
-        INNER JOIN FT_Remisiones_C rc
-            ON rc.Cve_Folio = rd.Cve_Folio
-           AND rc.Cve_Sucursal = rd.Cve_Sucursal
-           AND rc.Cve_Movimiento = rd.Cve_Movimiento
-        WHERE rc.Status = 'AC' AND rc.Cve_Movimiento = 'VTA'
-          AND rc.Cve_Sucursal <> 99 {xw}
-        UNION ALL
-        SELECT fd.Cve_Sucursal, fd.Cve_Producto,
-               fd.Cantidad AS Cantidad, fd.Precio_Unitario AS Precio,
-               fc.Fecha_Documento,
-               fc.Cve_Vendedor, fc.Cve_Cliente
-        FROM FT_Facturas_D fd
-        INNER JOIN FT_Facturas_C fc
-            ON fc.Cve_Folio = fd.Cve_Folio
-           AND fc.Cve_Sucursal = fd.Cve_Sucursal
-           AND fc.Cve_Movimiento = fd.Cve_Movimiento
-        WHERE fc.Status = 'AC' AND fc.Cve_Movimiento IN ('FM','FP')
-          AND fc.Cve_Sucursal <> 99 {xw}
-    ) {alias}"""
+def _acu_label(modo: str) -> str:
+    """Etiqueta legible del periodo."""
+    return {"hoy": "hoy", "15d": "ult. 15 dias", "mes": "mes actual",
+            "30d": "ult. 30 dias", "custom": "periodo"}.get(modo, "ult. 30 dias")
 
 
 # ── Generar dashboard con IA ────────────────────────────────────────────────
@@ -207,35 +182,32 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
     Llama internamente a la funcion de datos correcta segun el tipo.
     fi, ff: fechas ISO 'YYYY-MM-DD' para modo='custom'
 
-    Ventas se calculan con UNION ALL de:
-      - FT_Remisiones_C (Status='AC', Cve_Movimiento='VTA') -> Importe_Neto
-      - FT_Facturas_C   (Status='AC', Cve_Movimiento IN ('FM','FP')) -> Importe_Total
-    Detalle de producto con FT_Remisiones_D + FT_Facturas_D (JOIN a headers).
+    Ventas se obtienen de ACUMULADOS.ACU_VTA_DEV_DIARIA_FAM_PROD (pre-agregado).
+    Vendedores/clientes siguen en ERP (FT_Facturas_C).
     """
     hoy_fecha = f"CAST({hoy()} AS DATE)"
 
-    # ── VENTAS HOY ───────────────────────────────────────────────────────────
+    # ── VENTAS HOY (ACUMULADOS) ─────────────────────────────────────────────
     if tipo == "ventas_hoy":
-        rows = query(f"""
-            SELECT s.Nombre AS label,
-                   COUNT(v.Cve_Folio) AS pedidos,
-                   ISNULL(SUM(v.Importe), 0) AS valor
-            FROM GN_Sucursales s
-            LEFT JOIN {_ventas_union("v", extra_where=f"CAST(v.Fecha_Documento AS DATE) = {hoy_fecha}")}
-              ON v.Cve_Sucursal = s.Cve_Sucursal
-            WHERE s.Cve_Sucursal <> 99
-            GROUP BY s.Cve_Sucursal, s.Nombre ORDER BY valor DESC
+        h = f"CAST({hoy()} AS DATE)"
+        rows = query_acu(f"""
+            SELECT Nombre AS label,
+                   ISNULL(SUM(VentaUnidades), 0) AS pedidos,
+                   ISNULL(SUM(VentaNeta), 0) AS valor
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) = {h}
+            GROUP BY Cve_Sucursal, Nombre ORDER BY valor DESC
         """)
-        # Ayer
-        ayer_row = query(f"""
-            SELECT ISNULL(SUM(v.Importe), 0) AS total_ayer,
-                   COUNT(v.Cve_Folio) AS pedidos_ayer
-            FROM {_ventas_union("v", extra_where=f"CAST(v.Fecha_Documento AS DATE) = CAST(DATEADD(DAY,-1,{hoy()}) AS DATE)")}
+        ayer_row = query_acu(f"""
+            SELECT ISNULL(SUM(VentaNeta), 0) AS total_ayer,
+                   ISNULL(SUM(VentaUnidades), 0) AS pedidos_ayer
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) = DATEADD(DAY,-1,{h})
         """)
-        # Semana pasada mismo dia
-        semana_row = query(f"""
-            SELECT ISNULL(SUM(v.Importe), 0) AS total_sem
-            FROM {_ventas_union("v", extra_where=f"CAST(v.Fecha_Documento AS DATE) = CAST(DATEADD(DAY,-7,{hoy()}) AS DATE)")}
+        semana_row = query_acu(f"""
+            SELECT ISNULL(SUM(VentaNeta), 0) AS total_sem
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) = DATEADD(DAY,-7,{h})
         """)
         total         = sum(float(r.get("valor") or 0) for r in rows)
         total_pedidos = sum(int(r.get("pedidos") or 0) for r in rows)
@@ -260,20 +232,17 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "datos":         rows,
         }
 
-    # ── VENTAS POR SUCURSAL ──────────────────────────────────────────────────
+    # ── VENTAS POR SUCURSAL (ACUMULADOS) ────────────────────────────────────
     elif tipo == "ventas_sucursal":
-        fa, fb, label = _filtros_periodo(modo, "v.Fecha_Documento", fi, ff)
-        rows = query(f"""
-            SELECT s.Nombre AS label,
-                   ISNULL(SUM(CASE WHEN {fa} THEN v.Importe END), 0) AS actual,
-                   ISNULL(SUM(CASE WHEN {fb} THEN v.Importe END), 0) AS anterior
-            FROM GN_Sucursales s
-            LEFT JOIN {_ventas_union("v")}
-              ON v.Cve_Sucursal = s.Cve_Sucursal
-            WHERE s.Cve_Sucursal <> 99
-            GROUP BY s.Cve_Sucursal, s.Nombre ORDER BY actual DESC
+        fa, fb = _acu_filtros(modo, fi, ff)
+        label  = _acu_label(modo)
+        rows = query_acu(f"""
+            SELECT Nombre AS label,
+                   ISNULL(SUM(CASE WHEN {fa} THEN VentaNeta END), 0) AS actual,
+                   ISNULL(SUM(CASE WHEN {fb} THEN VentaNeta END), 0) AS anterior
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            GROUP BY Cve_Sucursal, Nombre ORDER BY actual DESC
         """)
-        # Filtrar sucursales sin ventas en el periodo actual
         rows = [r for r in rows if float(r.get("actual") or 0) > 0]
         for r in rows:
             actual   = float(r.get("actual") or 0)
@@ -311,16 +280,16 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
                 "titulo": f"Top vendedores ({label})",
                 "datos": rows}
 
-    # ── COMPARATIVO MESES ────────────────────────────────────────────────────
+    # ── COMPARATIVO MESES (ACUMULADOS) ──────────────────────────────────────
     elif tipo == "comparativo_meses":
-        rows = query(f"""
-            SELECT TOP 6 anio, mes, mes_nombre, SUM(Importe) AS valor, COUNT(*) AS pedidos
-            FROM (
-                SELECT YEAR(v.Fecha_Documento) AS anio, MONTH(v.Fecha_Documento) AS mes,
-                       DATENAME(MONTH, v.Fecha_Documento) AS mes_nombre,
-                       v.Importe
-                FROM {_ventas_union("v", extra_where=f"v.Fecha_Documento >= DATEADD(MONTH,-5,{hoy()})")}
-            ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
+        rows = query_acu(f"""
+            SELECT TOP 6 Año AS anio, Mes AS mes,
+                   DATENAME(MONTH, MIN(Fecha)) AS mes_nombre,
+                   SUM(VentaNeta) AS valor,
+                   SUM(VentaUnidades) AS pedidos
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE Fecha >= DATEADD(MONTH,-5,{hoy()})
+            GROUP BY Año, Mes ORDER BY Año, Mes
         """)
         import calendar as _cal
         from datetime import date as _d2
@@ -372,14 +341,16 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "datos":     rows,
         }
 
-    # ── VENTAS DIARIO ────────────────────────────────────────────────────────
+    # ── VENTAS DIARIO (ACUMULADOS) ──────────────────────────────────────────
     elif tipo == "ventas_diario":
-        rows = query(f"""
-            SELECT fecha, SUM(Importe) AS valor, COUNT(*) AS pedidos
-            FROM (
-                SELECT CAST(v.Fecha_Documento AS DATE) AS fecha, v.Importe
-                FROM {_ventas_union("v", extra_where=f"CAST(v.Fecha_Documento AS DATE) >= DATEADD(DAY,-29,{hoy_fecha})")}
-            ) t GROUP BY fecha ORDER BY fecha
+        h = f"CAST({hoy()} AS DATE)"
+        rows = query_acu(f"""
+            SELECT CAST(Fecha AS DATE) AS fecha,
+                   SUM(VentaNeta) AS valor,
+                   SUM(VentaUnidades) AS pedidos
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h})
+            GROUP BY CAST(Fecha AS DATE) ORDER BY fecha
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         proyeccion = _proyectar([float(r.get("valor") or 0) for r in rows])
@@ -390,17 +361,17 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "datos": rows,
         }
 
-    # ── TENDENCIA ANUAL ──────────────────────────────────────────────────────
+    # ── TENDENCIA ANUAL (ACUMULADOS) ────────────────────────────────────────
     elif tipo == "tendencia_anual":
         # Fetch 24 months to enable YoY seasonal projection
-        rows = query(f"""
-            SELECT anio, mes, mes_nombre, SUM(Importe) AS valor, COUNT(*) AS pedidos
-            FROM (
-                SELECT YEAR(v.Fecha_Documento) AS anio, MONTH(v.Fecha_Documento) AS mes,
-                       DATENAME(MONTH, v.Fecha_Documento) AS mes_nombre,
-                       v.Importe
-                FROM {_ventas_union("v", extra_where=f"v.Fecha_Documento >= DATEADD(MONTH,-23, DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))")}
-            ) t GROUP BY anio, mes, mes_nombre ORDER BY anio, mes
+        rows = query_acu(f"""
+            SELECT Año AS anio, Mes AS mes,
+                   DATENAME(MONTH, MIN(Fecha)) AS mes_nombre,
+                   SUM(VentaNeta) AS valor,
+                   SUM(VentaUnidades) AS pedidos
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE Fecha >= DATEADD(MONTH,-23, DATEFROMPARTS(YEAR({hoy()}),MONTH({hoy()}),1))
+            GROUP BY Año, Mes ORDER BY Año, Mes
         """)
         import calendar as _cal2
         from datetime import date as _d3
@@ -459,19 +430,19 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "datos": datos_12,
         }
 
-    # ── TOP PRODUCTOS (detalle remisiones + facturas) ────────────────────────
+    # ── TOP PRODUCTOS (ACUMULADOS) ──────────────────────────────────────────
     elif tipo == "top_productos":
-        filtro, _, label = _filtros_periodo(modo, "vd.Fecha_Documento", fi, ff)
-        rows = query(f"""
+        fa, _ = _acu_filtros(modo, fi, ff)
+        label = _acu_label(modo)
+        rows = query_acu(f"""
             SELECT TOP 10
-                MIN(pg.Descripcion)          AS label,
-                SUM(vd.Cantidad * vd.Precio) AS valor,
-                SUM(vd.Cantidad)             AS unidades
-            FROM {_ventas_detalle_union("vd")}
-            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = vd.Cve_Producto
-            WHERE {filtro}
-            GROUP BY vd.Cve_Producto
-            ORDER BY SUM(vd.Cantidad * vd.Precio) DESC
+                Descripcion AS label,
+                SUM(VentaNeta) AS valor,
+                SUM(VentaUnidades) AS unidades
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE {fa}
+            GROUP BY Cve_Producto, Descripcion
+            ORDER BY SUM(VentaNeta) DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         return {"tipo": tipo, "modo": modo,
@@ -544,13 +515,13 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         )
         n_sucursales = len([r for r in suc_datos if float(r.get("actual") or 0) > 0])
 
-        # Ticket promedio y total pedidos del periodo (union remisiones + facturas)
-        _ft, _, _ = _filtros_periodo(modo, "v.Fecha_Documento", fi, ff)
-        ticket_data = query(f"""
-            SELECT COUNT(*) AS total_pedidos,
-                   ISNULL(SUM(v.Importe), 0) AS total_importe
-            FROM {_ventas_union("v")}
-            WHERE {_ft}
+        # Ticket promedio y total pedidos del periodo (ACUMULADOS)
+        fa_rep, _ = _acu_filtros(modo, fi, ff)
+        ticket_data = query_acu(f"""
+            SELECT SUM(VentaUnidades) AS total_pedidos,
+                   ISNULL(SUM(VentaNeta), 0) AS total_importe
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE {fa_rep}
         """)
         t = ticket_data[0] if ticket_data else {}
         total_pedidos  = int(t.get("total_pedidos") or 0)
@@ -628,45 +599,64 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
         proyeccion_stock = _proyectar(valores_stock) if len(valores_stock) >= 2 else None
 
         # Rotacion de inventario: ventas 30d / valor_stock_actual (por sucursal)
-        # Ventas 30d ahora con UNION ALL remisiones + facturas (detalle)
-        rotacion_rows = query(f"""
-            SELECT s.Nombre AS label,
+        # Ventas 30d desde ACUMULADOS para velocidad
+        h_inv = f"CAST({hoy()} AS DATE)"
+        ventas_30d_acu = query_acu(f"""
+            SELECT Cve_Sucursal,
+                   ISNULL(SUM(VentaUnidades), 0) AS ventas_30d,
+                   ISNULL(SUM(VentaUnidades) / 30.0, 0) AS ventas_diaria
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) >= DATEADD(DAY,-30,{h_inv})
+            GROUP BY Cve_Sucursal
+        """)
+        # Build dict for JOIN in Python
+        v30 = {int(r["Cve_Sucursal"]): r for r in ventas_30d_acu}
+
+        stock_rows = query(f"""
+            SELECT s.Cve_Sucursal, s.Nombre AS label,
                    ISNULL(SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)),0) AS valor_stock,
-                   ISNULL(SUM(vt.ventas_30d),0) AS ventas_30d,
-                   CASE WHEN SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)) > 0
-                        THEN ROUND(SUM(vt.ventas_30d) / SUM(e.Existencia * ISNULL(pg.Costo_Promedio,0)), 2)
-                        ELSE 0 END AS rotacion,
-                   CASE WHEN SUM(vt.ventas_diaria) > 0
-                        THEN ROUND(SUM(e.Existencia) / SUM(vt.ventas_diaria), 0)
-                        ELSE NULL END AS dias_cobertura
+                   ISNULL(SUM(e.Existencia),0) AS total_existencia
             FROM GN_Sucursales s
             LEFT JOIN IN_Existencias_Alm e
               ON e.Cve_Sucursal = s.Cve_Sucursal AND e.Status='AC'
             LEFT JOIN IM_Productos_Gral pg ON pg.Cve_Producto = e.Cve_Producto
-            LEFT JOIN (
-                SELECT vd.Cve_Sucursal,
-                       ISNULL(SUM(vd.Cantidad), 0) AS ventas_30d,
-                       ISNULL(SUM(vd.Cantidad) / 30.0, 0) AS ventas_diaria
-                FROM {_ventas_detalle_union("vd", extra_where=f"CAST(vd.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,CAST({hoy()} AS DATE))")}
-                GROUP BY vd.Cve_Sucursal
-            ) vt ON vt.Cve_Sucursal = s.Cve_Sucursal
             WHERE s.Cve_Sucursal <> 99
             GROUP BY s.Cve_Sucursal, s.Nombre
             HAVING ISNULL(SUM(e.Existencia),0) > 0
-            ORDER BY rotacion DESC
+            ORDER BY valor_stock DESC
         """)
+        rotacion_rows = []
+        for sr in stock_rows:
+            cve = int(sr["Cve_Sucursal"])
+            v = v30.get(cve, {})
+            vstock = float(sr.get("valor_stock") or 0)
+            v30d   = float(v.get("ventas_30d") or 0)
+            vdia   = float(v.get("ventas_diaria") or 0)
+            exist  = float(sr.get("total_existencia") or 0)
+            rotacion_rows.append({
+                "label": sr["label"],
+                "valor_stock": vstock,
+                "ventas_30d": v30d,
+                "rotacion": round(v30d / vstock, 2) if vstock > 0 else 0,
+                "dias_cobertura": round(exist / vdia, 0) if vdia > 0 else None,
+            })
 
         # Productos con stock pero sin ventas en ultimos 30 dias
-        sin_mov = query(f"""
-            SELECT COUNT(DISTINCT e.Cve_Producto) AS total
-            FROM IN_Existencias_Alm e
-            LEFT JOIN (
-                SELECT DISTINCT vd.Cve_Producto
-                FROM {_ventas_detalle_union("vd", extra_where=f"CAST(vd.Fecha_Documento AS DATE) >= DATEADD(DAY,-30,CAST({hoy()} AS DATE))")}
-            ) sold ON sold.Cve_Producto = e.Cve_Producto
-            WHERE e.Existencia > 0 AND e.Status='AC' AND e.Cve_Sucursal <> 99
-              AND sold.Cve_Producto IS NULL
+        # Obtener productos vendidos en 30d desde ACUMULADOS
+        vendidos_acu = query_acu(f"""
+            SELECT DISTINCT Cve_Producto
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) >= DATEADD(DAY,-30,{h_inv})
         """)
+        vendidos_set = {r["Cve_Producto"] for r in vendidos_acu}
+        # Contar productos con stock que no están en vendidos
+        all_stock = query("""
+            SELECT DISTINCT e.Cve_Producto
+            FROM IN_Existencias_Alm e
+            WHERE e.Existencia > 0 AND e.Status='AC' AND e.Cve_Sucursal <> 99
+        """)
+        sin_mov_count = sum(1 for r in all_stock if r["Cve_Producto"] not in vendidos_set)
+        sin_mov = [{"total": sin_mov_count}]
         sin_movimiento = int((sin_mov[0] if sin_mov else {}).get("total") or 0)
 
         # KPIs de rotacion agregados
@@ -748,22 +738,19 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
             "datos":  rows,
         }
 
-    # ── VENTAS PRODUCTO (detalle remisiones + facturas) ──────────────────────
+    # ── VENTAS PRODUCTO (ACUMULADOS) ────────────────────────────────────────
     elif tipo == "ventas_producto":
-        filtro, _, label = _filtros_periodo(modo, "vd.Fecha_Documento", fi, ff)
-        like_sql = f"AND p.Descripcion LIKE '%{producto.upper()}%'" if producto else ""
-        rows = query(f"""
-            SELECT s.Nombre AS label,
-                   ISNULL(SUM(vd.Cantidad * vd.Precio), 0) AS valor,
-                   SUM(vd.Cantidad) AS unidades
-            FROM {_ventas_detalle_union("vd")}
-            JOIN IM_Productos_Gral p ON p.Cve_Producto = vd.Cve_Producto
-            JOIN GN_Sucursales s ON s.Cve_Sucursal = vd.Cve_Sucursal
-            WHERE vd.Precio > 1
-              AND p.Descripcion NOT LIKE '%GRATIS%'
+        fa, _ = _acu_filtros(modo, fi, ff)
+        label = _acu_label(modo)
+        like_sql = f"AND Descripcion LIKE '%{producto.upper()}%'" if producto else ""
+        rows = query_acu(f"""
+            SELECT Nombre AS label,
+                   ISNULL(SUM(VentaNeta), 0) AS valor,
+                   SUM(VentaUnidades) AS unidades
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE {fa}
               {like_sql}
-              AND {filtro}
-            GROUP BY s.Cve_Sucursal, s.Nombre
+            GROUP BY Cve_Sucursal, Nombre
             ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)

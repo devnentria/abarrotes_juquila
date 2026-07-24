@@ -23,7 +23,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from shared.database import query, hoy
+from shared.database import query, query_acu, hoy
 
 from .datos_helpers import _proyectar, _holt_winters_forecast, MESES_ES
 
@@ -98,43 +98,35 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
     _es_mes_actual = (_anio == hoy_d.year and _mes == hoy_d.month)
     _dia_corte     = hoy_d.day if _es_mes_actual else None
 
-    # ── 1. Top 20 productos del período ──────────────────────────────────────
-    date_filter = (f"AND YEAR(c.Fecha_Documento) = {_anio} "
-                   f"AND MONTH(c.Fecha_Documento) = {_mes}")
-    union_src = _union_detalle(extra_where=date_filter)
-
+    # ── 1. Top 20 productos del período (ACUMULADOS) ───────────────────────
+    _filtro_dia = f"AND DAY(Fecha) <= {_dia_corte}" if _dia_corte else ""
     try:
-        top_rows = query(f"""
+        top_rows = query_acu(f"""
             SELECT TOP 20
-                v.Cve_Producto,
-                MIN(pg.Descripcion) AS descripcion,
-                SUM(v.Cantidad)     AS piezas,
-                SUM(v.Importe_Neto) AS importe
-            FROM {union_src} v
-            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = v.Cve_Producto
-            WHERE pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
-            GROUP BY v.Cve_Producto
-            ORDER BY SUM(v.Importe_Neto) DESC
+                Cve_Producto,
+                Descripcion                AS descripcion,
+                SUM(VentaUnidades)         AS piezas,
+                SUM(VentaNeta)             AS importe
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE Año = {_anio} AND Mes = {_mes}
+            GROUP BY Cve_Producto, Descripcion
+            ORDER BY SUM(VentaNeta) DESC
         """)
     except Exception as _e:
         raise HTTPException(500, f"productos top_rows error: {_e}")
 
-    # Importe del mismo producto el mes anterior (para variación)
-    # Si es el mes actual, limitar al mismo día del mes anterior para comparar igual vs igual
-    _filtro_dia_ant = f"AND DAY(c.Fecha_Documento) <= {_dia_corte}" if _dia_corte else ""
-    date_filter_ant = (f"AND YEAR(c.Fecha_Documento) = {_anio_ant} "
-                       f"AND MONTH(c.Fecha_Documento) = {_mes_ant} "
-                       f"{_filtro_dia_ant}")
-    union_src_ant = _union_detalle(extra_where=date_filter_ant)
-
-    cve_list = ','.join(str(r['Cve_Producto']) for r in top_rows) or '0'
+    # Importe del mes anterior (para variación)
+    _filtro_dia_ant = f"AND DAY(Fecha) <= {_dia_corte}" if _dia_corte else ""
+    cve_list = ",".join(f"'{r['Cve_Producto']}'" for r in top_rows) or "'0'"
     try:
-        ant_rows = query(f"""
-            SELECT v.Cve_Producto,
-                   SUM(v.Importe_Neto) AS importe_ant
-            FROM {union_src_ant} v
-            WHERE v.Cve_Producto IN ({cve_list})
-            GROUP BY v.Cve_Producto
+        ant_rows = query_acu(f"""
+            SELECT Cve_Producto,
+                   SUM(VentaNeta) AS importe_ant
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE Año = {_anio_ant} AND Mes = {_mes_ant}
+              AND Cve_Producto IN ({cve_list})
+              {_filtro_dia_ant}
+            GROUP BY Cve_Producto
         """)
         ant_map = {r["Cve_Producto"]: float(r["importe_ant"] or 0) for r in ant_rows}
     except Exception:
@@ -157,20 +149,16 @@ def productos_dashboard(anio: Optional[int] = None, mes: Optional[int] = None):
             "pct_total":    round(imp / total_importe * 100, 1) if total_importe > 0 else 0,
         })
 
-    # ── 2. Lista de productos para el selector de predicción ─────────────────
-    # Todos los productos con ventas en los últimos 6 meses (activos)
-    date_filter_6m = f"AND c.Fecha_Documento >= DATEADD(MONTH, -6, {hoy()})"
-    union_src_6m = _union_detalle(extra_where=date_filter_6m)
-
+    # ── 2. Lista de productos para el selector de predicción (ACUMULADOS) ──
+    h = f"CAST({hoy()} AS DATE)"
     try:
-        lista_rows = query(f"""
-            SELECT v.Cve_Producto,
-                   MIN(pg.Descripcion) AS descripcion
-            FROM {union_src_6m} v
-            INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = v.Cve_Producto
-            WHERE pg.Descripcion NOT LIKE 'ENVIO ESPECIAL%'
-            GROUP BY v.Cve_Producto
-            ORDER BY MIN(pg.Descripcion)
+        lista_rows = query_acu(f"""
+            SELECT Cve_Producto,
+                   Descripcion AS descripcion
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) >= DATEADD(MONTH, -6, {h})
+            GROUP BY Cve_Producto, Descripcion
+            ORDER BY Descripcion
         """)
         lista_productos = [
             {"cve_producto": r["Cve_Producto"], "descripcion": (r["descripcion"] or "").strip()}
@@ -216,25 +204,21 @@ def productos_prediccion(cve_producto: int):
         raise HTTPException(500, f"prediccion-nombre: {e}")
 
     hoy_d = _date.today()
-    fecha_corte_str = f"{hoy_d.year - 3}-{hoy_d.month:02d}-01"
-
-    date_filter_hist = f"AND CONVERT(DATE, c.Fecha_Documento) >= '{fecha_corte_str}'"
-    union_src_hist = _union_detalle(extra_where=date_filter_hist)
 
     try:
-        hist_rows = query(f"""
+        hist_rows = query_acu(f"""
             SELECT
-                YEAR(v.Fecha_Documento)  AS anio,
-                MONTH(v.Fecha_Documento) AS mes,
-                v.Cve_Sucursal,
-                MIN(ISNULL(s.Nombre, CAST(v.Cve_Sucursal AS VARCHAR))) AS sucursal,
-                SUM(v.Cantidad) AS piezas
-            FROM {union_src_hist} v
-            LEFT JOIN GN_Sucursales s ON s.Cve_Sucursal = v.Cve_Sucursal
-            WHERE v.Cve_Producto = {cve_producto}
-            GROUP BY YEAR(v.Fecha_Documento), MONTH(v.Fecha_Documento), v.Cve_Sucursal
-            ORDER BY anio, mes
-        """)
+                Año                AS anio,
+                Mes                AS mes,
+                Cve_Sucursal,
+                Nombre             AS sucursal,
+                SUM(VentaUnidades) AS piezas
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE Cve_Producto = ?
+              AND Fecha >= DATEADD(YEAR, -3, GETDATE())
+            GROUP BY Año, Mes, Cve_Sucursal, Nombre
+            ORDER BY Año, Mes
+        """, (str(cve_producto),))
     except Exception as e:
         raise HTTPException(500, f"prediccion-hist: {e}")
 

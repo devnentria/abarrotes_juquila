@@ -23,7 +23,7 @@ Uso:
 """
 import pyodbc
 
-from shared.config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, TEST_DATE
+from shared.config import DB_HOST, DB_PORT, DB_NAME, DB_NAME_ACU, DB_USER, DB_PASSWORD, TEST_DATE
 from shared.serializers import serialize_row
 
 
@@ -66,27 +66,34 @@ def hoy() -> str:
 
 
 def get_connection() -> pyodbc.Connection:
-    """Abre y devuelve una conexión nueva. Siempre cerrarla después de usar."""
+    """Abre y devuelve una conexión nueva a la BD ERP. Siempre cerrarla después de usar."""
     return pyodbc.connect(_CONNECTION_STRING)
 
 
-def query(sql: str, params: tuple = (), timeout: int = 60) -> list[dict]:
-    """
-    Ejecuta un SELECT y devuelve una lista de dicts listos para JSON.
+# ── Conexión a ACUMULADOS (datos pre-agregados, consultas rápidas) ───────────
+_base_acu = (
+    f"DRIVER={{{_driver}}};"
+    f"SERVER={DB_HOST},{DB_PORT};"
+    f"DATABASE={DB_NAME_ACU};"
+    "TrustServerCertificate=yes;"
+)
+if DB_USER:
+    _CONNECTION_STRING_ACU = _base_acu + f"UID={DB_USER};PWD={DB_PASSWORD};"
+else:
+    _CONNECTION_STRING_ACU = _base_acu + "Trusted_Connection=yes;"
 
-    Args:
-        sql:     Consulta SQL con ? como placeholder (nunca f-strings con datos externos).
-        params:  Tupla de valores para los placeholders.
-        timeout: Segundos máximos de ejecución vía SET QUERY_GOVERNOR (default 60). 0 = sin límite.
 
-    Returns:
-        Lista de dicts. Lista vacía si no hay resultados.
-    """
-    conn = get_connection()
+def get_connection_acu() -> pyodbc.Connection:
+    """Abre y devuelve una conexión nueva a la BD ACUMULADOS."""
+    return pyodbc.connect(_CONNECTION_STRING_ACU)
+
+
+def _run_query(conn_string: str, sql: str, params: tuple, timeout: int) -> list[dict]:
+    """Ejecuta un SELECT genérico y devuelve lista de dicts."""
+    conn = pyodbc.connect(conn_string)
     cursor = conn.cursor()
     try:
         if timeout > 0:
-            # Limita el tiempo máximo de ejecución en SQL Server (en segundos)
             cursor.execute(f"SET LOCK_TIMEOUT {timeout * 1000}")
         cursor.execute(sql, params)
         columns = [col[0] for col in cursor.description]
@@ -98,3 +105,26 @@ def query(sql: str, params: tuple = (), timeout: int = 60) -> list[dict]:
         cursor.close()
         conn.close()
     return rows
+
+
+def query(sql: str, params: tuple = (), timeout: int = 60) -> list[dict]:
+    """
+    Ejecuta un SELECT en la BD ERP y devuelve una lista de dicts listos para JSON.
+
+    Args:
+        sql:     Consulta SQL con ? como placeholder (nunca f-strings con datos externos).
+        params:  Tupla de valores para los placeholders.
+        timeout: Segundos máximos de ejecución (default 60). 0 = sin límite.
+
+    Returns:
+        Lista de dicts. Lista vacía si no hay resultados.
+    """
+    return _run_query(_CONNECTION_STRING, sql, params, timeout)
+
+
+def query_acu(sql: str, params: tuple = (), timeout: int = 60) -> list[dict]:
+    """
+    Ejecuta un SELECT en la BD ACUMULADOS (datos pre-agregados).
+    Misma interfaz que query() pero conecta a ACUMULADOS.
+    """
+    return _run_query(_CONNECTION_STRING_ACU, sql, params, timeout)

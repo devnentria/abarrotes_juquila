@@ -46,7 +46,8 @@ from pwa_asistente.agente.especialistas import (
     ventas, inventario, pedidos, medicos, clientes, mixto,
 )
 try:
-    from studio_dashboards.routers.datos import _clasificar, _fetch_tipo, _narrar
+    from studio_dashboards.routers.datos_helpers import _clasificar, _narrar
+    from studio_dashboards.routers.datos_ia import _fetch_tipo
     _DASHBOARD_FN_OK = True
 except Exception as _e:
     print(f"[studio-chat] No se pudo importar funciones de dashboard: {_e}", flush=True)

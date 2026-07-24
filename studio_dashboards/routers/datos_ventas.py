@@ -28,7 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from shared.auth import get_current_user
-from shared.database import query, hoy
+from shared.database import query, query_acu, hoy
 
 from .datos_helpers import _filtros_periodo
 
@@ -68,56 +68,59 @@ def _ventas_union(date_filter: str, *, campo_fecha: str = "Fecha_Documento",
     )"""
 
 
-# ── Ventas por sucursal ───────────────────────────────────────────────────────
+# ── Helper: filtros de fecha para ACUMULADOS ─────────────────────────────────
+
+def _acu_filtros(modo: str, fi: str = None, ff: str = None):
+    """
+    Devuelve (filtro_actual, filtro_anterior) para queries a ACUMULADOS.
+    La columna de fecha es 'Fecha' (datetime).
+    """
+    h = f"CAST({hoy()} AS DATE)"
+    if modo == "custom" and fi and ff:
+        dias = f"DATEDIFF(DAY,'{fi}','{ff}')"
+        actual   = f"CAST(Fecha AS DATE) >= '{fi}' AND CAST(Fecha AS DATE) <= '{ff}'"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-({dias}+1),'{fi}') "
+                    f"AND CAST(Fecha AS DATE) < '{fi}'")
+    elif modo == "hoy":
+        actual   = f"CAST(Fecha AS DATE) = {h}"
+        anterior = f"CAST(Fecha AS DATE) = DATEADD(DAY,-1,{h})"
+    elif modo == "15d":
+        actual   = f"CAST(Fecha AS DATE) >= DATEADD(DAY,-14,{h})"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h}) "
+                    f"AND CAST(Fecha AS DATE) < DATEADD(DAY,-14,{h})")
+    elif modo == "mes":
+        actual   = (f"YEAR(Fecha)=YEAR({hoy()}) AND MONTH(Fecha)=MONTH({hoy()}) "
+                    f"AND CAST(Fecha AS DATE) <= {h}")
+        anterior = (f"YEAR(Fecha)=YEAR(DATEADD(MONTH,-1,{hoy()})) "
+                    f"AND MONTH(Fecha)=MONTH(DATEADD(MONTH,-1,{hoy()})) "
+                    f"AND DAY(Fecha)<=DAY({hoy()})")
+    else:  # 30d
+        actual   = f"CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h})"
+        anterior = (f"CAST(Fecha AS DATE) >= DATEADD(DAY,-59,{h}) "
+                    f"AND CAST(Fecha AS DATE) < DATEADD(DAY,-29,{h})")
+    return actual, anterior
+
+
+# ── Ventas por sucursal (ACUMULADOS) ─────────────────────────────────────────
 
 @router.get("/ventas")
 def ventas_sucursales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Query(None)):
     """
     Ventas por sucursal para los dashboards del Studio.
-
-    Args:
-        modo: 'hoy' | '15d' | '30d' | 'mes' | 'custom'
-        fi:   fecha inicio ISO (solo cuando modo='custom')
-        ff:   fecha fin ISO (solo cuando modo='custom')
-
-    Returns:
-        JSON con lista de sucursales, ventas, facturas y variación porcentual.
+    Fuente: ACUMULADOS.ACU_VTA_DEV_DIARIA_FAM_PROD (pre-agregado por día).
     """
     if fi and ff: modo = "custom"
-    filtro_actual, filtro_anterior, _ = _filtros_periodo(modo, "t.Fecha_Documento", fi, ff)
+    fa, fb = _acu_filtros(modo, fi, ff)
 
-    # Construir filtro de fecha amplio para las ramas internas del UNION
-    # (debe cubrir tanto periodo actual como anterior)
-    h = f"CAST({hoy()} AS DATE)"
-    if modo == "custom" and fi and ff:
-        # El filtro_anterior calcula el rango previo; abarcar todo desde el inicio del anterior
-        inner_date = (f"CAST(Fecha_Documento AS DATE) >= "
-                      f"DATEADD(DAY,-(DATEDIFF(DAY,'{fi}','{ff}')+1),'{fi}') "
-                      f"AND CAST(Fecha_Documento AS DATE) <= '{ff}'")
-    elif modo == "hoy":
-        inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-1,{h})"
-    elif modo == "15d":
-        inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-15,DATEADD(MONTH,-1,{h}))"
-    elif modo == "mes":
-        inner_date = (f"CAST(Fecha_Documento AS DATE) >= "
-                      f"DATEFROMPARTS(YEAR(DATEADD(MONTH,-1,{hoy()})),MONTH(DATEADD(MONTH,-1,{hoy()})),1)")
-    else:  # 30d
-        inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{h})"
-
-    union = _ventas_union(inner_date)
-
-    rows = query(f"""
+    rows = query_acu(f"""
         SELECT
-            s.Cve_Sucursal                                                     AS cve_sucursal,
-            s.Nombre                                                           AS sucursal,
-            ISNULL(SUM(CASE WHEN {filtro_actual}   THEN t.Monto END), 0)      AS ventas_actual,
-            ISNULL(SUM(CASE WHEN {filtro_anterior} THEN t.Monto END), 0)      AS ventas_anterior,
-            COUNT(DISTINCT CASE WHEN {filtro_actual} THEN
-                CAST(t.Canal AS VARCHAR(4)) + CAST(t.Cve_Folio AS VARCHAR(20)) END) AS facturas
-        FROM GN_Sucursales s
-        LEFT JOIN {union} t ON t.Cve_Sucursal = s.Cve_Sucursal
-        WHERE s.Cve_Sucursal <> 99
-        GROUP BY s.Cve_Sucursal, s.Nombre
+            Cve_Sucursal                                              AS cve_sucursal,
+            Nombre                                                    AS sucursal,
+            ISNULL(SUM(CASE WHEN {fa} THEN VentaNeta END), 0)        AS ventas_actual,
+            ISNULL(SUM(CASE WHEN {fb} THEN VentaNeta END), 0)        AS ventas_anterior,
+            ISNULL(SUM(CASE WHEN {fa} THEN VentaUnidades END), 0)    AS facturas
+        FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+        GROUP BY Cve_Sucursal, Nombre
         ORDER BY ventas_actual DESC
     """)
 
@@ -172,36 +175,18 @@ def pedidos_sucursales():
 def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Query(None)):
     """
     Totales globales para las tarjetas KPI del Studio.
-
-    Args:
-        modo: 'hoy' | '15d' | '30d' | 'mes' | 'custom'
-        fi:   fecha inicio ISO (solo cuando modo='custom')
-        ff:   fecha fin ISO (solo cuando modo='custom')
-
-    Returns:
-        JSON con ventas_total, facturas_total, pedidos_activos, sucursales_activas.
+    Fuente: ACUMULADOS (ventas) + ERP (órdenes de compra).
     """
     if fi and ff: modo = "custom"
-    filtro, _, _ = _filtros_periodo(modo, "Fecha_Documento", fi, ff)
+    fa, _ = _acu_filtros(modo, fi, ff)
 
-    # Filtro de fecha para las ramas internas del UNION
-    inner_date = filtro.replace("CAST(Fecha_Documento AS DATE)", "CAST(Fecha_Documento AS DATE)")
-
-    ventas_row = query(f"""
-        SELECT COUNT(*) AS facturas_total, ISNULL(SUM(Monto), 0) AS ventas_total
-        FROM (
-            SELECT Importe_Neto AS Monto, Fecha_Documento
-            FROM FT_Remisiones_C
-            WHERE Status='AC' AND Cve_Movimiento='VTA'
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-            UNION ALL
-            SELECT Importe_Total AS Monto, Fecha_Documento
-            FROM FT_Facturas_C
-            WHERE Status='AC' AND Cve_Movimiento IN ('FM','FP')
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-        ) AS t
+    ventas_row = query_acu(f"""
+        SELECT ISNULL(SUM(VentaNeta), 0) AS ventas_total,
+               ISNULL(SUM(VentaUnidades), 0) AS unidades_total,
+               COUNT(DISTINCT Cve_Sucursal) AS sucursales_activas,
+               COUNT(DISTINCT Cve_Producto) AS productos_vendidos
+        FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+        WHERE {fa}
     """)
 
     try:
@@ -214,54 +199,24 @@ def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Que
     except Exception:
         pedidos_row = [{"pedidos_activos": 0}]
 
-    sucursales_row = query(f"""
-        SELECT COUNT(DISTINCT Cve_Sucursal) AS total FROM (
-            SELECT Cve_Sucursal, Fecha_Documento
-            FROM FT_Remisiones_C
-            WHERE Status='AC' AND Cve_Movimiento='VTA'
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-            UNION ALL
-            SELECT Cve_Sucursal, Fecha_Documento
-            FROM FT_Facturas_C
-            WHERE Status='AC' AND Cve_Movimiento IN ('FM','FP')
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-        ) t
+    top_suc_row = query_acu(f"""
+        SELECT TOP 1 Nombre AS nombre, SUM(VentaNeta) AS total
+        FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+        WHERE {fa}
+        GROUP BY Cve_Sucursal, Nombre ORDER BY total DESC
     """)
 
     v = ventas_row[0] if ventas_row else {}
     ventas_total   = float(v.get("ventas_total") or 0)
-    facturas_total = int(v.get("facturas_total") or 0)
-    ticket_promedio = round(ventas_total / facturas_total, 2) if facturas_total > 0 else 0
-
-    # Top sucursal del período
-    top_suc_row = query(f"""
-        SELECT TOP 1 s.Nombre AS nombre, SUM(t.Monto) AS total
-        FROM (
-            SELECT Cve_Sucursal, Importe_Neto AS Monto, Fecha_Documento
-            FROM FT_Remisiones_C
-            WHERE Status='AC' AND Cve_Movimiento='VTA'
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-            UNION ALL
-            SELECT Cve_Sucursal, Importe_Total AS Monto, Fecha_Documento
-            FROM FT_Facturas_C
-            WHERE Status='AC' AND Cve_Movimiento IN ('FM','FP')
-              AND Cve_Sucursal <> 99
-              AND {filtro}
-        ) t
-        INNER JOIN GN_Sucursales s ON s.Cve_Sucursal=t.Cve_Sucursal
-        GROUP BY t.Cve_Sucursal, s.Nombre ORDER BY total DESC
-    """)
-    top_sucursal = (top_suc_row[0].get("nombre") or "—") if top_suc_row else "—"
+    unidades_total = int(v.get("unidades_total") or 0)
+    top_sucursal   = (top_suc_row[0].get("nombre") or "—") if top_suc_row else "—"
 
     return JSONResponse({
         "ventas_total":       ventas_total,
-        "facturas_total":     facturas_total,
+        "facturas_total":     unidades_total,
         "pedidos_activos":    int((pedidos_row[0] or {}).get("pedidos_activos") or 0),
-        "sucursales_activas": int((sucursales_row[0] or {}).get("total") or 0),
-        "ticket_promedio":    ticket_promedio,
+        "sucursales_activas": int(v.get("sucursales_activas") or 0),
+        "ticket_promedio":    0,
         "top_sucursal":       top_sucursal,
         "modo":               modo,
     })
@@ -273,25 +228,18 @@ def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Que
 def ventas_hoy():
     """
     Ventas del día actual por sucursal.
-
-    Fuente: FT_Remisiones_C (Importe_Neto) + FT_Facturas_C (Importe_Total).
-
-    Returns:
-        JSON con lista de sucursales y su total de ventas de hoy, más el total global.
+    Fuente: ACUMULADOS.ACU_VTA_DEV_DIARIA_FAM_PROD.
     """
-    hoy_filter = f"CAST(Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)"
-    union = _ventas_union(hoy_filter)
-
-    rows = query(f"""
+    h = f"CAST({hoy()} AS DATE)"
+    rows = query_acu(f"""
         SELECT
-            s.Cve_Sucursal                         AS cve_sucursal,
-            s.Nombre                               AS sucursal,
-            COUNT(*)                               AS pedidos_hoy,
-            ISNULL(SUM(t.Monto), 0)                AS ventas_hoy
-        FROM GN_Sucursales s
-        LEFT JOIN {union} t ON t.Cve_Sucursal = s.Cve_Sucursal
-        WHERE s.Cve_Sucursal <> 99
-        GROUP BY s.Cve_Sucursal, s.Nombre
+            Cve_Sucursal                           AS cve_sucursal,
+            Nombre                                 AS sucursal,
+            ISNULL(SUM(VentaUnidades), 0)          AS pedidos_hoy,
+            ISNULL(SUM(VentaNeta), 0)              AS ventas_hoy
+        FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+        WHERE CAST(Fecha AS DATE) = {h}
+        GROUP BY Cve_Sucursal, Nombre
         ORDER BY ventas_hoy DESC
     """)
 
@@ -317,34 +265,13 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
     if fi and ff: modo = "custom"
 
     if tipo == "ventas_sucursal":
-        fa, fb, _ = _filtros_periodo(modo, "t.Fecha_Documento", fi, ff)
-
-        # Calcular inner_date que cubra ambos períodos
-        h = f"CAST({hoy()} AS DATE)"
-        if modo == "custom" and fi and ff:
-            inner_date = (f"CAST(Fecha_Documento AS DATE) >= "
-                          f"DATEADD(DAY,-(DATEDIFF(DAY,'{fi}','{ff}')+1),'{fi}') "
-                          f"AND CAST(Fecha_Documento AS DATE) <= '{ff}'")
-        elif modo == "hoy":
-            inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-1,{h})"
-        elif modo == "15d":
-            inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-15,DATEADD(MONTH,-1,{h}))"
-        elif modo == "mes":
-            inner_date = (f"CAST(Fecha_Documento AS DATE) >= "
-                          f"DATEFROMPARTS(YEAR(DATEADD(MONTH,-1,{hoy()})),MONTH(DATEADD(MONTH,-1,{hoy()})),1)")
-        else:  # 30d
-            inner_date = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-60,{h})"
-
-        union = _ventas_union(inner_date)
-
-        rows = query(f"""
-            SELECT s.Nombre AS label,
-                   ISNULL(SUM(CASE WHEN {fa} THEN t.Monto END),0) AS actual,
-                   ISNULL(SUM(CASE WHEN {fb} THEN t.Monto END),0) AS anterior
-            FROM GN_Sucursales s
-            LEFT JOIN {union} t ON t.Cve_Sucursal=s.Cve_Sucursal
-            WHERE s.Cve_Sucursal<>99
-            GROUP BY s.Cve_Sucursal, s.Nombre ORDER BY actual DESC
+        fa, fb = _acu_filtros(modo, fi, ff)
+        rows = query_acu(f"""
+            SELECT Nombre AS label,
+                   ISNULL(SUM(CASE WHEN {fa} THEN VentaNeta END),0) AS actual,
+                   ISNULL(SUM(CASE WHEN {fb} THEN VentaNeta END),0) AS anterior
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            GROUP BY Cve_Sucursal, Nombre ORDER BY actual DESC
         """)
         return JSONResponse({"tipo": tipo, "modo": modo,
                              "titulo": f"Ventas por sucursal ({'últ. 30 días' if modo=='30d' else 'mes actual'})",
@@ -369,17 +296,14 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
                              "total": total, "datos": rows})
 
     elif tipo == "ventas_hoy":
-        hoy_filter = f"CAST(Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)"
-        union = _ventas_union(hoy_filter)
-
-        rows = query(f"""
-            SELECT s.Nombre AS label,
-                   COUNT(*) AS pedidos,
-                   ISNULL(SUM(t.Monto),0) AS valor
-            FROM GN_Sucursales s
-            LEFT JOIN {union} t ON t.Cve_Sucursal=s.Cve_Sucursal
-            WHERE s.Cve_Sucursal<>99
-            GROUP BY s.Cve_Sucursal, s.Nombre ORDER BY valor DESC
+        h = f"CAST({hoy()} AS DATE)"
+        rows = query_acu(f"""
+            SELECT Nombre AS label,
+                   ISNULL(SUM(VentaUnidades),0) AS pedidos,
+                   ISNULL(SUM(VentaNeta),0) AS valor
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) = {h}
+            GROUP BY Cve_Sucursal, Nombre ORDER BY valor DESC
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         return JSONResponse({"tipo": tipo, "titulo": "Ventas del día",
@@ -407,54 +331,33 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
         try:
             _MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                       "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-            date_filter = f"CAST(Fecha_Documento AS DATE) >= DATEADD(MONTH,-5,{hoy_fecha})"
-            union = _ventas_union(date_filter)
-
-            daily = query(f"""
-                SELECT fecha, sucursal, SUM(Monto) AS valor FROM (
-                    SELECT CAST(t.Fecha_Documento AS DATE) AS fecha,
-                           s.Nombre AS sucursal,
-                           t.Monto
-                    FROM {union} t
-                    INNER JOIN GN_Sucursales s ON s.Cve_Sucursal=t.Cve_Sucursal
-                    WHERE t.Cve_Sucursal <> 99
-                ) sub GROUP BY fecha, sucursal ORDER BY fecha
+            h = f"CAST({hoy()} AS DATE)"
+            rows = query_acu(f"""
+                SELECT Año AS anio, Mes AS mes, Nombre AS sucursal,
+                       SUM(VentaNeta) AS valor
+                FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+                WHERE CAST(Fecha AS DATE) >= DATEADD(MONTH,-5,{h})
+                GROUP BY Año, Mes, Nombre
+                ORDER BY Año, Mes, Nombre
             """)
-            # Agregación por (mes, sucursal) en Python
-            monthly: dict = defaultdict(lambda: defaultdict(float))
-            for r in daily:
-                f = r.get("fecha")
-                if f is None:
-                    continue
-                k = (f.year, f.month) if hasattr(f, "year") else (
-                    _dt.strptime(str(f)[:10], "%Y-%m-%d").year,
-                    _dt.strptime(str(f)[:10], "%Y-%m-%d").month,
-                )
-                suc = r.get("sucursal") or "—"
-                monthly[k][suc] += float(r.get("valor") or 0)
-            rows = []
-            for k, suc_dict in sorted(monthly.items()):
-                for suc, val in sorted(suc_dict.items()):
-                    rows.append({
-                        "anio": k[0], "mes": k[1], "mes_nombre": _MESES[k[1]],
-                        "sucursal": suc, "valor": round(val, 2),
-                    })
+            for r in rows:
+                m = int(r.get("mes") or 0)
+                r["mes_nombre"] = _MESES[m] if 0 < m <= 12 else "?"
+                r["valor"] = round(float(r.get("valor") or 0), 2)
         except Exception:
             rows = []
         return JSONResponse({"tipo": tipo, "titulo": "Ventas por sucursal — últimos 6 meses", "datos": rows})
 
     # ── Ventas por día (últimos 30 días) ─────────────────────────────────────
     elif tipo == "ventas_diario":
-        date_filter = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-29,{hoy_fecha})"
-        union = _ventas_union(date_filter)
-
-        rows = query(f"""
-            SELECT CAST(t.Fecha_Documento AS DATE) AS fecha,
-                   SUM(t.Monto) AS valor,
-                   COUNT(*) AS pedidos
-            FROM {union} t
-            WHERE t.Cve_Sucursal <> 99
-            GROUP BY CAST(t.Fecha_Documento AS DATE)
+        h = f"CAST({hoy()} AS DATE)"
+        rows = query_acu(f"""
+            SELECT CAST(Fecha AS DATE) AS fecha,
+                   SUM(VentaNeta) AS valor,
+                   SUM(VentaUnidades) AS pedidos
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE CAST(Fecha AS DATE) >= DATEADD(DAY,-29,{h})
+            GROUP BY CAST(Fecha AS DATE)
             ORDER BY fecha
         """)
         total = sum(float(r.get("valor") or 0) for r in rows)
@@ -466,34 +369,22 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
         try:
             _MESES = ["","Enero","Febrero","Marzo","Abril","Mayo","Junio",
                       "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-            date_filter = f"CAST(Fecha_Documento AS DATE) >= DATEADD(MONTH,-23,{hoy_fecha})"
-            union = _ventas_union(date_filter)
-
-            daily = query(f"""
-                SELECT CAST(t.Fecha_Documento AS DATE) AS fecha,
-                       SUM(t.Monto) AS valor,
-                       COUNT(*) AS pedidos
-                FROM {union} t
-                WHERE t.Cve_Sucursal <> 99
-                GROUP BY CAST(t.Fecha_Documento AS DATE)
-                ORDER BY fecha
+            h = f"CAST({hoy()} AS DATE)"
+            rows = query_acu(f"""
+                SELECT Año AS anio, Mes AS mes,
+                       SUM(VentaNeta) AS valor,
+                       SUM(VentaUnidades) AS pedidos
+                FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+                WHERE CAST(Fecha AS DATE) >= DATEADD(MONTH,-23,{h})
+                GROUP BY Año, Mes
+                ORDER BY Año, Mes
             """)
-            monthly: dict = defaultdict(lambda: {"valor": 0.0, "pedidos": 0})
-            for r in daily:
-                f = r.get("fecha")
-                if f is None:
-                    continue
-                k = (f.year, f.month) if hasattr(f, "year") else (
-                    _dt.strptime(str(f)[:10], "%Y-%m-%d").year,
-                    _dt.strptime(str(f)[:10], "%Y-%m-%d").month,
-                )
-                monthly[k]["valor"]   += float(r.get("valor") or 0)
-                monthly[k]["pedidos"] += int(r.get("pedidos") or 0)
-            rows = [
-                {"anio": k[0], "mes": k[1], "mes_nombre": _MESES[k[1]],
-                 "valor": round(v["valor"], 2), "pedidos": v["pedidos"]}
-                for k, v in sorted(monthly.items()) if v["valor"] > 0
-            ]
+            for r in rows:
+                m = int(r.get("mes") or 0)
+                r["mes_nombre"] = _MESES[m] if 0 < m <= 12 else "?"
+                r["valor"] = round(float(r.get("valor") or 0), 2)
+                r["pedidos"] = int(r.get("pedidos") or 0)
+            rows = [r for r in rows if r["valor"] > 0]
         except Exception:
             rows = []
         total = sum(float(r.get("valor") or 0) for r in rows)
@@ -502,47 +393,17 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
 
     # ── Top productos ─────────────────────────────────────────────────────────
     elif tipo == "top_productos":
-        if modo == "30d":
-            filtro = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-30,{hoy_fecha})"
-        elif modo == "15d":
-            filtro = f"CAST(Fecha_Documento AS DATE) >= DATEADD(DAY,-15,{hoy_fecha})"
-        elif modo == "hoy":
-            filtro = f"CAST(Fecha_Documento AS DATE) = CAST({hoy()} AS DATE)"
-        elif modo == "custom" and fi and ff:
-            filtro = f"CAST(Fecha_Documento AS DATE) >= '{fi}' AND CAST(Fecha_Documento AS DATE) <= '{ff}'"
-        else:
-            filtro = (f"YEAR(Fecha_Documento)=YEAR({hoy()}) "
-                      f"AND MONTH(Fecha_Documento)=MONTH({hoy()})")
-        try:
-            # Product-level: need detail tables
-            rows = query(f"""
-                SELECT TOP 10
-                    MIN(pg.Descripcion)      AS label,
-                    SUM(d.Importe_Neto)       AS valor,
-                    SUM(d.Cantidad)           AS unidades
-                FROM (
-                    SELECT Cve_Sucursal, Cve_Folio, Cve_Producto, Cantidad, Importe_Neto, Fecha_Documento
-                    FROM FT_Remisiones_D rd
-                    INNER JOIN FT_Remisiones_C rc
-                        ON rc.Cve_Folio=rd.Cve_Folio AND rc.Cve_Sucursal=rd.Cve_Sucursal
-                    WHERE rc.Status='AC' AND rc.Cve_Movimiento='VTA'
-                      AND rc.Cve_Sucursal <> 99
-                      AND {filtro.replace('Fecha_Documento','rc.Fecha_Documento')}
-                    UNION ALL
-                    SELECT fd.Cve_Sucursal, fd.Cve_Folio, fd.Cve_Producto, fd.Cantidad, fd.Importe_Neto, fc.Fecha_Documento
-                    FROM FT_Facturas_D fd
-                    INNER JOIN FT_Facturas_C fc
-                        ON fc.Cve_Folio=fd.Cve_Folio AND fc.Cve_Sucursal=fd.Cve_Sucursal
-                    WHERE fc.Status='AC' AND fc.Cve_Movimiento IN ('FM','FP')
-                      AND fc.Cve_Sucursal <> 99
-                      AND {filtro.replace('Fecha_Documento','fc.Fecha_Documento')}
-                ) d
-                INNER JOIN IM_Productos_Gral pg ON pg.Cve_Producto = d.Cve_Producto
-                GROUP BY d.Cve_Producto
-                ORDER BY SUM(d.Importe_Neto) DESC
-            """)
-        except Exception as _e:
-            raise HTTPException(500, f"top_productos SQL error: {_e}")
+        fa, _ = _acu_filtros(modo, fi, ff)
+        rows = query_acu(f"""
+            SELECT TOP 10
+                Descripcion              AS label,
+                SUM(VentaNeta)           AS valor,
+                SUM(VentaUnidades)       AS unidades
+            FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+            WHERE {fa}
+            GROUP BY Descripcion
+            ORDER BY SUM(VentaNeta) DESC
+        """)
         total = sum(float(r.get("valor") or 0) for r in rows)
         return JSONResponse({"tipo": tipo, "modo": modo,
                              "titulo": f"Top productos ({'últ. 30 días' if modo=='30d' else 'mes actual'})",
