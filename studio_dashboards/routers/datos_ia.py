@@ -308,24 +308,24 @@ def _fetch_tipo(tipo: str, modo: str, fi: str = None, ff: str = None, producto: 
     elif tipo == "pedidos_activos":
         rows = query(f"""
             SELECT s.Nombre AS label,
-                   COUNT(CASE WHEN o.Status = 'AC' THEN 1 END) AS valor,
-                   ISNULL(SUM(CASE WHEN o.Status = 'AC' THEN o.Importe_Neto END), 0)
+                   COUNT(CASE WHEN o.Status IN ('AU','RP') THEN 1 END) AS valor,
+                   ISNULL(SUM(CASE WHEN o.Status IN ('AU','RP') THEN o.imp_total END), 0)
                        AS valor_mxn
             FROM GN_Sucursales s
             LEFT JOIN MT_Ordenes_C o ON o.Cve_Sucursal = s.Cve_Sucursal
             WHERE s.Cve_Sucursal <> 99
             GROUP BY s.Cve_Sucursal, s.Nombre
-            HAVING COUNT(CASE WHEN o.Status = 'AC' THEN 1 END) > 0
+            HAVING COUNT(CASE WHEN o.Status IN ('AU','RP') THEN 1 END) > 0
             ORDER BY valor DESC
         """)
         # Ordenes generadas en los ultimos 7 dias
         tendencia = query(f"""
-            SELECT CAST(o.Fecha_Documento AS DATE) AS fecha,
+            SELECT CAST(o.fecha AS DATE) AS fecha,
                    COUNT(o.Cve_Folio) AS pedidos,
-                   ISNULL(SUM(o.Importe_Neto), 0) AS valor
+                   ISNULL(SUM(o.imp_total), 0) AS valor
             FROM MT_Ordenes_C o
-            WHERE o.Status = 'AC'
-              AND CAST(o.Fecha_Documento AS DATE) >= DATEADD(DAY, -6, {hoy_fecha})
+            WHERE o.Status IN ('AU','RP')
+              AND CAST(o.fecha AS DATE) >= DATEADD(DAY, -6, {hoy_fecha})
               AND o.Cve_Sucursal <> 99
             GROUP BY CAST(o.Fecha_Documento AS DATE)
             ORDER BY fecha
