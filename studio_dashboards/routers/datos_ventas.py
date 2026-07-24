@@ -189,16 +189,6 @@ def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Que
         WHERE {fa}
     """)
 
-    try:
-        pedidos_row = query(f"""
-            SELECT COUNT(DISTINCT Cve_Folio) AS pedidos_activos
-            FROM MT_Ordenes_C
-            WHERE Status IN ('AU','RP')
-              AND Cve_Sucursal <> 99
-        """)
-    except Exception:
-        pedidos_row = [{"pedidos_activos": 0}]
-
     top_suc_row = query_acu(f"""
         SELECT TOP 1 Nombre AS nombre, SUM(VentaNeta) AS total
         FROM ACU_VTA_DEV_DIARIA_FAM_PROD
@@ -214,9 +204,8 @@ def kpis_globales(modo: str = Query("30d"), fi: str = Query(None), ff: str = Que
     return JSONResponse({
         "ventas_total":       ventas_total,
         "facturas_total":     unidades_total,
-        "pedidos_activos":    int((pedidos_row[0] or {}).get("pedidos_activos") or 0),
         "sucursales_activas": int(v.get("sucursales_activas") or 0),
-        "ticket_promedio":    0,
+        "productos_vendidos": int(v.get("productos_vendidos") or 0),
         "top_sucursal":       top_sucursal,
         "modo":               modo,
     })
@@ -230,6 +219,7 @@ def ventas_hoy():
     Ventas del día actual por sucursal.
     Fuente: ACUMULADOS.ACU_VTA_DEV_DIARIA_FAM_PROD.
     """
+    # Intentar hoy; si no hay datos, usar el último día disponible en ACUMULADOS
     h = f"CAST({hoy()} AS DATE)"
     rows = query_acu(f"""
         SELECT
@@ -242,9 +232,29 @@ def ventas_hoy():
         GROUP BY Cve_Sucursal, Nombre
         ORDER BY ventas_hoy DESC
     """)
-
     total = sum(float(r.get("ventas_hoy") or 0) for r in rows)
-    return JSONResponse({"sucursales": rows, "total_hoy": total})
+    fecha_label = "hoy"
+
+    # Si no hay datos de hoy, traer el último día disponible
+    if total == 0:
+        ultimo = query_acu("SELECT MAX(CAST(Fecha AS DATE)) AS ultima FROM ACU_VTA_DEV_DIARIA_FAM_PROD")
+        if ultimo and ultimo[0].get("ultima"):
+            uf = ultimo[0]["ultima"]
+            rows = query_acu(f"""
+                SELECT
+                    Cve_Sucursal                           AS cve_sucursal,
+                    Nombre                                 AS sucursal,
+                    ISNULL(SUM(VentaUnidades), 0)          AS pedidos_hoy,
+                    ISNULL(SUM(VentaNeta), 0)              AS ventas_hoy
+                FROM ACU_VTA_DEV_DIARIA_FAM_PROD
+                WHERE CAST(Fecha AS DATE) = CAST('{uf}' AS DATE)
+                GROUP BY Cve_Sucursal, Nombre
+                ORDER BY ventas_hoy DESC
+            """)
+            total = sum(float(r.get("ventas_hoy") or 0) for r in rows)
+            fecha_label = str(uf)
+
+    return JSONResponse({"sucursales": rows, "total_hoy": total, "fecha_label": fecha_label})
 
 
 # ── Plantillas predefinidas ───────────────────────────────────────────────────
