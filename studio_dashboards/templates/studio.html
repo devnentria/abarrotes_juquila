@@ -860,7 +860,7 @@
   <!-- ── Login ── -->
   <div id="login-screen" class="login-screen">
     <div class="login-card">
-      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" style="width:180px;height:auto;display:block;margin:0 auto 12px">
+      <div style="text-align:center;margin:0 auto 12px;font-size:22px;font-weight:800;color:#1a7f64;letter-spacing:.02em">🛒 Abarrotes Suite</div>
       <p class="login-sub" style="text-align:center;margin-bottom:4px">Studio — Inicia sesión para continuar</p>
       <div id="login-error" class="login-error hidden"></div>
       <input id="login-email" type="text" class="login-input" placeholder="Usuario" autocomplete="username">
@@ -879,7 +879,7 @@
   <!-- ── Header ── -->
   <header class="header">
     <div class="header-left">
-      <img src="/static/logo_transparente.png" alt="Abarrotes Suite" style="height:38px;width:auto;max-width:200px;display:block;background:rgba(255,255,255,0.95);border-radius:5px;padding:3px 12px">
+      <span class="header-logo" style="font-size:16px;color:#fff">🛒 Abarrotes Suite</span>
       <span style="background:#EF6C3A;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:6px;letter-spacing:.08em;text-transform:uppercase;animation:pulse-demo 2s infinite">DEMO</span>
       <div class="header-user-info">
         <span class="header-user-name">Bienvenido, <span id="header-welcome-nombre">—</span></span>
@@ -1992,7 +1992,7 @@ function renderHeader() {
   document.getElementById('drawer-nombre').textContent  = _usuario.nombre;
   document.getElementById('drawer-usuario').textContent = _usuario.email;
 
-  const subs = { admin: 'Administrador · Nentria', supervisor: 'Supervisor', usuario: 'Usuario' };
+  const subs = { admin: 'Administrador', supervisor: 'Supervisor', usuario: 'Usuario' };
   const sub = subs[_usuario.rol] || 'Abarrotes Suite';
   document.getElementById('header-welcome-sub').textContent = sub;
 }
