@@ -153,15 +153,15 @@ def pedidos_sucursales():
             s.Cve_Sucursal                                                    AS cve_sucursal,
             s.Nombre                                                          AS sucursal,
             COUNT(CASE WHEN o.Status IN ('AU','RP')
-                        AND o.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
+                        AND o.fecha >= DATEADD(DAY,-30,{hoy()})
                   THEN 1 END)                                                 AS activos,
             COUNT(CASE WHEN o.Status = 'TR'
-                        AND o.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
+                        AND o.fecha >= DATEADD(DAY,-30,{hoy()})
                   THEN 1 END)                                                 AS completados_30d
         FROM GN_Sucursales s
         LEFT JOIN MT_Ordenes_C o ON o.Cve_Sucursal = s.Cve_Sucursal
             AND o.Status <> 'CN'
-            AND o.Fecha_Documento >= DATEADD(DAY,-30,{hoy()})
+            AND o.fecha >= DATEADD(DAY,-30,{hoy()})
         WHERE s.Cve_Sucursal <> 99
         GROUP BY s.Cve_Sucursal, s.Nombre
         ORDER BY activos DESC
@@ -286,7 +286,7 @@ def plantilla(tipo: str, modo: str = Query("30d"), fi: str = Query(None), ff: st
             FROM GN_Sucursales s
             LEFT JOIN MT_Ordenes_C o ON o.Cve_Sucursal=s.Cve_Sucursal
                 AND o.Status <> 'CN'
-                AND o.Fecha_Documento >= DATEADD(DAY,-90,{hoy_fecha})
+                AND o.fecha >= DATEADD(DAY,-90,{hoy_fecha})
             WHERE s.Cve_Sucursal<>99
             GROUP BY s.Cve_Sucursal, s.Nombre HAVING COUNT(CASE WHEN o.Status IN ('AU','RP') THEN 1 END)>0
             ORDER BY valor DESC
