@@ -974,7 +974,7 @@
       <div class="kpi-card" id="card-ventas-hoy" style="margin-bottom:16px;border-left:4px solid var(--blue-mid);padding:22px 28px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div>
-            <div class="kpi-label" style="font-size:12px">Ventas de hoy (pagadas)</div>
+            <div class="kpi-label" style="font-size:12px" id="kpi-ventas-hoy-label">Ventas del día</div>
             <div class="kpi-value" id="kpi-ventas-hoy" style="font-size:32px">—</div>
             <div class="kpi-sub" id="kpi-ventas-hoy-sub">Cargando...</div>
           </div>
@@ -985,7 +985,7 @@
       </div>
 
       <!-- KPI Cards — 6 tarjetas -->
-      <div class="kpi-grid" id="kpi-grid" style="grid-template-columns:repeat(6,1fr)">
+      <div class="kpi-grid" id="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="kpi-card" style="border-left:4px solid var(--blue-mid)">
           <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg></div>
           <div class="kpi-label">Ventas período</div>
@@ -994,15 +994,9 @@
         </div>
         <div class="kpi-card">
           <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg></div>
-          <div class="kpi-label">Facturas emitidas</div>
+          <div class="kpi-label">Unidades vendidas</div>
           <div class="kpi-value" id="kpi-facturas">—</div>
           <div class="kpi-sub" id="kpi-facturas-sub">Cargando...</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 17.82 9.64 17 12 17s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/></svg></div>
-          <div class="kpi-label">Pedidos</div>
-          <div class="kpi-value" id="kpi-pedidos">—</div>
-          <div class="kpi-sub">En sucursales</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg></div>
@@ -1011,10 +1005,10 @@
           <div class="kpi-sub">En el sistema</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M20 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z"/></svg></div>
-          <div class="kpi-label">Venta promedio</div>
+          <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg></div>
+          <div class="kpi-label">Productos vendidos</div>
           <div class="kpi-value" id="kpi-ticket">—</div>
-          <div class="kpi-sub" id="kpi-ticket-sub">Por pedido pagado</div>
+          <div class="kpi-sub" id="kpi-ticket-sub">Distintos en período</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="36" height="36"><path d="M5 3l3.057-3 11.943 12-11.943 12-3.057-3 9-9z"/></svg></div>
@@ -1041,19 +1035,6 @@
           <canvas id="chart-ventas" style="display:none"></canvas>
         </div>
 
-        <!-- Pedidos activos (doughnut) -->
-        <div class="chart-card">
-          <div class="chart-card-header">
-            <span class="chart-card-title">Pedidos</span>
-          </div>
-          <div id="chart-pedidos-wrap" class="chart-loading">
-            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="animation:spin 1s linear infinite">
-              <path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/>
-            </svg>
-            Cargando...
-          </div>
-          <canvas id="chart-pedidos" style="display:none;max-height:220px"></canvas>
-        </div>
 
       </div>
 
@@ -3700,10 +3681,9 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
 
   // Cargar todos los datos en paralelo
   try {
-    const [kpisData, ventasData, pedidosData, tendenciaData, productosData, vendedoresData, diariaData, mensualData] = await Promise.all([
+    const [kpisData, ventasData, tendenciaData, productosData, vendedoresData, diariaData, mensualData] = await Promise.all([
       api(`/api/datos/kpis?${paramBase}`),
       api(`/api/datos/ventas?${paramBase}`),
-      api(`/api/datos/pedidos`),
       api('/api/datos/plantilla/tendencia_anual'),
       api(`/api/datos/plantilla/top_productos?${paramBase}`),
       api(`/api/datos/plantilla/top_vendedores?${paramBase}`),
@@ -3713,7 +3693,6 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
 
     renderKPIs(kpisData, esModoCustom ? periodoLabel : modo);
     renderChartVentas(ventasData.sucursales);
-    renderChartPedidos(pedidosData.sucursales);
     renderTablaComparativo(ventasData.sucursales, esModoCustom ? periodoLabel : modo);
     renderChartTendencia(tendenciaData.datos || []);
     renderChartProductos(productosData.datos || []);
@@ -3742,7 +3721,7 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
     api('/api/datos/uso-selector', { method: 'POST' }).catch(() => {});
   } catch (e) {
     // Mostrar estado de error en lugar de quedar "Cargando..."
-    ['kpi-ventas', 'kpi-facturas', 'kpi-pedidos', 'kpi-sucursales'].forEach(id => {
+    ['kpi-ventas', 'kpi-facturas', 'kpi-sucursales', 'kpi-ticket'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.textContent = '—';
     });
@@ -3754,9 +3733,6 @@ async function _cargarDashboardsConRango(modo, fi, ff) {
     const vw = document.getElementById('chart-ventas-wrap');
     if (vw) { vw.innerHTML = errHtml; vw.style.display = 'flex'; }
     document.getElementById('chart-ventas').style.display = 'none';
-    const pw = document.getElementById('chart-pedidos-wrap');
-    if (pw) { pw.innerHTML = errHtml; pw.style.display = 'flex'; }
-    document.getElementById('chart-pedidos').style.display = 'none';
     const cl = document.getElementById('comp-loading');
     if (cl) { cl.innerHTML = errHtml; cl.style.display = 'flex'; }
     const vhl = document.getElementById('ventas-hoy-loading');
@@ -3772,11 +3748,9 @@ function renderKPIs(data, modo) {
   document.getElementById('kpi-ventas-sub').textContent   = periodoSub;
   document.getElementById('kpi-facturas').textContent     = (data.facturas_total || 0).toLocaleString('es-MX');
   document.getElementById('kpi-facturas-sub').textContent = periodoSub;
-  document.getElementById('kpi-pedidos').textContent      = (data.pedidos_activos || 0).toLocaleString('es-MX');
   document.getElementById('kpi-sucursales').textContent   = data.sucursales_activas || '—';
-  if (data.ticket_promedio !== undefined) {
-    document.getElementById('kpi-ticket').textContent = _formatMXN(data.ticket_promedio);
-  }
+  document.getElementById('kpi-ticket').textContent       = (data.productos_vendidos || 0).toLocaleString('es-MX');
+  document.getElementById('kpi-ticket-sub').textContent   = periodoSub;
   if (data.top_sucursal) {
     document.getElementById('kpi-top-suc').textContent = data.top_sucursal;
   }
@@ -4363,8 +4337,14 @@ async function cargarVentasHoy() {
   try {
     const data = await api('/api/datos/ventas-hoy');
     document.getElementById('kpi-ventas-hoy').textContent = _formatMXN(data.total_hoy);
-    const pedidosHoy = data.sucursales.reduce((s, r) => s + (r.pedidos_hoy || 0), 0);
-    document.getElementById('kpi-ventas-hoy-sub').textContent = `${pedidosHoy} pedidos pagados hoy`;
+    const unidadesHoy = data.sucursales.reduce((s, r) => s + (r.pedidos_hoy || 0), 0);
+    const fl = data.fecha_label || 'hoy';
+    if (fl !== 'hoy') {
+      document.getElementById('kpi-ventas-hoy-label').textContent = `Ventas del ${fl}`;
+      document.getElementById('kpi-ventas-hoy-sub').textContent = `${unidadesHoy.toLocaleString('es-MX')} unidades vendidas`;
+    } else {
+      document.getElementById('kpi-ventas-hoy-sub').textContent = `${unidadesHoy.toLocaleString('es-MX')} unidades vendidas hoy`;
+    }
 
     const tbody = document.getElementById('ventas-hoy-tabla');
     const conVentas = data.sucursales.filter(s => s.ventas_hoy > 0);
